@@ -1,0 +1,2 @@
+pydantic
+datamodel-code-generator

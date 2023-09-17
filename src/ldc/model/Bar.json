@@ -1,0 +1,19 @@
+{
+    "id": "Bar",
+    "title": "Bar",
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "default": [
+                "Bar"
+            ]
+        },
+        "prop1": {
+            "type": "string"
+        }
+    }
+}

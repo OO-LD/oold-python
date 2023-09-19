@@ -1,30 +1,27 @@
 import json
-import os
-from pathlib import Path
-from pprint import pprint
 import re
+from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Optional
-from datamodel_code_generator import InputFileType, generate, DataModelType
-from datamodel_code_generator.parser.jsonschema import JsonSchemaParser, JsonSchemaObject
 
-class Generator():
-    
+from datamodel_code_generator import DataModelType, InputFileType, generate
+from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
+
+
+class Generator:
     def generate1(self, json_schemas):
-
         code = ""
         first = True
         for schema in json_schemas:
             parser = JsonSchemaParser(
                 json.dumps(schema),
-                #custom_template_dir=Path(model_dir_path),
+                # custom_template_dir=Path(model_dir_path),
                 field_include_all_keys=True,
                 base_class="osw.model.static.OswBaseModel",
-                #use_default = True,
+                # use_default = True,
                 enum_field_as_literal="all",
-                use_title_as_name = True,
-                use_schema_description = True,
-                use_field_description = True,
+                use_title_as_name=True,
+                use_schema_description=True,
+                use_field_description=True,
                 encoding="utf-8",
                 use_double_quotes=True,
                 collapse_root_models=True,
@@ -33,7 +30,6 @@ class Generator():
             content = parser.parse()
 
             if first:
-
                 header = (
                     "from uuid import uuid4\n"
                     "from typing import Type, TypeVar\n"
@@ -76,8 +72,8 @@ class Generator():
                 )  # remove import statement
 
             code += content + "\r\n"
-            #pprint(parser.raw_obj)
-            #print(result)
+            # pprint(parser.raw_obj)
+            # print(result)
             first = False
 
         with open("model.py", "w") as f:
@@ -87,31 +83,33 @@ class Generator():
         with TemporaryDirectory() as temporary_directory_name:
             temporary_directory = Path(temporary_directory_name)
             temporary_directory = Path("./src/ldc/model")
-            output = Path(temporary_directory / 'model.py')
+            output = Path(temporary_directory / "model.py")
             for schema in json_schemas:
                 name = schema["id"]
-                with open(Path(temporary_directory / (name + ".json")), "w", encoding="utf-8") as f:
-                    schema_str = json.dumps(schema, ensure_ascii=False, indent=4).replace(
-                        "dollarref", "$ref"
-                    )
+                with open(
+                    Path(temporary_directory / (name + ".json")), "w", encoding="utf-8"
+                ) as f:
+                    schema_str = json.dumps(
+                        schema, ensure_ascii=False, indent=4
+                    ).replace("dollarref", "$ref")
                     # print(schema_str)
                     f.write(schema_str)
             generate(
-                input_= Path(temporary_directory / "Foo.json"),
-                #json_schema,
+                input_=Path(temporary_directory / "Foo.json"),
+                # json_schema,
                 input_file_type=InputFileType.JsonSchema,
                 input_filename="Foo.json",
                 output=output,
                 # set up the output model types
                 output_model_type=DataModelType.PydanticV2BaseModel,
-                            #custom_template_dir=Path(model_dir_path),
+                # custom_template_dir=Path(model_dir_path),
                 field_include_all_keys=True,
                 base_class="ldc.model.static.LinkedBaseModel",
-                #use_default = True,
+                # use_default = True,
                 enum_field_as_literal="all",
-                use_title_as_name = True,
-                use_schema_description = True,
-                use_field_description = True,
+                use_title_as_name=True,
+                use_schema_description=True,
+                use_field_description=True,
                 encoding="utf-8",
                 use_double_quotes=True,
                 collapse_root_models=True,
@@ -119,13 +117,11 @@ class Generator():
             )
 
     def preprocess(self, json_schemas):
-        aggr_schema = {
-            "$defs": {}
-        }
+        aggr_schema = {"$defs": {}}
         for schema in json_schemas:
             aggr_schema["$defs"][schema["id"]] = schema
-        #pprint(aggr_schema)
-        #return aggr_schema
+        # pprint(aggr_schema)
+        # return aggr_schema
 
         for schema in json_schemas:
             for property_key in schema["properties"]:
@@ -140,8 +136,7 @@ class Generator():
                         property["range"] = property["items"]["range"]
 
     def generate(self, json_schemas):
-        #pprint(json_schemas)
+        # pprint(json_schemas)
         self.preprocess(json_schemas)
-        #pprint(json_schemas)
+        # pprint(json_schemas)
         self.generate2(json_schemas)
-

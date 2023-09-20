@@ -1,0 +1,20 @@
+site_name: Linked Data Classes (LDC)
+site_url: https://OpenSemanticWorld.github.io/ldc-python/
+
+plugins:
+- search
+- autorefs
+- mkdocstrings:
+    handlers:
+      python:
+        paths: [src]  # search packages in the src folder
+        options:
+          docstring_style: numpy
+
+nav:
+    - Home: index.md
+    - ldc.md
+    - Development: dev.md
+
+theme:
+  name: "material"

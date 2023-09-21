@@ -82,7 +82,7 @@ class Generator:
     def generate2(self, json_schemas):
         with TemporaryDirectory() as temporary_directory_name:
             temporary_directory = Path(temporary_directory_name)
-            temporary_directory = Path("./src/ldc/model")
+            temporary_directory = Path("./src/oold/model")
             output = Path(temporary_directory / "model.py")
             for schema in json_schemas:
                 name = schema["id"]
@@ -104,7 +104,7 @@ class Generator:
                 output_model_type=DataModelType.PydanticV2BaseModel,
                 # custom_template_dir=Path(model_dir_path),
                 field_include_all_keys=True,
-                base_class="ldc.model.static.LinkedBaseModel",
+                base_class="oold.model.static.LinkedBaseModel",
                 # use_default = True,
                 enum_field_as_literal="all",
                 use_title_as_name=True,

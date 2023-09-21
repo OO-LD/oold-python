@@ -1,16 +1,16 @@
-[![PyPI-Server](https://img.shields.io/pypi/v/ldc.svg)](https://pypi.org/project/ldc/)
-[![Coveralls](https://img.shields.io/coveralls/github/OpenSemanticWorld/ldc-python/main.svg)](https://coveralls.io/r/<USER>/ldc)
+[![PyPI-Server](https://img.shields.io/pypi/v/oold.svg)](https://pypi.org/project/oold/)
+[![Coveralls](https://img.shields.io/coveralls/github/OpenSemanticWorld/oold-python/main.svg)](https://coveralls.io/r/<USER>/oold)
 [![Project generated with PyScaffold](https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold)](https://pyscaffold.org/)
 
 
-# ldc
+# oold
 
 > Linked data class python package
 
 
 ## Dev
 ```
-git clone https://github.com/OpenSemanticWorld/ldc-python
+git clone https://github.com/OpenSemanticWorld/oold-python
 pip install -e .[dev]
 ```
 

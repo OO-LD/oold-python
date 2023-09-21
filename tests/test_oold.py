@@ -1,14 +1,14 @@
-"""Tests for `ldc` package."""
+"""Tests for `oold` package."""
 
 from typing import Any
 
-import ldc.model.model as model
-from ldc.generator import Generator
-from ldc.model.static import Resolver, ResolveRequest, ResolveResponse
+import oold.model.model as model
+from oold.generator import Generator
+from oold.model.static import Resolver, ResolveRequest, ResolveResponse
 
 
 def test_core():
-    """Tests for `ldc` package."""
+    """Tests for `oold` package."""
 
     schemas = [
         {

@@ -1,5 +1,5 @@
-site_name: Linked Data Classes (LDC)
-site_url: https://OpenSemanticWorld.github.io/ldc-python/
+site_name: Object Oriented Linked Data (OOLD)
+site_url: https://OpenSemanticWorld.github.io/oold-python/
 
 plugins:
 - search
@@ -13,7 +13,7 @@ plugins:
 
 nav:
     - Home: index.md
-    - ldc.md
+    - oold.md
     - Development: dev.md
 
 theme:

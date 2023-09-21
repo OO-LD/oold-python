@@ -1,6 +1,6 @@
-import ldc.model.model as model
-from ldc.generator import Generator
-from ldc.model.static import Resolver, ResolveRequest, ResolveResponse
+import oold.model.model as model
+from oold.generator import Generator
+from oold.model.static import Resolver, ResolveRequest, ResolveResponse
 
 schemas = [
     {

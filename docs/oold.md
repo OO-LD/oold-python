@@ -1,4 +1,4 @@
 LinkedBaseModel Class
 
 # LinkedBaseModel
-::: ldc.model.static.LinkedBaseModel
+::: oold.model.static.LinkedBaseModel

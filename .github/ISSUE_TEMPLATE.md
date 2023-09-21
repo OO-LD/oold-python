@@ -1,4 +1,4 @@
-* ldc-python version:
+* oold-python version:
 * Python version:
 * Operating System:
 

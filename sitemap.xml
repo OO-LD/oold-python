@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://OpenSemanticWorld.github.io/ldc-python/</loc>
+         <loc>https://OpenSemanticWorld.github.io/oold-python/</loc>
          <lastmod>2023-09-21</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://OpenSemanticWorld.github.io/ldc-python/dev/</loc>
+         <loc>https://OpenSemanticWorld.github.io/oold-python/dev/</loc>
          <lastmod>2023-09-21</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://OpenSemanticWorld.github.io/ldc-python/ldc/</loc>
+         <loc>https://OpenSemanticWorld.github.io/oold-python/oold/</loc>
          <lastmod>2023-09-21</lastmod>
          <changefreq>daily</changefreq>
     </url>

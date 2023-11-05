@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/691355012.svg)](https://zenodo.org/doi/10.5281/zenodo.8374237)
 [![PyPI-Server](https://img.shields.io/pypi/v/oold.svg)](https://pypi.org/project/oold/)
 [![Coveralls](https://img.shields.io/coveralls/github/OpenSemanticWorld/oold-python/main.svg)](https://coveralls.io/r/<USER>/oold)
 [![Project generated with PyScaffold](https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold)](https://pyscaffold.org/)
@@ -5,7 +6,7 @@
 
 # oold
 
-Linked data class python package for object oriented linked data (OOLD). This package aims to implemment this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package.
+Linked data class python package for object oriented linked data (OOLD). This package aims to implemment this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package - work in progress.
 
 ## Concept
 

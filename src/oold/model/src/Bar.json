@@ -1,0 +1,24 @@
+{
+    "id": "Bar",
+    "title": "Bar",
+    "type": "object",
+    "allOf": [
+        {
+            "$ref": "./bar2/Bar2.json"
+        }
+    ],
+    "properties": {
+        "type": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "default": [
+                "Bar"
+            ]
+        },
+        "prop1": {
+            "type": "string"
+        }
+    }
+}

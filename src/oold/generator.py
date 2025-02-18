@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -79,13 +80,14 @@ class Generator:
         with open("model.py", "w") as f:
             f.write(code)
 
-    def generate2(self, json_schemas):
+    def generate2(self, json_schemas, main_schema=None):
         with TemporaryDirectory() as temporary_directory_name:
             temporary_directory = Path(temporary_directory_name)
-            temporary_directory = Path("./src/oold/model")
-            output = Path(temporary_directory / "model.py")
+            temporary_directory = Path(__file__).parent / "model" / "src"
+
             for schema in json_schemas:
                 name = schema["id"]
+                os.makedirs(os.path.dirname(Path(temporary_directory / (name + ".json"))), exist_ok=True)
                 with open(
                     Path(temporary_directory / (name + ".json")), "w", encoding="utf-8"
                 ) as f:
@@ -94,11 +96,17 @@ class Generator:
                     ).replace("dollarref", "$ref")
                     # print(schema_str)
                     f.write(schema_str)
+            
+            input = Path(temporary_directory)
+            output = Path(__file__).parent / "generated"
+            if main_schema is not None:
+                input = Path(temporary_directory / Path(main_schema))
+                output = Path(__file__).parent / "model" / "model.py"
             generate(
-                input_=Path(temporary_directory / "Foo.json"),
+                input_=input,
                 # json_schema,
                 input_file_type=InputFileType.JsonSchema,
-                input_filename="Foo.json",
+                #input_filename="Foo.json",
                 output=output,
                 # set up the output model types
                 output_model_type=DataModelType.PydanticV2BaseModel,
@@ -135,8 +143,8 @@ class Generator:
                         property["items"]["$ref"] = property["items"]["range"]
                         property["range"] = property["items"]["range"]
 
-    def generate(self, json_schemas):
+    def generate(self, json_schemas, main_schema=None):
         # pprint(json_schemas)
         self.preprocess(json_schemas)
         # pprint(json_schemas)
-        self.generate2(json_schemas)
+        self.generate2(json_schemas, main_schema)

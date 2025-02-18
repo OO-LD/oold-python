@@ -12,9 +12,23 @@ def test_core():
 
     schemas = [
         {
+            "id": "./bar2/Bar2",
+            "title": "Bar2",
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": ["Bar2"],
+                },
+                "prop1": {"type": "string"},
+            },
+        },
+        {
             "id": "Bar",
             "title": "Bar",
             "type": "object",
+            "allOf": [{"$ref": "./bar2/Bar2.json"}],
             "properties": {
                 "type": {
                     "type": "array",
@@ -49,7 +63,7 @@ def test_core():
     ]
 
     g = Generator()
-    g.generate(schemas)
+    g.generate(schemas, main_schema="Foo.json")
 
     class MyResolver(Resolver):
         graph: (Any)

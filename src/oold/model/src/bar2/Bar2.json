@@ -1,6 +1,6 @@
 {
-    "id": "Bar",
-    "title": "Bar",
+    "id": "./bar2/Bar2",
+    "title": "Bar2",
     "type": "object",
     "properties": {
         "type": {
@@ -9,7 +9,7 @@
                 "type": "string"
             },
             "default": [
-                "Bar"
+                "Bar2"
             ]
         },
         "prop1": {

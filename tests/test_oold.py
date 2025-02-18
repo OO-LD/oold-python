@@ -4,7 +4,7 @@ from typing import Any
 
 import oold.model.model as model
 from oold.generator import Generator
-from oold.model.static import Resolver, ResolveRequest, ResolveResponse
+from oold.model.static import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
 
 
 def test_core():
@@ -60,6 +60,8 @@ def test_core():
     graph = [
         {"id": "ex:a", "type": ["Foo"], "literal": "test1", "b": "ex:b"},
         {"id": "ex:b", "type": ["Bar"], "prop1": "test2"},
+        {"id": "ex:b1", "type": ["Bar"], "prop1": "test3"},
+        {"id": "ex:b2", "type": ["Bar"], "prop1": "test4"},
     ]
 
     g = Generator()
@@ -72,22 +74,28 @@ def test_core():
             for node in self.graph:
                 if node["id"] == iri:
                     cls = node["type"][0]
-                    entity = eval(f"model.{cls}(**node, resolver=self)")
+                    entity = eval(f"model.{cls}(**node)")
                     return entity
 
-        def resolve(self, request: ResolveRequest):
+        def resolve(self, request: ResolveParam):
             # print("RESOLVE", request)
             nodes = {}
             for iri in request.iris:
                 nodes[iri] = self.resolve_iri(iri)
-            return ResolveResponse(nodes=nodes)
+            return ResolveResult(nodes=nodes)
 
     r = MyResolver(graph=graph)
-    f = model.Foo(resolver=r, id="ex:f", b="ex:b", b2=["ex:b", "ex:b"])
+    set_resolver(SetResolverParam(iri="ex", resolver=r))
+    
+    f = model.Foo(id="ex:f", b="ex:b", b2=["ex:b1", "ex:b2"])
     print(f.b)
+    
     print(f.b.id)
+    assert f.b.id == "ex:b"
     for b in f.b2:
         print(b)
+    assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
+    assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
 
 
 # test_core()

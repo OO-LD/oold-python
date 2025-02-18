@@ -5,24 +5,44 @@ from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
+class SetResolverParam(BaseModel):
+    iri: str
+    resolver: "Resolver"
+    
+class GetResolverParam(BaseModel):
+    iri: str
+    
+class GetResolverResult(BaseModel):
+    resolver: "Resolver"
 
-class ResolveRequest(BaseModel):
+class ResolveParam(BaseModel):
     iris: List[str]
 
 
-class ResolveResponse(BaseModel):
+class ResolveResult(BaseModel):
     nodes: Dict[str, Union[None, "LinkedBaseModel"]]
 
 
 class Resolver(BaseModel):
     @abstractmethod
-    def resolve(self, request: ResolveRequest) -> ResolveResponse:
+    def resolve(self, request: ResolveParam) -> ResolveResult:
         pass
 
+global _resolvers
+_resolvers = {}
+
+
+def set_resolver(param: SetResolverParam) -> None:
+    _resolvers[param.iri] = param.resolver
+
+def get_resolver(param: GetResolverParam) -> GetResolverResult:
+    # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
+    iri = param.iri.split(":")[0]
+    if iri not in _resolvers:
+        raise ValueError(f"No resolvers found for {iri}")
+    return GetResolverResult(resolver=_resolvers[iri])
 
 class LinkedBaseModel(BaseModel):
-    resolver: Resolver
-    type: str
     id: str
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}
 
@@ -82,11 +102,12 @@ class LinkedBaseModel(BaseModel):
                     is_list = isinstance(iris, list)
                     if not is_list:
                         iris = [iris]
-                    node_dict = self.resolver.resolve(ResolveRequest(iris=iris)).nodes
+                    resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
+                    node_dict = resolver.resolve(ResolveParam(iris=iris)).nodes
                     if is_list:
                         node_list = []
                         for iri in iris:
-                            node = node_dict[iris[0]]
+                            node = node_dict[iri]
                             node_list.append(node)
                         self.__setattr__(name, node_list)
                     else:

@@ -3,7 +3,8 @@ from abc import abstractmethod
 from pprint import pprint
 from typing import Dict, List, Optional, Union
 
-from pydantic import BaseModel
+from pydantic.v1 import PrivateAttr
+from pydantic.v1 import BaseModel
 
 class SetResolverParam(BaseModel):
     iri: str
@@ -44,22 +45,28 @@ def get_resolver(param: GetResolverParam) -> GetResolverResult:
 
 class LinkedBaseModel(BaseModel):
     id: str
-    __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}
+    __iris__: Optional[Dict[str, Union[str, List[str]]]] = PrivateAttr()
 
     def __init__(self, *a, **kw):
+        # check if instance of pydantic.v1.BaseModel
+        if issubclass(self.__class__, BaseModel):
+            print("Pydantic v1")
         # pprint(a)
         # pprint(kw)
         for name in list(kw):  # force copy of keys for inline-delete
             # rewrite <attr> to <attr>_iri
             # pprint(self.__fields__)
-            # if hasattr(self.__fields__[name], "extra")
-            # and "range" in self.__fields__[name].extra: # pydantic v1
+            extra = None
+            if issubclass(self.__class__, BaseModel):
+                # pydantic v1
+                if hasattr(self.__fields__[name].default, "json_schema_extra"):
+                    extra = self.__fields__[name].default.json_schema_extra
+            else:
+                # pydantic v2
+                extra = self.model_fields[name].json_schema_extra
             if "__iris__" not in kw:
                 kw["__iris__"] = {}
-            if (
-                self.model_fields[name].json_schema_extra
-                and "range" in self.model_fields[name].json_schema_extra
-            ):  # pydantic v2: model_fields
+            if extra and "range" in extra:
                 arg_is_list = isinstance(kw[name], list)
 
                 # annotation_is_list = False
@@ -74,13 +81,19 @@ class LinkedBaseModel(BaseModel):
                         elif isinstance(e, str):  # constructed from json
                             kw["__iris__"][name].append(e)
                             kw[name].remove(e)  # remove to construct valid instance
+                    if len(kw[name]) == 0:
+                        if issubclass(self.__class__, BaseModel):
+                            kw[name] = None # else pydantic v1 will set a FieldInfo object
+                        else: del kw[name]
                 else:
                     if isinstance(kw[name], BaseModel):  # contructed with object ref
                         # print(kw[name].id)
                         kw["__iris__"][name] = kw[name].id
                     elif isinstance(kw[name], str):  # constructed from json
                         kw["__iris__"][name] = kw[name]
-                        del kw[name]
+                        if issubclass(self.__class__, BaseModel):
+                            kw[name] = None # else pydantic v1 will set a FieldInfo object
+                        else: del kw[name]
         pprint(kw)
         super().__init__(*a, **kw)
         self.__iris__ = kw["__iris__"]
@@ -92,8 +105,8 @@ class LinkedBaseModel(BaseModel):
         if name in ["__dict__", "__pydantic_private__", "__iris__"]:
             return BaseModel.__getattribute__(self, name)  # prevent loop
         # if name in ["__pydantic_extra__"]
-        if "__iris__" in self.__dict__:
-            if name in self.__dict__["__iris__"]:
+        if hasattr(self, "__iris__"):
+            if name in self.__iris__:
                 if self.__dict__[name] is None or (
                     isinstance(self.__dict__[name], list)
                     and len(self.__dict__[name]) == 0
@@ -131,12 +144,14 @@ class LinkedBaseModel(BaseModel):
         # pprint(d)
         return d
 
+    # pydantic v1
     def json(self, **kwargs):
         print("json")
         d = json.loads(BaseModel.json(self, **kwargs))  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **kwargs)
 
+    # pydantic v2
     def model_dump_json(self, **kwargs):
         print("json")
         d = json.loads(
@@ -144,3 +159,8 @@ class LinkedBaseModel(BaseModel):
         )  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **kwargs)
+
+# required for pydantic v1
+SetResolverParam.update_forward_refs()
+GetResolverResult.update_forward_refs()
+ResolveResult.update_forward_refs()

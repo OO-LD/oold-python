@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import datamodel_code_generator
 import oold.model.model as model
 from oold.generator import Generator
 from oold.model.static import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
@@ -65,7 +66,7 @@ def test_core():
     ]
 
     g = Generator()
-    g.generate(schemas, main_schema="Foo.json")
+    g.generate(schemas, main_schema="Foo.json", output_model_type=datamodel_code_generator.DataModelType.PydanticBaseModel)
 
     class MyResolver(Resolver):
         graph: (Any)

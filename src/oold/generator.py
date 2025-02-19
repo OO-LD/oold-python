@@ -80,7 +80,7 @@ class Generator:
         with open("model.py", "w") as f:
             f.write(code)
 
-    def generate2(self, json_schemas, main_schema=None):
+    def generate2(self, json_schemas, main_schema=None, output_model_type=DataModelType.PydanticV2BaseModel):
         with TemporaryDirectory() as temporary_directory_name:
             temporary_directory = Path(temporary_directory_name)
             temporary_directory = Path(__file__).parent / "model" / "src"
@@ -109,7 +109,7 @@ class Generator:
                 #input_filename="Foo.json",
                 output=output,
                 # set up the output model types
-                output_model_type=DataModelType.PydanticV2BaseModel,
+                output_model_type=output_model_type,
                 # custom_template_dir=Path(model_dir_path),
                 field_include_all_keys=True,
                 base_class="oold.model.static.LinkedBaseModel",
@@ -143,8 +143,8 @@ class Generator:
                         property["items"]["$ref"] = property["items"]["range"]
                         property["range"] = property["items"]["range"]
 
-    def generate(self, json_schemas, main_schema=None):
+    def generate(self, json_schemas, main_schema=None, output_model_type=DataModelType.PydanticV2BaseModel):
         # pprint(json_schemas)
         self.preprocess(json_schemas)
         # pprint(json_schemas)
-        self.generate2(json_schemas, main_schema)
+        self.generate2(json_schemas, main_schema, output_model_type)

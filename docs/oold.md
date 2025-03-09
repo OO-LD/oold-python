@@ -8,5 +8,3 @@ LinkedBaseModel Class
 
 # LinkedBaseModel v2
 ::: oold.model.LinkedBaseModel
-
-

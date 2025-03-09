@@ -4,20 +4,33 @@ import importlib
 from typing import Any
 
 import datamodel_code_generator
+
 import oold.model.model as model
 from oold.generator import Generator
 
 
-
 def _run(pydantic_version="v1"):
-    
     if pydantic_version == "v1":
-        from oold.model.v1 import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
-        output_model_type=datamodel_code_generator.DataModelType.PydanticBaseModel
+        from oold.model.v1 import (
+            ResolveParam,
+            Resolver,
+            ResolveResult,
+            SetResolverParam,
+            set_resolver,
+        )
+
+        output_model_type = datamodel_code_generator.DataModelType.PydanticBaseModel
     else:
-        from oold.model import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
-        output_model_type=datamodel_code_generator.DataModelType.PydanticV2BaseModel
-    
+        from oold.model import (
+            ResolveParam,
+            Resolver,
+            ResolveResult,
+            SetResolverParam,
+            set_resolver,
+        )
+
+        output_model_type = datamodel_code_generator.DataModelType.PydanticV2BaseModel
+
     """Tests for `oold` package."""
 
     schemas = [
@@ -97,10 +110,10 @@ def _run(pydantic_version="v1"):
 
     r = MyResolver(graph=graph)
     set_resolver(SetResolverParam(iri="ex", resolver=r))
-    
+
     f = model.Foo(id="ex:f", b="ex:b", b2=["ex:b1", "ex:b2"])
     print(f.b)
-    
+
     print(f.b.id)
     assert f.b.id == "ex:b"
     for b in f.b2:
@@ -108,9 +121,11 @@ def _run(pydantic_version="v1"):
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
 
+
 def test_core():
     _run(pydantic_version="v1")
     _run(pydantic_version="v2")
+
 
 if __name__ == "__main__":
     test_core()

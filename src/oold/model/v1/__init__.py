@@ -2,19 +2,23 @@ import json
 from abc import abstractmethod
 from typing import Dict, List, Optional, Union
 
+from pydantic.v1 import BaseModel, PrivateAttr
+
 from oold.model.static import GenericLinkedBaseModel
-from pydantic.v1 import PrivateAttr
-from pydantic.v1 import BaseModel
+
 
 class SetResolverParam(BaseModel):
     iri: str
     resolver: "Resolver"
-    
+
+
 class GetResolverParam(BaseModel):
     iri: str
-    
+
+
 class GetResolverResult(BaseModel):
     resolver: "Resolver"
+
 
 class ResolveParam(BaseModel):
     iris: List[str]
@@ -29,12 +33,14 @@ class Resolver(BaseModel):
     def resolve(self, request: ResolveParam) -> ResolveResult:
         pass
 
+
 global _resolvers
 _resolvers = {}
 
 
 def set_resolver(param: SetResolverParam) -> None:
     _resolvers[param.iri] = param.resolver
+
 
 def get_resolver(param: GetResolverParam) -> GetResolverResult:
     # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
@@ -43,11 +49,13 @@ def get_resolver(param: GetResolverParam) -> GetResolverResult:
         raise ValueError(f"No resolvers found for {iri}")
     return GetResolverResult(resolver=_resolvers[iri])
 
+
 class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
     """LinkedBaseModel for pydantic v1"""
+
     id: str
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = PrivateAttr()
-    
+
     def __init__(self, *a, **kw):
         for name in list(kw):  # force copy of keys for inline-delete
             # rewrite <attr> to <attr>_iri
@@ -77,7 +85,7 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
                             kw[name].remove(e)  # remove to construct valid instance
                     if len(kw[name]) == 0:
                         # pydantic v1
-                        kw[name] = None # else pydantic v1 will set a FieldInfo object
+                        kw[name] = None  # else pydantic v1 will set a FieldInfo object
                         # pydantic v2
                         # del kw[name]
                 else:
@@ -87,17 +95,15 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
                     elif isinstance(kw[name], str):  # constructed from json
                         kw["__iris__"][name] = kw[name]
                         # pydantic v1
-                        kw[name] = None # else pydantic v1 will set a FieldInfo object
+                        kw[name] = None  # else pydantic v1 will set a FieldInfo object
                         # pydantic v2
                         # del kw[name]
 
-        
         BaseModel.__init__(self, *a, **kw)
 
         self.__iris__ = kw["__iris__"]
 
     def __getattribute__(self, name):
-
         # print("__getattribute__ ", name)
         # async? https://stackoverflow.com/questions/33128325/
         # how-to-set-class-attribute-with-await-in-init
@@ -131,7 +137,6 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
 
         return BaseModel.__getattribute__(self, name)
 
-
     def _object_to_iri(self, d):
         for name in list(d):  # force copy of keys for inline-delete
             if name in self.__iris__:
@@ -146,12 +151,12 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
         self._object_to_iri(d)
         # pprint(d)
         return d
-    
+
     def _resolve(self, iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
         node_dict = resolver.resolve(ResolveParam(iris=iris)).nodes
         return node_dict
-    
+
     # pydantic v1
     def json(self, **kwargs):
         print("json")

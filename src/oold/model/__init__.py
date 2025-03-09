@@ -2,18 +2,23 @@ import json
 from abc import abstractmethod
 from typing import Dict, List, Optional, Union
 
-from oold.model.static import GenericLinkedBaseModel
 from pydantic import BaseModel
+
+from oold.model.static import GenericLinkedBaseModel
+
 
 class SetResolverParam(BaseModel):
     iri: str
     resolver: "Resolver"
-    
+
+
 class GetResolverParam(BaseModel):
     iri: str
-    
+
+
 class GetResolverResult(BaseModel):
     resolver: "Resolver"
+
 
 class ResolveParam(BaseModel):
     iris: List[str]
@@ -28,32 +33,36 @@ class Resolver(BaseModel):
     def resolve(self, request: ResolveParam) -> ResolveResult:
         pass
 
+
 global _resolvers
 _resolvers = {}
 
 
 def set_resolver(param: SetResolverParam) -> None:
     _resolvers[param.iri] = param.resolver
-    
+
+
 def get_resolver(param: GetResolverParam) -> GetResolverResult:
     # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
     iri = param.iri.split(":")[0]
     if iri not in _resolvers:
         raise ValueError(f"No resolvers found for {iri}")
     return GetResolverResult(resolver=_resolvers[iri])
-    
+
+
 class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
     """LinkedBaseModel for pydantic v1"""
+
     id: str
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}
-    
+
     def __init__(self, *a, **kw):
         for name in list(kw):  # force copy of keys for inline-delete
             # rewrite <attr> to <attr>_iri
             # pprint(self.__fields__)
             extra = None
             # pydantic v1
-            #if hasattr(self.__fields__[name].default, "json_schema_extra"):
+            # if hasattr(self.__fields__[name].default, "json_schema_extra"):
             #    extra = self.__fields__[name].default.json_schema_extra
             # pydantic v2
             extra = self.model_fields[name].json_schema_extra
@@ -90,13 +99,11 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
                         # pydantic v2
                         del kw[name]
 
-        
         BaseModel.__init__(self, *a, **kw)
 
         self.__iris__ = kw["__iris__"]
 
     def __getattribute__(self, name):
-
         # print("__getattribute__ ", name)
         # async? https://stackoverflow.com/questions/33128325/
         # how-to-set-class-attribute-with-await-in-init
@@ -130,7 +137,6 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
 
         return BaseModel.__getattribute__(self, name)
 
-
     def _object_to_iri(self, d):
         for name in list(d):  # force copy of keys for inline-delete
             if name in self.__iris__:
@@ -159,4 +165,3 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
         )  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **kwargs)
-

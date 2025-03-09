@@ -6,10 +6,18 @@ from typing import Any
 import datamodel_code_generator
 import oold.model.model as model
 from oold.generator import Generator
-from oold.model.v1 import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
 
 
-def test_core():
+
+def _run(pydantic_version="v1"):
+    
+    if pydantic_version == "v1":
+        from oold.model.v1 import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
+        output_model_type=datamodel_code_generator.DataModelType.PydanticBaseModel
+    else:
+        from oold.model import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
+        output_model_type=datamodel_code_generator.DataModelType.PydanticV2BaseModel
+    
     """Tests for `oold` package."""
 
     schemas = [
@@ -67,8 +75,8 @@ def test_core():
     ]
 
     g = Generator()
-    g.generate(schemas, main_schema="Foo.json", output_model_type=datamodel_code_generator.DataModelType.PydanticBaseModel)
-    #importlib.reload(model)
+    g.generate(schemas, main_schema="Foo.json", output_model_type=output_model_type)
+    importlib.reload(model)
 
     class MyResolver(Resolver):
         graph: (Any)
@@ -100,5 +108,9 @@ def test_core():
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
 
+def test_core():
+    _run(pydantic_version="v1")
+    _run(pydantic_version="v2")
 
-test_core()
+if __name__ == "__main__":
+    test_core()

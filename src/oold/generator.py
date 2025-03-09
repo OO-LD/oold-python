@@ -102,6 +102,11 @@ class Generator:
             if main_schema is not None:
                 input = Path(temporary_directory / Path(main_schema))
                 output = Path(__file__).parent / "model" / "model.py"
+                
+            if output_model_type == DataModelType.PydanticV2BaseModel:
+                base_class = "oold.model.LinkedBaseModel"
+            else:
+                base_class = "oold.model.v1.LinkedBaseModel"
             generate(
                 input_=input,
                 # json_schema,
@@ -112,7 +117,7 @@ class Generator:
                 output_model_type=output_model_type,
                 # custom_template_dir=Path(model_dir_path),
                 field_include_all_keys=True,
-                base_class="oold.model.static.LinkedBaseModel",
+                base_class=base_class,
                 # use_default = True,
                 enum_field_as_literal="all",
                 use_title_as_name=True,

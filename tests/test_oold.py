@@ -1,11 +1,12 @@
 """Tests for `oold` package."""
 
+import importlib
 from typing import Any
 
 import datamodel_code_generator
 import oold.model.model as model
 from oold.generator import Generator
-from oold.model.static import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
+from oold.model.v1 import Resolver, ResolveParam, ResolveResult, SetResolverParam, set_resolver
 
 
 def test_core():
@@ -67,6 +68,7 @@ def test_core():
 
     g = Generator()
     g.generate(schemas, main_schema="Foo.json", output_model_type=datamodel_code_generator.DataModelType.PydanticBaseModel)
+    #importlib.reload(model)
 
     class MyResolver(Resolver):
         graph: (Any)
@@ -99,4 +101,4 @@ def test_core():
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
 
 
-# test_core()
+test_core()

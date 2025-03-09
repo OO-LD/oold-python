@@ -1,55 +1,15 @@
-import json
-from abc import abstractmethod
-from pprint import pprint
-from typing import Dict, List, Optional, Union
+from pydantic.v1 import BaseModel as BaseModel_v1
+from pydantic import BaseModel
 
-from pydantic.v1 import PrivateAttr
-from pydantic.v1 import BaseModel
+from typing import TypeVar, Generic
 
-class SetResolverParam(BaseModel):
-    iri: str
-    resolver: "Resolver"
-    
-class GetResolverParam(BaseModel):
-    iri: str
-    
-class GetResolverResult(BaseModel):
-    resolver: "Resolver"
+T = TypeVar('T')  # Define type variable "T"
 
-class ResolveParam(BaseModel):
-    iris: List[str]
-
-
-class ResolveResult(BaseModel):
-    nodes: Dict[str, Union[None, "LinkedBaseModel"]]
-
-
-class Resolver(BaseModel):
-    @abstractmethod
-    def resolve(self, request: ResolveParam) -> ResolveResult:
-        pass
-
-global _resolvers
-_resolvers = {}
-
-
-def set_resolver(param: SetResolverParam) -> None:
-    _resolvers[param.iri] = param.resolver
-
-def get_resolver(param: GetResolverParam) -> GetResolverResult:
-    # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
-    iri = param.iri.split(":")[0]
-    if iri not in _resolvers:
-        raise ValueError(f"No resolvers found for {iri}")
-    return GetResolverResult(resolver=_resolvers[iri])
-
-class LinkedBaseModel(BaseModel):
-    id: str
-    __iris__: Optional[Dict[str, Union[str, List[str]]]] = PrivateAttr()
+class GenericLinkedBaseModel(Generic[T]):
 
     def __init__(self, *a, **kw):
         # check if instance of pydantic.v1.BaseModel
-        if issubclass(self.__class__, BaseModel):
+        if issubclass(self.__class__, BaseModel_v1):
             print("Pydantic v1")
         # pprint(a)
         # pprint(kw)
@@ -57,7 +17,7 @@ class LinkedBaseModel(BaseModel):
             # rewrite <attr> to <attr>_iri
             # pprint(self.__fields__)
             extra = None
-            if issubclass(self.__class__, BaseModel):
+            if issubclass(self.__class__, BaseModel_v1):
                 # pydantic v1
                 if hasattr(self.__fields__[name].default, "json_schema_extra"):
                     extra = self.__fields__[name].default.json_schema_extra
@@ -76,58 +36,83 @@ class LinkedBaseModel(BaseModel):
                 if arg_is_list:
                     kw["__iris__"][name] = []
                     for e in kw[name][:]:  # interate over copy of list
-                        if isinstance(e, BaseModel):  # contructed with object ref
+                        if isinstance(e, BaseModel_v1) or isinstance(e, BaseModel):  # contructed with object ref
                             kw["__iris__"][name].append(e.id)
                         elif isinstance(e, str):  # constructed from json
                             kw["__iris__"][name].append(e)
                             kw[name].remove(e)  # remove to construct valid instance
                     if len(kw[name]) == 0:
-                        if issubclass(self.__class__, BaseModel):
+                        if issubclass(self.__class__, BaseModel_v1):
                             kw[name] = None # else pydantic v1 will set a FieldInfo object
                         else: del kw[name]
                 else:
-                    if isinstance(kw[name], BaseModel):  # contructed with object ref
+                    if isinstance(kw[name], BaseModel_v1) or isinstance(kw[name], BaseModel):  # contructed with object ref
                         # print(kw[name].id)
                         kw["__iris__"][name] = kw[name].id
                     elif isinstance(kw[name], str):  # constructed from json
                         kw["__iris__"][name] = kw[name]
-                        if issubclass(self.__class__, BaseModel):
+                        if issubclass(self.__class__, BaseModel_v1):
                             kw[name] = None # else pydantic v1 will set a FieldInfo object
                         else: del kw[name]
-        pprint(kw)
-        super().__init__(*a, **kw)
+
+        
+        if isinstance(self, BaseModel_v1):
+            BaseModel_v1.__init__(self, *a, **kw)
+        else: BaseModel.__init__(self, *a, **kw)
+        #super(BaseModel, self).__init__(*a, **kw)
+
         self.__iris__ = kw["__iris__"]
 
     def __getattribute__(self, name):
+        #print( "I am {0}".format(self.__orig_class__.__args__[0].__name__))
         # print("__getattribute__ ", name)
         # async? https://stackoverflow.com/questions/33128325/
         # how-to-set-class-attribute-with-await-in-init
-        if name in ["__dict__", "__pydantic_private__", "__iris__"]:
-            return BaseModel.__getattribute__(self, name)  # prevent loop
+        #if name in ["__dict__", "__pydantic_private__", "__iris__"]:
+        #    return BaseModel.__getattribute__(self, name)  # prevent loop
         # if name in ["__pydantic_extra__"]
-        if hasattr(self, "__iris__"):
-            if name in self.__iris__:
-                if self.__dict__[name] is None or (
-                    isinstance(self.__dict__[name], list)
-                    and len(self.__dict__[name]) == 0
-                ):
-                    iris = self.__iris__[name]
-                    is_list = isinstance(iris, list)
-                    if not is_list:
-                        iris = [iris]
-                    resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
-                    node_dict = resolver.resolve(ResolveParam(iris=iris)).nodes
-                    if is_list:
-                        node_list = []
-                        for iri in iris:
-                            node = node_dict[iri]
-                            node_list.append(node)
-                        self.__setattr__(name, node_list)
-                    else:
-                        node = node_dict[iris[0]]
-                        if node:
-                            self.__setattr__(name, node)
-        return BaseModel.__getattribute__(self, name)
+        print(name)
+        if name in ["__dict__", "__pydantic_private__", "__iris__", "__post_root_validators__", "_get_pydantic_basemodel", "__class__"]:
+            #if isinstance(self, BaseModel_v1):
+            #    return BaseModel_v1.__getattribute__(self, name)
+            #else: return BaseModel.__getattribute__(self, name)
+            #return super().__getattribute__(name)
+            return BaseModel.__getattribute__(self, name)
+        else:
+            #if hasattr(self, "__iris__"):
+            if "__iris__" in self.__dict__:
+                if name in self.__iris__:
+                    if self.__dict__[name] is None or (
+                        isinstance(self.__dict__[name], list)
+                        and len(self.__dict__[name]) == 0
+                    ):
+                        iris = self.__iris__[name]
+                        is_list = isinstance(iris, list)
+                        if not is_list:
+                            iris = [iris]
+
+                        node_dict = self._resolve(iris)
+                        if is_list:
+                            node_list = []
+                            for iri in iris:
+                                node = node_dict[iri]
+                                node_list.append(node)
+                            self.__setattr__(name, node_list)
+                        else:
+                            node = node_dict[iris[0]]
+                            if node:
+                                self.__setattr__(name, node)
+
+        #print(super())
+        #if self._get_pydantic_basemodel() == BaseModel_v1:
+        #    return BaseModel_v1.__getattribute__(self, name)
+        #else: 
+        #    return BaseModel.__getattribute__(self, name)
+        #return BaseModel_v1.__getattribute__(self, name)
+        if isinstance(self, BaseModel_v1):
+            return BaseModel_v1.__getattribute__(self, name)
+        else: return BaseModel.__getattribute__(self, name)
+        #T.__getattribute__(self, name)
 
     def _object_to_iri(self, d):
         for name in list(d):  # force copy of keys for inline-delete
@@ -144,23 +129,5 @@ class LinkedBaseModel(BaseModel):
         # pprint(d)
         return d
 
-    # pydantic v1
-    def json(self, **kwargs):
-        print("json")
-        d = json.loads(BaseModel.json(self, **kwargs))  # ToDo directly use dict?
-        self._object_to_iri(d)
-        return json.dumps(d, **kwargs)
 
-    # pydantic v2
-    def model_dump_json(self, **kwargs):
-        print("json")
-        d = json.loads(
-            BaseModel.model_dump_json(self, **kwargs)
-        )  # ToDo directly use dict?
-        self._object_to_iri(d)
-        return json.dumps(d, **kwargs)
 
-# required for pydantic v1
-SetResolverParam.update_forward_refs()
-GetResolverResult.update_forward_refs()
-ResolveResult.update_forward_refs()

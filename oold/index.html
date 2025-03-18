@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.8">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.9">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.8608ea7d.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.4af4bdda.min.css">
       
       
 
@@ -403,277 +403,7 @@
 
               <details class="quote">
                 <summary>Source code in <code>src/oold/model/v1/__init__.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 53</span>
-<span class="normal"> 54</span>
-<span class="normal"> 55</span>
-<span class="normal"> 56</span>
-<span class="normal"> 57</span>
-<span class="normal"> 58</span>
-<span class="normal"> 59</span>
-<span class="normal"> 60</span>
-<span class="normal"> 61</span>
-<span class="normal"> 62</span>
-<span class="normal"> 63</span>
-<span class="normal"> 64</span>
-<span class="normal"> 65</span>
-<span class="normal"> 66</span>
-<span class="normal"> 67</span>
-<span class="normal"> 68</span>
-<span class="normal"> 69</span>
-<span class="normal"> 70</span>
-<span class="normal"> 71</span>
-<span class="normal"> 72</span>
-<span class="normal"> 73</span>
-<span class="normal"> 74</span>
-<span class="normal"> 75</span>
-<span class="normal"> 76</span>
-<span class="normal"> 77</span>
-<span class="normal"> 78</span>
-<span class="normal"> 79</span>
-<span class="normal"> 80</span>
-<span class="normal"> 81</span>
-<span class="normal"> 82</span>
-<span class="normal"> 83</span>
-<span class="normal"> 84</span>
-<span class="normal"> 85</span>
-<span class="normal"> 86</span>
-<span class="normal"> 87</span>
-<span class="normal"> 88</span>
-<span class="normal"> 89</span>
-<span class="normal"> 90</span>
-<span class="normal"> 91</span>
-<span class="normal"> 92</span>
-<span class="normal"> 93</span>
-<span class="normal"> 94</span>
-<span class="normal"> 95</span>
-<span class="normal"> 96</span>
-<span class="normal"> 97</span>
-<span class="normal"> 98</span>
-<span class="normal"> 99</span>
-<span class="normal">100</span>
-<span class="normal">101</span>
-<span class="normal">102</span>
-<span class="normal">103</span>
-<span class="normal">104</span>
-<span class="normal">105</span>
-<span class="normal">106</span>
-<span class="normal">107</span>
-<span class="normal">108</span>
-<span class="normal">109</span>
-<span class="normal">110</span>
-<span class="normal">111</span>
-<span class="normal">112</span>
-<span class="normal">113</span>
-<span class="normal">114</span>
-<span class="normal">115</span>
-<span class="normal">116</span>
-<span class="normal">117</span>
-<span class="normal">118</span>
-<span class="normal">119</span>
-<span class="normal">120</span>
-<span class="normal">121</span>
-<span class="normal">122</span>
-<span class="normal">123</span>
-<span class="normal">124</span>
-<span class="normal">125</span>
-<span class="normal">126</span>
-<span class="normal">127</span>
-<span class="normal">128</span>
-<span class="normal">129</span>
-<span class="normal">130</span>
-<span class="normal">131</span>
-<span class="normal">132</span>
-<span class="normal">133</span>
-<span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
-<span class="normal">137</span>
-<span class="normal">138</span>
-<span class="normal">139</span>
-<span class="normal">140</span>
-<span class="normal">141</span>
-<span class="normal">142</span>
-<span class="normal">143</span>
-<span class="normal">144</span>
-<span class="normal">145</span>
-<span class="normal">146</span>
-<span class="normal">147</span>
-<span class="normal">148</span>
-<span class="normal">149</span>
-<span class="normal">150</span>
-<span class="normal">151</span>
-<span class="normal">152</span>
-<span class="normal">153</span>
-<span class="normal">154</span>
-<span class="normal">155</span>
-<span class="normal">156</span>
-<span class="normal">157</span>
-<span class="normal">158</span>
-<span class="normal">159</span>
-<span class="normal">160</span>
-<span class="normal">161</span>
-<span class="normal">162</span>
-<span class="normal">163</span>
-<span class="normal">164</span>
-<span class="normal">165</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LinkedBaseModel</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">GenericLinkedBaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;LinkedBaseModel for pydantic v1&quot;&quot;&quot;</span>
-
-    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">__iris__</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]]</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">()</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">kw</span><span class="p">):</span>  <span class="c1"># force copy of keys for inline-delete</span>
-            <span class="c1"># rewrite &lt;attr&gt; to &lt;attr&gt;_iri</span>
-            <span class="c1"># pprint(self.__fields__)</span>
-            <span class="n">extra</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="c1"># pydantic v1</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">default</span><span class="p">,</span> <span class="s2">&quot;json_schema_extra&quot;</span><span class="p">):</span>
-                <span class="n">extra</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">default</span><span class="o">.</span><span class="n">json_schema_extra</span>
-            <span class="c1"># pydantic v2</span>
-            <span class="c1"># extra = self.model_fields[name].json_schema_extra</span>
-            <span class="k">if</span> <span class="s2">&quot;__iris__&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">:</span>
-                <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="k">if</span> <span class="n">extra</span> <span class="ow">and</span> <span class="s2">&quot;range&quot;</span> <span class="ow">in</span> <span class="n">extra</span><span class="p">:</span>
-                <span class="n">arg_is_list</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span>
-
-                <span class="c1"># annotation_is_list = False</span>
-                <span class="c1"># args = self.model_fields[name].annotation.__args__</span>
-                <span class="c1"># if hasattr(args[0], &quot;_name&quot;):</span>
-                <span class="c1">#    is_list = args[0]._name == &quot;List&quot;</span>
-                <span class="k">if</span> <span class="n">arg_is_list</span><span class="p">:</span>
-                    <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-                    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">][:]:</span>  <span class="c1"># interate over copy of list</span>
-                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>  <span class="c1"># contructed with object ref</span>
-                            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
-                        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># constructed from json</span>
-                            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-                            <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>  <span class="c1"># remove to construct valid instance</span>
-                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                        <span class="c1"># pydantic v1</span>
-                        <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># else pydantic v1 will set a FieldInfo object</span>
-                        <span class="c1"># pydantic v2</span>
-                        <span class="c1"># del kw[name]</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">BaseModel</span><span class="p">):</span>  <span class="c1"># contructed with object ref</span>
-                        <span class="c1"># print(kw[name].id)</span>
-                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">id</span>
-                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># constructed from json</span>
-                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-                        <span class="c1"># pydantic v1</span>
-                        <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># else pydantic v1 will set a FieldInfo object</span>
-                        <span class="c1"># pydantic v2</span>
-                        <span class="c1"># del kw[name]</span>
-
-        <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
-        <span class="c1"># print(&quot;__getattribute__ &quot;, name)</span>
-        <span class="c1"># async? https://stackoverflow.com/questions/33128325/</span>
-        <span class="c1"># how-to-set-class-attribute-with-await-in-init</span>
-
-        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;__dict__&quot;</span><span class="p">,</span> <span class="s2">&quot;__pydantic_private__&quot;</span><span class="p">,</span> <span class="s2">&quot;__iris__&quot;</span><span class="p">]:</span>
-            <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>  <span class="c1"># prevent loop</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;__iris__&quot;</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
-                        <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span>
-                        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span>
-                    <span class="p">):</span>
-                        <span class="n">iris</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-                        <span class="n">is_list</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iris</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
-                        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_list</span><span class="p">:</span>
-                            <span class="n">iris</span> <span class="o">=</span> <span class="p">[</span><span class="n">iris</span><span class="p">]</span>
-
-                        <span class="n">node_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve</span><span class="p">(</span><span class="n">iris</span><span class="p">)</span>
-                        <span class="k">if</span> <span class="n">is_list</span><span class="p">:</span>
-                            <span class="n">node_list</span> <span class="o">=</span> <span class="p">[]</span>
-                            <span class="k">for</span> <span class="n">iri</span> <span class="ow">in</span> <span class="n">iris</span><span class="p">:</span>
-                                <span class="n">node</span> <span class="o">=</span> <span class="n">node_dict</span><span class="p">[</span><span class="n">iri</span><span class="p">]</span>
-                                <span class="n">node_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">node_list</span><span class="p">)</span>
-                        <span class="k">else</span><span class="p">:</span>
-                            <span class="n">node</span> <span class="o">=</span> <span class="n">node_dict</span><span class="p">[</span><span class="n">iris</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
-                            <span class="k">if</span> <span class="n">node</span><span class="p">:</span>
-                                <span class="bp">self</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_object_to_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>  <span class="c1"># force copy of keys for inline-delete</span>
-            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">:</span>
-                <span class="n">d</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-                <span class="c1"># del d[name + &quot;_iri&quot;]</span>
-        <span class="k">return</span> <span class="n">d</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># extent BaseClass export function</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;dict&quot;</span><span class="p">)</span>
-        <span class="n">d</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="c1"># pprint(d)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
-        <span class="c1"># pprint(d)</span>
-        <span class="k">return</span> <span class="n">d</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">iris</span><span class="p">):</span>
-        <span class="n">resolver</span> <span class="o">=</span> <span class="n">get_resolver</span><span class="p">(</span><span class="n">GetResolverParam</span><span class="p">(</span><span class="n">iri</span><span class="o">=</span><span class="n">iris</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span><span class="o">.</span><span class="n">resolver</span>
-        <span class="n">node_dict</span> <span class="o">=</span> <span class="n">resolver</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">ResolveParam</span><span class="p">(</span><span class="n">iris</span><span class="o">=</span><span class="n">iris</span><span class="p">))</span><span class="o">.</span><span class="n">nodes</span>
-        <span class="k">return</span> <span class="n">node_dict</span>
-
-    <span class="c1"># pydantic v1</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;json&quot;</span><span class="p">)</span>
-        <span class="n">d</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">BaseModel</span><span class="o">.</span><span class="n">json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>  <span class="c1"># ToDo directly use dict?</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-</code></pre></div></td></tr></table></div>
-              </details>
-
-
-
-  <div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div><h1 id="linkedbasemodel-v2">LinkedBaseModel v2</h1>
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<a id="oold.model.LinkedBaseModel"></a>
-    <div class="doc doc-contents first">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code>, <code><a class="autorefs autorefs-internal" title="GenericLinkedBaseModel (oold.model.static.GenericLinkedBaseModel)" href="#oold.model.static.GenericLinkedBaseModel">GenericLinkedBaseModel</a></code></p>
-
-
-        <p>LinkedBaseModel for pydantic v1</p>
-
-
-
-
-
-
-
-              <details class="quote">
-                <summary>Source code in <code>src/oold/model/__init__.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 53</span>
-<span class="normal"> 54</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 54</span>
 <span class="normal"> 55</span>
 <span class="normal"> 56</span>
 <span class="normal"> 57</span>
@@ -786,24 +516,78 @@
 <span class="normal">164</span>
 <span class="normal">165</span>
 <span class="normal">166</span>
-<span class="normal">167</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LinkedBaseModel</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">GenericLinkedBaseModel</span><span class="p">):</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LinkedBaseModel</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">GenericLinkedBaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;LinkedBaseModel for pydantic v1&quot;&quot;&quot;</span>
 
-    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">__iris__</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">__iris__</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]]</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the unique IRI of the object.</span>
+<span class="sd">        Overwrite this method in the subclass.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">id</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;__iris__&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">:</span>
+            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
         <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">kw</span><span class="p">):</span>  <span class="c1"># force copy of keys for inline-delete</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;__iris__&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
             <span class="c1"># rewrite &lt;attr&gt; to &lt;attr&gt;_iri</span>
             <span class="c1"># pprint(self.__fields__)</span>
             <span class="n">extra</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="c1"># pydantic v1</span>
-            <span class="c1"># if hasattr(self.__fields__[name].default, &quot;json_schema_extra&quot;):</span>
-            <span class="c1">#    extra = self.__fields__[name].default.json_schema_extra</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">default</span><span class="p">,</span> <span class="s2">&quot;json_schema_extra&quot;</span><span class="p">):</span>
+                    <span class="n">extra</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">default</span><span class="o">.</span><span class="n">json_schema_extra</span>
+                <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">field_info</span><span class="p">,</span> <span class="s2">&quot;extra&quot;</span><span class="p">):</span>
+                    <span class="n">extra</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">field_info</span><span class="o">.</span><span class="n">extra</span>
             <span class="c1"># pydantic v2</span>
-            <span class="n">extra</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_fields</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">json_schema_extra</span>
-            <span class="k">if</span> <span class="s2">&quot;__iris__&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">:</span>
-                <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="c1"># extra = self.model_fields[name].json_schema_extra</span>
+
             <span class="k">if</span> <span class="n">extra</span> <span class="ow">and</span> <span class="s2">&quot;range&quot;</span> <span class="ow">in</span> <span class="n">extra</span><span class="p">:</span>
                 <span class="n">arg_is_list</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span>
 
@@ -815,7 +599,517 @@
                     <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
                     <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">][:]:</span>  <span class="c1"># interate over copy of list</span>
                         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>  <span class="c1"># contructed with object ref</span>
-                            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+                            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">get_iri</span><span class="p">())</span>
+                        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># constructed from json</span>
+                            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                            <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>  <span class="c1"># remove to construct valid instance</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="c1"># pydantic v1</span>
+                        <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># else pydantic v1 will set a FieldInfo object</span>
+                        <span class="c1"># pydantic v2</span>
+                        <span class="c1"># del kw[name]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">BaseModel</span><span class="p">):</span>  <span class="c1"># contructed with object ref</span>
+                        <span class="c1"># print(kw[name].id)</span>
+                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">get_iri</span><span class="p">()</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># constructed from json</span>
+                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+                        <span class="c1"># pydantic v1</span>
+                        <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># else pydantic v1 will set a FieldInfo object</span>
+                        <span class="c1"># pydantic v2</span>
+                        <span class="c1"># del kw[name]</span>
+
+        <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="c1"># print(&quot;__getattribute__ &quot;, name)</span>
+        <span class="c1"># async? https://stackoverflow.com/questions/33128325/</span>
+        <span class="c1"># how-to-set-class-attribute-with-await-in-init</span>
+
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;__dict__&quot;</span><span class="p">,</span> <span class="s2">&quot;__pydantic_private__&quot;</span><span class="p">,</span> <span class="s2">&quot;__iris__&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>  <span class="c1"># prevent loop</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;__iris__&quot;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
+                        <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span>
+                    <span class="p">):</span>
+                        <span class="n">iris</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+                        <span class="n">is_list</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iris</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_list</span><span class="p">:</span>
+                            <span class="n">iris</span> <span class="o">=</span> <span class="p">[</span><span class="n">iris</span><span class="p">]</span>
+
+                        <span class="n">node_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve</span><span class="p">(</span><span class="n">iris</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">is_list</span><span class="p">:</span>
+                            <span class="n">node_list</span> <span class="o">=</span> <span class="p">[]</span>
+                            <span class="k">for</span> <span class="n">iri</span> <span class="ow">in</span> <span class="n">iris</span><span class="p">:</span>
+                                <span class="n">node</span> <span class="o">=</span> <span class="n">node_dict</span><span class="p">[</span><span class="n">iri</span><span class="p">]</span>
+                                <span class="n">node_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">node_list</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">node</span> <span class="o">=</span> <span class="n">node_dict</span><span class="p">[</span><span class="n">iris</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+                            <span class="k">if</span> <span class="n">node</span><span class="p">:</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_object_to_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>  <span class="c1"># force copy of keys for inline-delete</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+                <span class="c1"># del d[name + &quot;_iri&quot;]</span>
+        <span class="k">return</span> <span class="n">d</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># extent BaseClass export function</span>
+        <span class="c1"># print(&quot;dict&quot;)</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="c1"># pprint(d)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+        <span class="c1"># pprint(d)</span>
+        <span class="k">return</span> <span class="n">d</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">iris</span><span class="p">):</span>
+        <span class="n">resolver</span> <span class="o">=</span> <span class="n">get_resolver</span><span class="p">(</span><span class="n">GetResolverParam</span><span class="p">(</span><span class="n">iri</span><span class="o">=</span><span class="n">iris</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span><span class="o">.</span><span class="n">resolver</span>
+        <span class="n">node_dict</span> <span class="o">=</span> <span class="n">resolver</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">ResolveParam</span><span class="p">(</span><span class="n">iris</span><span class="o">=</span><span class="n">iris</span><span class="p">))</span><span class="o">.</span><span class="n">nodes</span>
+        <span class="k">return</span> <span class="n">node_dict</span>
+
+    <span class="c1"># pydantic v1</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">json</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">include</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="s2">&quot;AbstractSetIntStr&quot;</span><span class="p">,</span> <span class="s2">&quot;MappingIntStrAny&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exclude</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="s2">&quot;AbstractSetIntStr&quot;</span><span class="p">,</span> <span class="s2">&quot;MappingIntStrAny&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">by_alias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">skip_defaults</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exclude_unset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">exclude_defaults</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">exclude_none</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">encoder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">models_as_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate a JSON representation of the model,</span>
+<span class="sd">        `include` and `exclude` arguments as per `dict()`.</span>
+
+<span class="sd">        `encoder` is an optional function to supply as `default` to json.dumps(),</span>
+<span class="sd">        other arguments as per `json.dumps()`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
+            <span class="n">BaseModel</span><span class="o">.</span><span class="n">json</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span>
+                <span class="n">include</span><span class="o">=</span><span class="n">include</span><span class="p">,</span>
+                <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">,</span>
+                <span class="n">by_alias</span><span class="o">=</span><span class="n">by_alias</span><span class="p">,</span>
+                <span class="n">skip_defaults</span><span class="o">=</span><span class="n">skip_defaults</span><span class="p">,</span>
+                <span class="n">exclude_unset</span><span class="o">=</span><span class="n">exclude_unset</span><span class="p">,</span>
+                <span class="n">exclude_defaults</span><span class="o">=</span><span class="n">exclude_defaults</span><span class="p">,</span>
+                <span class="n">exclude_none</span><span class="o">=</span><span class="n">exclude_none</span><span class="p">,</span>
+                <span class="n">encoder</span><span class="o">=</span><span class="n">encoder</span><span class="p">,</span>
+                <span class="n">models_as_dict</span><span class="o">=</span><span class="n">models_as_dict</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>  <span class="c1"># ToDo directly use dict?</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="oold.model.v1.LinkedBaseModel.get_iri" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_iri</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the unique IRI of the object.
+Overwrite this method in the subclass.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>src/oold/model/v1/__init__.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the unique IRI of the object.</span>
+<span class="sd">    Overwrite this method in the subclass.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">id</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="oold.model.v1.LinkedBaseModel.json" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">json</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">include</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">by_alias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_defaults</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude_unset</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exclude_defaults</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exclude_none</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">encoder</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">models_as_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Generate a JSON representation of the model,
+<code>include</code> and <code>exclude</code> arguments as per <code>dict()</code>.</p>
+<p><code>encoder</code> is an optional function to supply as <code>default</code> to json.dumps(),
+other arguments as per <code>json.dumps()</code>.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>src/oold/model/v1/__init__.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">json</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">include</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="s2">&quot;AbstractSetIntStr&quot;</span><span class="p">,</span> <span class="s2">&quot;MappingIntStrAny&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exclude</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="s2">&quot;AbstractSetIntStr&quot;</span><span class="p">,</span> <span class="s2">&quot;MappingIntStrAny&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">by_alias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">skip_defaults</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exclude_unset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">exclude_defaults</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">exclude_none</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">encoder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">models_as_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate a JSON representation of the model,</span>
+<span class="sd">    `include` and `exclude` arguments as per `dict()`.</span>
+
+<span class="sd">    `encoder` is an optional function to supply as `default` to json.dumps(),</span>
+<span class="sd">    other arguments as per `json.dumps()`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
+        <span class="n">BaseModel</span><span class="o">.</span><span class="n">json</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">include</span><span class="o">=</span><span class="n">include</span><span class="p">,</span>
+            <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">,</span>
+            <span class="n">by_alias</span><span class="o">=</span><span class="n">by_alias</span><span class="p">,</span>
+            <span class="n">skip_defaults</span><span class="o">=</span><span class="n">skip_defaults</span><span class="p">,</span>
+            <span class="n">exclude_unset</span><span class="o">=</span><span class="n">exclude_unset</span><span class="p">,</span>
+            <span class="n">exclude_defaults</span><span class="o">=</span><span class="n">exclude_defaults</span><span class="p">,</span>
+            <span class="n">exclude_none</span><span class="o">=</span><span class="n">exclude_none</span><span class="p">,</span>
+            <span class="n">encoder</span><span class="o">=</span><span class="n">encoder</span><span class="p">,</span>
+            <span class="n">models_as_dict</span><span class="o">=</span><span class="n">models_as_dict</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>  <span class="c1"># ToDo directly use dict?</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h1 id="linkedbasemodel-v2">LinkedBaseModel v2</h1>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="oold.model.LinkedBaseModel"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code>, <code><a class="autorefs autorefs-internal" title="GenericLinkedBaseModel (oold.model.static.GenericLinkedBaseModel)" href="#oold.model.static.GenericLinkedBaseModel">GenericLinkedBaseModel</a></code></p>
+
+
+        <p>LinkedBaseModel for pydantic v1</p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>src/oold/model/__init__.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 54</span>
+<span class="normal"> 55</span>
+<span class="normal"> 56</span>
+<span class="normal"> 57</span>
+<span class="normal"> 58</span>
+<span class="normal"> 59</span>
+<span class="normal"> 60</span>
+<span class="normal"> 61</span>
+<span class="normal"> 62</span>
+<span class="normal"> 63</span>
+<span class="normal"> 64</span>
+<span class="normal"> 65</span>
+<span class="normal"> 66</span>
+<span class="normal"> 67</span>
+<span class="normal"> 68</span>
+<span class="normal"> 69</span>
+<span class="normal"> 70</span>
+<span class="normal"> 71</span>
+<span class="normal"> 72</span>
+<span class="normal"> 73</span>
+<span class="normal"> 74</span>
+<span class="normal"> 75</span>
+<span class="normal"> 76</span>
+<span class="normal"> 77</span>
+<span class="normal"> 78</span>
+<span class="normal"> 79</span>
+<span class="normal"> 80</span>
+<span class="normal"> 81</span>
+<span class="normal"> 82</span>
+<span class="normal"> 83</span>
+<span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LinkedBaseModel</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">GenericLinkedBaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LinkedBaseModel for pydantic v1&quot;&quot;&quot;</span>
+
+    <span class="n">__iris__</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the unique IRI of the object.</span>
+<span class="sd">        Overwrite this method in the subclass.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">id</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;__iris__&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">:</span>
+            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">kw</span><span class="p">):</span>  <span class="c1"># force copy of keys for inline-delete</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;__iris__&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># rewrite &lt;attr&gt; to &lt;attr&gt;_iri</span>
+            <span class="c1"># pprint(self.__fields__)</span>
+            <span class="n">extra</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="c1"># pydantic v1</span>
+            <span class="c1"># if name in self.__fields__:</span>
+            <span class="c1">#     if hasattr(self.__fields__[name].default, &quot;json_schema_extra&quot;):</span>
+            <span class="c1">#         extra = self.__fields__[name].default.json_schema_extra</span>
+            <span class="c1">#     elif hasattr(self.__fields__[name].field_info, &quot;extra&quot;):</span>
+            <span class="c1">#         extra = self.__fields__[name].field_info.extra</span>
+            <span class="c1"># pydantic v2</span>
+            <span class="n">extra</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_fields</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">json_schema_extra</span>
+
+            <span class="k">if</span> <span class="n">extra</span> <span class="ow">and</span> <span class="s2">&quot;range&quot;</span> <span class="ow">in</span> <span class="n">extra</span><span class="p">:</span>
+                <span class="n">arg_is_list</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">list</span><span class="p">)</span>
+
+                <span class="c1"># annotation_is_list = False</span>
+                <span class="c1"># args = self.model_fields[name].annotation.__args__</span>
+                <span class="c1"># if hasattr(args[0], &quot;_name&quot;):</span>
+                <span class="c1">#    is_list = args[0]._name == &quot;List&quot;</span>
+                <span class="k">if</span> <span class="n">arg_is_list</span><span class="p">:</span>
+                    <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">][:]:</span>  <span class="c1"># interate over copy of list</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>  <span class="c1"># contructed with object ref</span>
+                            <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">get_iri</span><span class="p">())</span>
                         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># constructed from json</span>
                             <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
                             <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>  <span class="c1"># remove to construct valid instance</span>
@@ -827,7 +1121,7 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">BaseModel</span><span class="p">):</span>  <span class="c1"># contructed with object ref</span>
                         <span class="c1"># print(kw[name].id)</span>
-                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">id</span>
+                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">get_iri</span><span class="p">()</span>
                     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># constructed from json</span>
                         <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
                         <span class="c1"># pydantic v1</span>
@@ -874,14 +1168,14 @@
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_object_to_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>  <span class="c1"># force copy of keys for inline-delete</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>  <span class="c1"># force copy of keys for inline-delete</span>
             <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">:</span>
                 <span class="n">d</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
                 <span class="c1"># del d[name + &quot;_iri&quot;]</span>
         <span class="k">return</span> <span class="n">d</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># extent BaseClass export function</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;dict&quot;</span><span class="p">)</span>
+        <span class="c1"># print(&quot;dict&quot;)</span>
         <span class="n">d</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="c1"># pprint(d)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
@@ -894,13 +1188,67 @@
         <span class="k">return</span> <span class="n">node_dict</span>
 
     <span class="c1"># pydantic v2</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">model_dump_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;json&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">model_dump_json</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">indent</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">include</span><span class="p">:</span> <span class="n">pydantic</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">IncEx</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exclude</span><span class="p">:</span> <span class="n">pydantic</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">IncEx</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">by_alias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">exclude_unset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">exclude_defaults</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">exclude_none</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">round_trip</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">warnings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;warn&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">serialize_as_any</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Usage docs:</span>
+<span class="sd">        https://docs.pydantic.dev/2.10/concepts/serialization/#modelmodel_dump_json</span>
+
+<span class="sd">        Generates a JSON representation of the model using Pydantic&#39;s `to_json` method.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            indent: Indentation to use in the JSON output.</span>
+<span class="sd">                If None is passed, the output will be compact.</span>
+<span class="sd">            include: Field(s) to include in the JSON output.</span>
+<span class="sd">            exclude: Field(s) to exclude from the JSON output.</span>
+<span class="sd">            context: Additional context to pass to the serializer.</span>
+<span class="sd">            by_alias: Whether to serialize using field aliases.</span>
+<span class="sd">            exclude_unset: Whether to exclude fields that have not been explicitly set.</span>
+<span class="sd">            exclude_defaults: Whether to exclude fields that are set to</span>
+<span class="sd">                their default value.</span>
+<span class="sd">            exclude_none: Whether to exclude fields that have a value of `None`.</span>
+<span class="sd">            round_trip: If True, dumped values should be valid as input</span>
+<span class="sd">                for non-idempotent types such as Json[T].</span>
+<span class="sd">            warnings: How to handle serialization errors. False/&quot;none&quot; ignores them,</span>
+<span class="sd">                True/&quot;warn&quot; logs errors, &quot;error&quot; raises a</span>
+<span class="sd">                [`PydanticSerializationError`][pydantic_core.PydanticSerializationError].</span>
+<span class="sd">            serialize_as_any: Whether to serialize fields with duck-typing serialization</span>
+<span class="sd">                behavior.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A JSON string representation of the model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">d</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
-            <span class="n">BaseModel</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">BaseModel</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span>
+                <span class="n">indent</span><span class="o">=</span><span class="n">indent</span><span class="p">,</span>
+                <span class="n">include</span><span class="o">=</span><span class="n">include</span><span class="p">,</span>
+                <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">,</span>
+                <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+                <span class="n">by_alias</span><span class="o">=</span><span class="n">by_alias</span><span class="p">,</span>
+                <span class="n">exclude_unset</span><span class="o">=</span><span class="n">exclude_unset</span><span class="p">,</span>
+                <span class="n">exclude_defaults</span><span class="o">=</span><span class="n">exclude_defaults</span><span class="p">,</span>
+                <span class="n">exclude_none</span><span class="o">=</span><span class="n">exclude_none</span><span class="p">,</span>
+                <span class="n">round_trip</span><span class="o">=</span><span class="n">round_trip</span><span class="p">,</span>
+                <span class="n">warnings</span><span class="o">=</span><span class="n">warnings</span><span class="p">,</span>
+                <span class="n">serialize_as_any</span><span class="o">=</span><span class="n">serialize_as_any</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="p">)</span>  <span class="c1"># ToDo directly use dict?</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
               </details>
 
@@ -915,6 +1263,201 @@
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="oold.model.LinkedBaseModel.get_iri" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_iri</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the unique IRI of the object.
+Overwrite this method in the subclass.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>src/oold/model/__init__.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the unique IRI of the object.</span>
+<span class="sd">    Overwrite this method in the subclass.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">id</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="oold.model.LinkedBaseModel.model_dump_json" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">model_dump_json</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">include</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">by_alias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exclude_unset</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exclude_defaults</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exclude_none</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">round_trip</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">warnings</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">serialize_as_any</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Usage docs:
+https://docs.pydantic.dev/2.10/concepts/serialization/#modelmodel_dump_json</p>
+<p>Generates a JSON representation of the model using Pydantic's <code>to_json</code> method.</p>
+<p>Args:
+    indent: Indentation to use in the JSON output.
+        If None is passed, the output will be compact.
+    include: Field(s) to include in the JSON output.
+    exclude: Field(s) to exclude from the JSON output.
+    context: Additional context to pass to the serializer.
+    by_alias: Whether to serialize using field aliases.
+    exclude_unset: Whether to exclude fields that have not been explicitly set.
+    exclude_defaults: Whether to exclude fields that are set to
+        their default value.
+    exclude_none: Whether to exclude fields that have a value of <code>None</code>.
+    round_trip: If True, dumped values should be valid as input
+        for non-idempotent types such as Json[T].
+    warnings: How to handle serialization errors. False/"none" ignores them,
+        True/"warn" logs errors, "error" raises a
+        [<code>PydanticSerializationError</code>][pydantic_core.PydanticSerializationError].
+    serialize_as_any: Whether to serialize fields with duck-typing serialization
+        behavior.</p>
+<p>Returns:
+    A JSON string representation of the model.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>src/oold/model/__init__.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">model_dump_json</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">indent</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">include</span><span class="p">:</span> <span class="n">pydantic</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">IncEx</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exclude</span><span class="p">:</span> <span class="n">pydantic</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">IncEx</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">by_alias</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">exclude_unset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">exclude_defaults</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">exclude_none</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">round_trip</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">warnings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;warn&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">serialize_as_any</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Usage docs:</span>
+<span class="sd">    https://docs.pydantic.dev/2.10/concepts/serialization/#modelmodel_dump_json</span>
+
+<span class="sd">    Generates a JSON representation of the model using Pydantic&#39;s `to_json` method.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        indent: Indentation to use in the JSON output.</span>
+<span class="sd">            If None is passed, the output will be compact.</span>
+<span class="sd">        include: Field(s) to include in the JSON output.</span>
+<span class="sd">        exclude: Field(s) to exclude from the JSON output.</span>
+<span class="sd">        context: Additional context to pass to the serializer.</span>
+<span class="sd">        by_alias: Whether to serialize using field aliases.</span>
+<span class="sd">        exclude_unset: Whether to exclude fields that have not been explicitly set.</span>
+<span class="sd">        exclude_defaults: Whether to exclude fields that are set to</span>
+<span class="sd">            their default value.</span>
+<span class="sd">        exclude_none: Whether to exclude fields that have a value of `None`.</span>
+<span class="sd">        round_trip: If True, dumped values should be valid as input</span>
+<span class="sd">            for non-idempotent types such as Json[T].</span>
+<span class="sd">        warnings: How to handle serialization errors. False/&quot;none&quot; ignores them,</span>
+<span class="sd">            True/&quot;warn&quot; logs errors, &quot;error&quot; raises a</span>
+<span class="sd">            [`PydanticSerializationError`][pydantic_core.PydanticSerializationError].</span>
+<span class="sd">        serialize_as_any: Whether to serialize fields with duck-typing serialization</span>
+<span class="sd">            behavior.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A JSON string representation of the model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
+        <span class="n">BaseModel</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">indent</span><span class="o">=</span><span class="n">indent</span><span class="p">,</span>
+            <span class="n">include</span><span class="o">=</span><span class="n">include</span><span class="p">,</span>
+            <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">,</span>
+            <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+            <span class="n">by_alias</span><span class="o">=</span><span class="n">by_alias</span><span class="p">,</span>
+            <span class="n">exclude_unset</span><span class="o">=</span><span class="n">exclude_unset</span><span class="p">,</span>
+            <span class="n">exclude_defaults</span><span class="o">=</span><span class="n">exclude_defaults</span><span class="p">,</span>
+            <span class="n">exclude_none</span><span class="o">=</span><span class="n">exclude_none</span><span class="p">,</span>
+            <span class="n">round_trip</span><span class="o">=</span><span class="n">round_trip</span><span class="p">,</span>
+            <span class="n">warnings</span><span class="o">=</span><span class="n">warnings</span><span class="p">,</span>
+            <span class="n">serialize_as_any</span><span class="o">=</span><span class="n">serialize_as_any</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>  <span class="c1"># ToDo directly use dict?</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_object_to_iri</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">dumps_kwargs</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
 
 
 

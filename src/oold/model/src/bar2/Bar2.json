@@ -3,6 +3,9 @@
     "title": "Bar2",
     "type": "object",
     "properties": {
+        "id": {
+            "type": "string"
+        },
         "type": {
             "type": "array",
             "items": {

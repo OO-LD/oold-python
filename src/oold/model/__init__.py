@@ -1,7 +1,8 @@
 import json
 from abc import abstractmethod
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
+import pydantic
 from pydantic import BaseModel
 
 from oold.model.static import GenericLinkedBaseModel
@@ -53,21 +54,32 @@ def get_resolver(param: GetResolverParam) -> GetResolverResult:
 class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
     """LinkedBaseModel for pydantic v1"""
 
-    id: str
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}
 
+    def get_iri(self) -> str:
+        """Return the unique IRI of the object.
+        Overwrite this method in the subclass."""
+        return self.id
+
     def __init__(self, *a, **kw):
+        if "__iris__" not in kw:
+            kw["__iris__"] = {}
+
         for name in list(kw):  # force copy of keys for inline-delete
+            if name == "__iris__":
+                continue
             # rewrite <attr> to <attr>_iri
             # pprint(self.__fields__)
             extra = None
             # pydantic v1
-            # if hasattr(self.__fields__[name].default, "json_schema_extra"):
-            #    extra = self.__fields__[name].default.json_schema_extra
+            # if name in self.__fields__:
+            #     if hasattr(self.__fields__[name].default, "json_schema_extra"):
+            #         extra = self.__fields__[name].default.json_schema_extra
+            #     elif hasattr(self.__fields__[name].field_info, "extra"):
+            #         extra = self.__fields__[name].field_info.extra
             # pydantic v2
             extra = self.model_fields[name].json_schema_extra
-            if "__iris__" not in kw:
-                kw["__iris__"] = {}
+
             if extra and "range" in extra:
                 arg_is_list = isinstance(kw[name], list)
 
@@ -79,7 +91,7 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
                     kw["__iris__"][name] = []
                     for e in kw[name][:]:  # interate over copy of list
                         if isinstance(e, BaseModel):  # contructed with object ref
-                            kw["__iris__"][name].append(e.id)
+                            kw["__iris__"][name].append(e.get_iri())
                         elif isinstance(e, str):  # constructed from json
                             kw["__iris__"][name].append(e)
                             kw[name].remove(e)  # remove to construct valid instance
@@ -91,7 +103,7 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
                 else:
                     if isinstance(kw[name], BaseModel):  # contructed with object ref
                         # print(kw[name].id)
-                        kw["__iris__"][name] = kw[name].id
+                        kw["__iris__"][name] = kw[name].get_iri()
                     elif isinstance(kw[name], str):  # constructed from json
                         kw["__iris__"][name] = kw[name]
                         # pydantic v1
@@ -138,14 +150,14 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
         return BaseModel.__getattribute__(self, name)
 
     def _object_to_iri(self, d):
-        for name in list(d):  # force copy of keys for inline-delete
+        for name in list(d.keys()):  # force copy of keys for inline-delete
             if name in self.__iris__:
                 d[name] = self.__iris__[name]
                 # del d[name + "_iri"]
         return d
 
     def dict(self, **kwargs):  # extent BaseClass export function
-        print("dict")
+        # print("dict")
         d = super().dict(**kwargs)
         # pprint(d)
         self._object_to_iri(d)
@@ -158,10 +170,64 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
         return node_dict
 
     # pydantic v2
-    def model_dump_json(self, **kwargs):
-        print("json")
+    def model_dump_json(
+        self,
+        *,
+        indent: Union[int, None] = None,
+        include: Union[pydantic.main.IncEx, None] = None,
+        exclude: Union[pydantic.main.IncEx, None] = None,
+        context: Union[Any, None] = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        round_trip: bool = False,
+        warnings: Union[bool, Literal["none", "warn", "error"]] = True,
+        serialize_as_any: bool = False,
+        **dumps_kwargs: Any,
+    ) -> str:
+        """Usage docs:
+        https://docs.pydantic.dev/2.10/concepts/serialization/#modelmodel_dump_json
+
+        Generates a JSON representation of the model using Pydantic's `to_json` method.
+
+        Args:
+            indent: Indentation to use in the JSON output.
+                If None is passed, the output will be compact.
+            include: Field(s) to include in the JSON output.
+            exclude: Field(s) to exclude from the JSON output.
+            context: Additional context to pass to the serializer.
+            by_alias: Whether to serialize using field aliases.
+            exclude_unset: Whether to exclude fields that have not been explicitly set.
+            exclude_defaults: Whether to exclude fields that are set to
+                their default value.
+            exclude_none: Whether to exclude fields that have a value of `None`.
+            round_trip: If True, dumped values should be valid as input
+                for non-idempotent types such as Json[T].
+            warnings: How to handle serialization errors. False/"none" ignores them,
+                True/"warn" logs errors, "error" raises a
+                [`PydanticSerializationError`][pydantic_core.PydanticSerializationError].
+            serialize_as_any: Whether to serialize fields with duck-typing serialization
+                behavior.
+
+        Returns:
+            A JSON string representation of the model.
+        """
         d = json.loads(
-            BaseModel.model_dump_json(self, **kwargs)
+            BaseModel.model_dump_json(
+                self,
+                indent=indent,
+                include=include,
+                exclude=exclude,
+                context=context,
+                by_alias=by_alias,
+                exclude_unset=exclude_unset,
+                exclude_defaults=exclude_defaults,
+                exclude_none=exclude_none,
+                round_trip=round_trip,
+                warnings=warnings,
+                serialize_as_any=serialize_as_any,
+            )
         )  # ToDo directly use dict?
         self._object_to_iri(d)
-        return json.dumps(d, **kwargs)
+        return json.dumps(d, **dumps_kwargs)

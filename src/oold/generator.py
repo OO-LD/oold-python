@@ -138,22 +138,31 @@ class Generator:
             )
 
     def preprocess(self, json_schemas):
-        aggr_schema = {"$defs": {}}
-        for schema in json_schemas:
-            aggr_schema["$defs"][schema["id"]] = schema
-        # pprint(aggr_schema)
-        # return aggr_schema
-
         for schema in json_schemas:
             for property_key in schema["properties"]:
                 property = schema["properties"][property_key]
                 if "range" in property:
-                    del property["type"]
-                    property["$ref"] = property["range"]
+                    if "type" in property:
+                        del property["type"]
+                    if "format" in property:
+                        del property["format"]
+                    # if range is a string we create a allOf with a ref to the range
+                    if isinstance(property["range"], str):
+                        property["allOf"] = [{"$ref": property["range"]}]
+                    else:
+                        property["$ref"] = property["range"]
                 if "items" in property:
                     if "range" in property["items"]:
-                        del property["items"]["type"]
-                        property["items"]["$ref"] = property["items"]["range"]
+                        if "type" in property["items"]:
+                            del property["items"]["type"]
+                        if "format" in property["items"]:
+                            del property["items"]["format"]
+                        if isinstance(property["items"]["range"], str):
+                            property["items"]["allOf"] = [
+                                {"$ref": property["items"]["range"]}
+                            ]
+                        else:
+                            property["items"]["$ref"] = property["items"]["range"]
                         property["range"] = property["items"]["range"]
 
     def generate(

@@ -1,6 +1,7 @@
 """Tests for `oold` package."""
 
 import importlib
+import json
 from typing import Any
 
 import datamodel_code_generator
@@ -39,6 +40,7 @@ def _run(pydantic_version="v1"):
             "title": "Bar2",
             "type": "object",
             "properties": {
+                "id": {"type": "string"},
                 "type": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -58,7 +60,7 @@ def _run(pydantic_version="v1"):
                     "items": {"type": "string"},
                     "default": ["Bar"],
                 },
-                "prop1": {"type": "string"},
+                "prop2": {"type": "string"},
             },
         },
         {
@@ -66,6 +68,7 @@ def _run(pydantic_version="v1"):
             "title": "Foo",
             "type": "object",
             "properties": {
+                "id": {"type": "string"},
                 "type": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -81,7 +84,13 @@ def _run(pydantic_version="v1"):
         },
     ]
     graph = [
-        {"id": "ex:a", "type": ["Foo"], "literal": "test1", "b": "ex:b"},
+        {
+            "id": "ex:f",
+            "type": ["Foo"],
+            "literal": "test1",
+            "b": "ex:b",
+            "b2": ["ex:b1", "ex:b2"],
+        },
         {"id": "ex:b", "type": ["Bar"], "prop1": "test2"},
         {"id": "ex:b1", "type": ["Bar"], "prop1": "test3"},
         {"id": "ex:b2", "type": ["Bar"], "prop1": "test4"},
@@ -111,7 +120,7 @@ def _run(pydantic_version="v1"):
     r = MyResolver(graph=graph)
     set_resolver(SetResolverParam(iri="ex", resolver=r))
 
-    f = model.Foo(id="ex:f", b="ex:b", b2=["ex:b1", "ex:b2"])
+    f = model.Foo(id="ex:f", literal="test1", b="ex:b", b2=["ex:b1", "ex:b2"])
     print(f.b)
 
     print(f.b.id)
@@ -120,6 +129,29 @@ def _run(pydantic_version="v1"):
         print(b)
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
+
+    f = model.Foo(
+        id="ex:f",
+        literal="test1",
+        b=model.Bar(id="ex:b", prop1="test2"),
+        b2=[model.Bar(id="ex:b1", prop1="test3"), model.Bar(id="ex:b2", prop1="test4")],
+    )
+    assert f.b.id == "ex:b"
+    for b in f.b2:
+        print(b)
+    assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
+    assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
+
+    def export_json(obj):
+        if pydantic_version == "v1":
+            return obj.json(exclude_none=True)
+        return obj.model_dump_json(exclude_none=True)
+
+    print(export_json(f.b))
+    assert json.loads(export_json(f)) == graph[0]
+    assert json.loads(export_json(f.b)) == graph[1]
+    assert json.loads(export_json(f.b2[0])) == graph[2]
+    assert json.loads(export_json(f.b2[1])) == graph[3]
 
 
 def test_core():

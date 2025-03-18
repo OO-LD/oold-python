@@ -17,7 +17,7 @@
                 "Bar"
             ]
         },
-        "prop1": {
+        "prop2": {
             "type": "string"
         }
     }

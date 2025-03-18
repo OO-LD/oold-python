@@ -3,6 +3,9 @@
     "title": "Foo",
     "type": "object",
     "properties": {
+        "id": {
+            "type": "string"
+        },
         "type": {
             "type": "array",
             "items": {
@@ -17,13 +20,21 @@
         },
         "b": {
             "range": "Bar.json",
-            "$ref": "Bar.json"
+            "allOf": [
+                {
+                    "$ref": "Bar.json"
+                }
+            ]
         },
         "b2": {
             "type": "array",
             "items": {
                 "range": "Bar.json",
-                "$ref": "Bar.json"
+                "allOf": [
+                    {
+                        "$ref": "Bar.json"
+                    }
+                ]
             },
             "range": "Bar.json"
         }

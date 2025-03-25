@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import pydantic
 from pydantic import BaseModel
 
-from oold.model.static import GenericLinkedBaseModel
+from oold.model.static import GenericLinkedBaseModel, export_jsonld
 
 
 class SetResolverParam(BaseModel):
@@ -231,3 +231,7 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
         )  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **dumps_kwargs)
+
+    def to_jsonld(self) -> Dict:
+        """Return the RDF representation of the object as JSON-LD."""
+        return export_jsonld(self, BaseModel)

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 from pydantic.v1 import BaseModel, PrivateAttr
 
-from oold.model.static import GenericLinkedBaseModel
+from oold.model.static import GenericLinkedBaseModel, export_jsonld
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import AbstractSetIntStr, MappingIntStrAny
@@ -210,6 +210,10 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
         )  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **dumps_kwargs)
+
+    def to_jsonld(self) -> Dict:
+        """Return the RDF representation of the object as JSON-LD."""
+        return export_jsonld(self, BaseModel)
 
 
 # required for pydantic v1

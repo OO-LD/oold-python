@@ -1,91 +1,26 @@
 import json
 import os
-import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import datamodel_code_generator
 from datamodel_code_generator import DataModelType, InputFileType, generate
-from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
+
+from oold.utils.codegen import OOLDJsonSchemaParser
 
 
 class Generator:
-    def generate1(self, json_schemas):
-        code = ""
-        first = True
-        for schema in json_schemas:
-            parser = JsonSchemaParser(
-                json.dumps(schema),
-                # custom_template_dir=Path(model_dir_path),
-                field_include_all_keys=True,
-                base_class="osw.model.static.OswBaseModel",
-                # use_default = True,
-                enum_field_as_literal="all",
-                use_title_as_name=True,
-                use_schema_description=True,
-                use_field_description=True,
-                encoding="utf-8",
-                use_double_quotes=True,
-                collapse_root_models=True,
-                reuse_model=True,
-            )
-            content = parser.parse()
-
-            if first:
-                header = (
-                    "from uuid import uuid4\n"
-                    "from typing import Type, TypeVar\n"
-                    "from osw.model.static import OswBaseModel, Ontology\n"
-                    "\n"
-                )
-
-                content = re.sub(
-                    r"(class\s*\S*\s*\(\s*OswBaseModel\s*\)\s*:.*\n)",
-                    header + r"\n\n\n\1",
-                    content,
-                    1,
-                )  # add header before first class declaration
-
-                content = re.sub(
-                    r"(UUID = Field\(...)",
-                    r"UUID = Field(default_factory=uuid4",
-                    content,
-                )  # enable default value for uuid
-
-            else:
-                org_content = code
-
-                pattern = re.compile(
-                    r"class\s*([\S]*)\s*\(\s*\S*\s*\)\s*:.*\n"
-                )  # match class definition [\s\S]*(?:[^\S\n]*\n){2,}
-                for cls in re.findall(pattern, org_content):
-                    print(cls)
-                    content = re.sub(
-                        r"(class\s*"
-                        + cls
-                        + r"\s*\(\s*\S*\s*\)\s*:.*\n[\s\S]*?(?:[^\S\n]*\n){3,})",
-                        "",
-                        content,
-                        count=1,
-                    )  # replace duplicated classes
-
-                content = re.sub(
-                    r"(from __future__ import annotations)", "", content, 1
-                )  # remove import statement
-
-            code += content + "\r\n"
-            # pprint(parser.raw_obj)
-            # print(result)
-            first = False
-
-        with open("model.py", "w") as f:
-            f.write(code)
-
-    def generate2(
+    def _generate(
         self,
         json_schemas,
         main_schema=None,
         output_model_type=DataModelType.PydanticV2BaseModel,
     ):
+        # monkey patch class
+        datamodel_code_generator.parser.jsonschema.JsonSchemaParser = (
+            OOLDJsonSchemaParser
+        )
+
         with TemporaryDirectory() as temporary_directory_name:
             temporary_directory = Path(temporary_directory_name)
             temporary_directory = Path(__file__).parent / "model" / "src"
@@ -135,11 +70,15 @@ class Generator:
                 use_double_quotes=True,
                 collapse_root_models=True,
                 reuse_model=True,
+                # create MyEnum(str, Enum) instead of MyEnum(Enum)
+                use_subclass_enum=True,
+                additional_imports=["pydantic.ConfigDict"],
             )
 
     def preprocess(self, json_schemas):
         for schema in json_schemas:
-            for property_key in schema["properties"]:
+            # schema = self.merge_property_schemas(schema)
+            for property_key in schema.get("properties", {}):
                 property = schema["properties"][property_key]
                 if "range" in property:
                     if "type" in property:
@@ -174,4 +113,4 @@ class Generator:
         # pprint(json_schemas)
         self.preprocess(json_schemas)
         # pprint(json_schemas)
-        self.generate2(json_schemas, main_schema, output_model_type)
+        self._generate(json_schemas, main_schema, output_model_type)

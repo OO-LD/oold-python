@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import pydantic
 from pydantic import BaseModel
 
-from oold.model.static import GenericLinkedBaseModel, export_jsonld
+from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
 
 class SetResolverParam(BaseModel):
@@ -51,8 +51,31 @@ def get_resolver(param: GetResolverParam) -> GetResolverResult:
     return GetResolverResult(resolver=_resolvers[iri])
 
 
-class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
-    """LinkedBaseModel for pydantic v1"""
+# pydantic v2
+_types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
+
+
+# pydantic v2
+class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass):
+    def __new__(mcs, name, bases, namespace):
+        cls = super().__new__(mcs, name, bases, namespace)
+        schema = {}
+
+        # pydantic v2
+        if "model_config" in namespace:
+            if "json_schema_extra" in namespace["model_config"]:
+                schema = namespace["model_config"]["json_schema_extra"]
+
+        if "iri" in schema:
+            iri = schema["iri"]
+            _types[iri] = cls
+        return cls
+
+
+class LinkedBaseModel(
+    BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass
+):
+    """LinkedBaseModel for pydantic v2"""
 
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}
 
@@ -67,6 +90,8 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
 
         for name in list(kw):  # force copy of keys for inline-delete
             if name == "__iris__":
+                continue
+            if name not in self.model_fields:
                 continue
             # rewrite <attr> to <attr>_iri
             # pprint(self.__fields__)
@@ -235,3 +260,8 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
     def to_jsonld(self) -> Dict:
         """Return the RDF representation of the object as JSON-LD."""
         return export_jsonld(self, BaseModel)
+
+    @classmethod
+    def from_jsonld(self, jsonld: Dict) -> "LinkedBaseModel":
+        """Constructs a model instance from a JSON-LD representation."""
+        return import_jsonld(BaseModel, jsonld, _types)

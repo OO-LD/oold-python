@@ -2,9 +2,10 @@ import json
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
+import pydantic
 from pydantic.v1 import BaseModel, PrivateAttr
 
-from oold.model.static import GenericLinkedBaseModel, export_jsonld
+from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import AbstractSetIntStr, MappingIntStrAny
@@ -53,7 +54,30 @@ def get_resolver(param: GetResolverParam) -> GetResolverResult:
     return GetResolverResult(resolver=_resolvers[iri])
 
 
-class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
+# pydantic v1
+_types: Dict[str, pydantic.v1.main.ModelMetaclass] = {}
+
+
+# pydantic v1
+class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
+    def __new__(mcs, name, bases, namespace):
+        cls = super().__new__(mcs, name, bases, namespace)
+        schema = {}
+
+        # pydantic v1
+        if "Config" in namespace:
+            if "schema_extra" in namespace["Config"].__dict__:
+                schema = namespace["Config"].schema_extra
+
+        if "iri" in schema:
+            iri = schema["iri"]
+            _types[iri] = cls
+        return cls
+
+
+class LinkedBaseModel(
+    BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass
+):
     """LinkedBaseModel for pydantic v1"""
 
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = PrivateAttr()
@@ -214,6 +238,11 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
     def to_jsonld(self) -> Dict:
         """Return the RDF representation of the object as JSON-LD."""
         return export_jsonld(self, BaseModel)
+
+    @classmethod
+    def from_jsonld(self, jsonld: Dict) -> "LinkedBaseModel":
+        """Constructs a model instance from a JSON-LD representation."""
+        return import_jsonld(BaseModel, jsonld, _types)
 
 
 # required for pydantic v1

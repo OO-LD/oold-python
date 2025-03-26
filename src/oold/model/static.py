@@ -10,16 +10,16 @@ class GenericLinkedBaseModel:
     pass
 
 
-def get_jsonld_context_loader(model_instance, model_type) -> Callable:
+def get_jsonld_context_loader(model_cls, model_type) -> Callable:
     """to overwrite the default jsonld document loader to load
     relative context from the osl"""
 
-    classes = [model_instance.__class__]
+    classes = [model_cls]
     i = 0
     while 1:
         try:
             cls = classes[i]
-            if cls == BaseModel:
+            if cls == model_type:
                 break
         except IndexError:
             break
@@ -73,11 +73,45 @@ def export_jsonld(model_instance, model_type) -> Dict:
     if model_type == BaseModel_v1:
         context = model_instance.__class__.__config__.schema_extra.get("@context", {})
     data = model_instance.dict()
-    if "id" not in data and not "@id" not in data:
+    if "id" not in data and "@id" not in data:
         data["id"] = model_instance.get_iri()
     jsonld_dict = {"@context": context, **data}
-    jsonld.set_document_loader(get_jsonld_context_loader(model_instance, model_type))
+    jsonld.set_document_loader(
+        get_jsonld_context_loader(model_instance.__class__, model_type)
+    )
     jsonld_dict = jsonld.expand(jsonld_dict)
     if isinstance(jsonld_dict, list):
         jsonld_dict = jsonld_dict[0]
     return jsonld_dict
+
+
+def import_jsonld(model_type, jsonld_dict: Dict, _types: Dict[str, type]):
+    """Return the object instance from the JSON-LD representation."""
+    # ToDo: apply jsonld frame with @id restriction
+    # get the @type from the jsonld_dict
+    type_iri = jsonld_dict.get("@type", None)
+    # if type_iri is None, return None
+    if type_iri is None:
+        return None
+    # if type_iri is a list, get the first element
+    if isinstance(type_iri, list):
+        type_iri = type_iri[0]
+    # get the class from the _types dict
+    # Todo: IRI normalization
+    type_iri = type_iri.split("/")[-1]
+    model_cls = _types.get(type_iri, None)
+    # if model_type is None, return None
+    if model_cls is None:
+        return None
+    if model_type == BaseModel:
+        # get the context from self.ConfigDict.json_schema_extra["@context"]
+        context = model_cls.model_config.get("json_schema_extra", {}).get(
+            "@context", {}
+        )
+    if model_type == BaseModel_v1:
+        context = model_cls.__config__.schema_extra.get("@context", {})
+    jsonld.set_document_loader(get_jsonld_context_loader(model_cls, model_type))
+    jsonld_dict = jsonld.compact(jsonld_dict, context)
+    if "@context" in jsonld_dict:
+        del jsonld_dict["@context"]
+    return model_cls(**jsonld_dict)

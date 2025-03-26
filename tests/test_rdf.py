@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional
 
 
@@ -5,7 +6,15 @@ def _run(pydantic_version):
     if pydantic_version == "v1":
         from pydantic.v1 import Field
 
-        from oold.model.v1 import LinkedBaseModel  # based on pydantic v2
+        # based on pydantic v1
+        from oold.model.v1 import (
+            LinkedBaseModel,
+            ResolveParam,
+            Resolver,
+            ResolveResult,
+            SetResolverParam,
+            set_resolver,
+        )
 
         class Entity(LinkedBaseModel):
             class Config:
@@ -23,7 +32,7 @@ def _run(pydantic_version):
                     "iri": "Entity.json",  # the IRI of the schema
                 }
 
-            type: Optional[str] = "ex:Entity"
+            type: Optional[str] = "ex:Entity.json"
             name: str
 
             def get_iri(self):
@@ -36,23 +45,33 @@ def _run(pydantic_version):
                         "Entity.json",  # import the context of the parent class
                         {
                             # object property definition
-                            "knows": {"@id": "schema:knows", "@type": "@id"},
+                            "knows": {
+                                "@id": "schema:knows",
+                                "@type": "@id",
+                                "@container": "@set",
+                            }
                         },
                     ],
                     "iri": "Person.json",
                 }
 
-            type: Optional[str] = "ex:Person"
+            type: Optional[str] = "ex:Person.json"
             knows: Optional[List["Person"]] = Field(
                 None,
                 # object property pointing to another Person
-                json_schema_extra={"range": "Person.json"},
+                range="Person.json",
             )
 
     if pydantic_version == "v2":
         from pydantic import ConfigDict, Field
 
-        from oold.model import LinkedBaseModel  # based on pydantic v2
+        # based on pydantic v2
+        from oold.model import LinkedBaseModel  # noqa
+        from oold.model import ResolveParam  # noqa
+        from oold.model import Resolver  # noqa
+        from oold.model import ResolveResult  # noqa
+        from oold.model import SetResolverParam  # noqa
+        from oold.model import set_resolver  # noqa
 
         class Entity(LinkedBaseModel):
             model_config = ConfigDict(
@@ -70,7 +89,7 @@ def _run(pydantic_version):
                     "iri": "Entity.json",  # the IRI of the schema
                 }
             )
-            type: Optional[str] = "ex:Entity"
+            type: Optional[str] = "ex:Entity.json"
             name: str
 
             def get_iri(self):
@@ -83,13 +102,17 @@ def _run(pydantic_version):
                         "Entity.json",  # import the context of the parent class
                         {
                             # object property definition
-                            "knows": {"@id": "schema:knows", "@type": "@id"},
+                            "knows": {
+                                "@id": "schema:knows",
+                                "@type": "@id",
+                                "@container": "@set",
+                            }
                         },
                     ],
                     "iri": "Person.json",
                 }
             )
-            type: Optional[str] = "ex:Person"
+            type: Optional[str] = "ex:Person.json"
             knows: Optional[List["Person"]] = Field(
                 None,
                 # object property pointing to another Person
@@ -121,6 +144,60 @@ def _run(pydantic_version):
     for row in qres:
         print("Bob knows " + row.name)
         assert str(row.name) == "Alice"
+
+    # create a resolver to resolve IRIs to objects
+    class SparqlResolver(Resolver):
+        # model_config = ConfigDict(
+        #    arbitrary_types_allowed=True
+        # )
+        class Config:
+            arbitrary_types_allowed = True
+
+        graph: Graph
+
+        def resolve_iri(self, iri):
+            # sparql query to get a node by IRI with all its properties
+            # using CONSTRUCT to get the full node
+            # format the result as json-ld
+            iri_filter = f"FILTER (?s = {iri})"
+            # check if the iri is a full IRI or a prefix
+            if iri.startswith("http"):
+                iri_filter = f"FILTER (?s = <{iri}>)"
+            qres = self.graph.query(
+                """
+                PREFIX ex: <https://example.com/>
+                CONSTRUCT {
+                    ?s ?p ?o .
+                }
+                WHERE {
+                    ?s ?p ?o .
+                    {{{iri_filter}}}
+                }
+                """.replace(
+                    "{{{iri_filter}}}", iri_filter
+                )
+            )
+            jsonld_dict = json.loads(qres.serialize(format="json-ld"))[0]
+            res = LinkedBaseModel.from_jsonld(jsonld_dict)
+            return res
+
+        def resolve(self, request: ResolveParam):
+            # print("RESOLVE", request)
+            nodes = {}
+            for iri in request.iris:
+                nodes[iri] = self.resolve_iri(iri)
+            return ResolveResult(nodes=nodes)
+
+    r = SparqlResolver(graph=g)
+    set_resolver(SetResolverParam(iri="ex", resolver=r))
+
+    # load bob from the graph
+    bob = r.resolve_iri("ex:Bob")
+    print(bob)
+    # accessing 'knows' will trigger a sparql query
+    # to get the full node of Alice from the graph
+    print(bob.knows[0].name)
+    assert bob.knows[0].name == "Alice"
 
 
 def test_rdf_export_and_sparql_query():

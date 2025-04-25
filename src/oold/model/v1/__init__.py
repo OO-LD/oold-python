@@ -87,11 +87,33 @@ class LinkedBaseModel(
         Overwrite this method in the subclass."""
         return self.id
 
+    @classmethod
+    def parse_obj(cls, obj: Any) -> "LinkedBaseModel":
+        """Parse the object and return a LinkedBaseModel instance.
+        This method is called by pydantic when creating
+        a new (default) instance of the model."""
+        if isinstance(obj, str):
+            # pydantic v1
+            return cls._resolve([obj])[obj]
+        if isinstance(obj, list):
+            # pydantic v1
+            # return cls._resolve(obj).nodes[obj[0]]
+            node_dict = cls._resolve(obj)
+            node_list = []
+            for iri in obj:
+                node = node_dict[iri]
+                if node:
+                    node_list.append(node)
+            return node_list
+        elif isinstance(obj, dict):
+            return super().parse_obj(obj)
+
     def __init__(self, *a, **kw):
         if "__iris__" not in kw:
             kw["__iris__"] = {}
 
         for name in list(kw):  # force copy of keys for inline-delete
+            # print(name)
             if name == "__iris__":
                 continue
             # rewrite <attr> to <attr>_iri
@@ -138,6 +160,29 @@ class LinkedBaseModel(
                         # del kw[name]
 
         BaseModel.__init__(self, *a, **kw)
+        # handle default values
+        for name in list(self.__dict__.keys()):
+            if self.__dict__[name] is None:
+                continue
+            extra = None
+            # pydantic v1
+            if name in self.__fields__:
+                if hasattr(self.__fields__[name].default, "json_schema_extra"):
+                    extra = self.__fields__[name].default.json_schema_extra
+                elif hasattr(self.__fields__[name].field_info, "extra"):
+                    extra = self.__fields__[name].field_info.extra
+            if extra and "range" in extra and name not in kw["__iris__"]:
+                arg_is_list = isinstance(self.__dict__[name], list)
+
+                if arg_is_list:
+                    kw["__iris__"][name] = []
+                    for e in self.__dict__[name]:
+                        if isinstance(e, BaseModel):  # contructed with object ref
+                            kw["__iris__"][name].append(e.get_iri())
+                else:
+                    # contructed with object ref
+                    if isinstance(self.__dict__[name], BaseModel):
+                        kw["__iris__"][name] = self.__dict__[name].get_iri()
 
         self.__iris__ = kw["__iris__"]
 
@@ -190,7 +235,8 @@ class LinkedBaseModel(
         # pprint(d)
         return d
 
-    def _resolve(self, iris):
+    @staticmethod
+    def _resolve(iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
         node_dict = resolver.resolve(ResolveParam(iris=iris)).nodes
         return node_dict

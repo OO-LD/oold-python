@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.13">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.2afb09e1.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
       
       
 
@@ -623,9 +623,7 @@
 <span class="normal">288</span>
 <span class="normal">289</span>
 <span class="normal">290</span>
-<span class="normal">291</span>
-<span class="normal">292</span>
-<span class="normal">293</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LinkedBaseModel</span><span class="p">(</span>
+<span class="normal">291</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LinkedBaseModel</span><span class="p">(</span>
     <span class="n">BaseModel</span><span class="p">,</span> <span class="n">GenericLinkedBaseModel</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">LinkedBaseModelMetaClass</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;LinkedBaseModel for pydantic v1&quot;&quot;&quot;</span>
@@ -642,7 +640,6 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse the object and return a LinkedBaseModel instance.</span>
 <span class="sd">        This method is called by pydantic when creating</span>
 <span class="sd">        a new (default) instance of the model.&quot;&quot;&quot;</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;parse_obj&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="c1"># pydantic v1</span>
             <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_resolve</span><span class="p">([</span><span class="n">obj</span><span class="p">])[</span><span class="n">obj</span><span class="p">]</span>
@@ -733,8 +730,7 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># contructed with object ref</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">BaseModel</span><span class="p">):</span>
-                        <span class="c1"># print(kw[name].id)</span>
-                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">get_iri</span><span class="p">()</span>
+                        <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">get_iri</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span> <span class="o">=</span> <span class="n">kw</span><span class="p">[</span><span class="s2">&quot;__iris__&quot;</span><span class="p">]</span>
 
@@ -876,10 +872,10 @@
 
             <details class="quote">
               <summary>Source code in <code>src/oold/model/v1/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">290</span>
-<span class="normal">291</span>
-<span class="normal">292</span>
-<span class="normal">293</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_jsonld</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jsonld</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;LinkedBaseModel&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Constructs a model instance from a JSON-LD representation.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">import_jsonld</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">jsonld</span><span class="p">,</span> <span class="n">_types</span><span class="p">)</span>
@@ -938,7 +934,9 @@ other arguments as per <code>json.dumps()</code>.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/oold/model/v1/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">247</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
 <span class="normal">248</span>
 <span class="normal">249</span>
 <span class="normal">250</span>
@@ -973,9 +971,7 @@ other arguments as per <code>json.dumps()</code>.</p>
 <span class="normal">279</span>
 <span class="normal">280</span>
 <span class="normal">281</span>
-<span class="normal">282</span>
-<span class="normal">283</span>
-<span class="normal">284</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">json</span><span class="p">(</span>
+<span class="normal">282</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">json</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">include</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="s2">&quot;AbstractSetIntStr&quot;</span><span class="p">,</span> <span class="s2">&quot;MappingIntStrAny&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1060,13 +1056,11 @@ a new (default) instance of the model.</p>
 <span class="normal">106</span>
 <span class="normal">107</span>
 <span class="normal">108</span>
-<span class="normal">109</span>
-<span class="normal">110</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">109</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_obj</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;LinkedBaseModel&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse the object and return a LinkedBaseModel instance.</span>
 <span class="sd">    This method is called by pydantic when creating</span>
 <span class="sd">    a new (default) instance of the model.&quot;&quot;&quot;</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;parse_obj&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="c1"># pydantic v1</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_resolve</span><span class="p">([</span><span class="n">obj</span><span class="p">])[</span><span class="n">obj</span><span class="p">]</span>
@@ -1104,9 +1098,9 @@ a new (default) instance of the model.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/oold/model/v1/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">286</span>
-<span class="normal">287</span>
-<span class="normal">288</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">to_jsonld</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">to_jsonld</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the RDF representation of the object as JSON-LD.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">export_jsonld</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -1854,10 +1848,10 @@ https://docs.pydantic.dev/2.10/concepts/serialization/#modelmodel_dump_json</p>
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.c8b220af.min.js"></script>
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
       
     
   </body>

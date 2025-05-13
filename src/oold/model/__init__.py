@@ -1,6 +1,6 @@
 import json
 from abc import abstractmethod
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Self, Union
 
 import pydantic
 from pydantic import BaseModel
@@ -84,6 +84,44 @@ class LinkedBaseModel(
         Overwrite this method in the subclass."""
         return self.id
 
+    @classmethod
+    def model_validate(
+        cls,
+        obj: Any,
+        *,
+        strict: bool | None = None,
+        from_attributes: bool | None = None,
+        context: Any | None = None,
+    ) -> Self:
+        """Validate a pydantic model instance.
+
+        Args:
+            obj: The object to validate.
+            strict: Whether to enforce types strictly.
+            from_attributes: Whether to extract data from object attributes.
+            context: Additional context to pass to the validator.
+
+        Raises:
+            ValidationError: If the object could not be validated.
+
+        Returns:
+            The validated model instance.
+        """
+        if isinstance(obj, str):
+            return cls._resolve([obj])[obj]
+        if isinstance(obj, list):
+            node_dict = cls._resolve(obj)
+            node_list = []
+            for iri in obj:
+                node = node_dict[iri]
+                if node:
+                    node_list.append(node)
+            return node_list
+        elif isinstance(obj, dict):
+            super().model_validate(
+                obj, strict=strict, from_attributes=from_attributes, context=context
+            )
+
     def __init__(self, *a, **kw):
         if "__iris__" not in kw:
             kw["__iris__"] = {}
@@ -137,6 +175,33 @@ class LinkedBaseModel(
                         del kw[name]
 
         BaseModel.__init__(self, *a, **kw)
+        # handle default values
+        for name in list(self.__dict__.keys()):
+            if self.__dict__[name] is None:
+                continue
+            extra = None
+            # pydantic v1
+            # if name in self.__fields__:
+            #     if hasattr(self.__fields__[name].default, "json_schema_extra"):
+            #         extra = self.__fields__[name].default.json_schema_extra
+            #     elif hasattr(self.__fields__[name].field_info, "extra"):
+            #         extra = self.__fields__[name].field_info.extra
+            # pydantic v2
+            extra = self.model_fields[name].json_schema_extra
+
+            if extra and "range" in extra:
+                arg_is_list = isinstance(self.__dict__, list)
+
+                if arg_is_list:
+                    kw["__iris__"][name] = []
+                    for e in self.__dict__[name]:
+                        if isinstance(e, BaseModel):  # contructed with object ref
+                            kw["__iris__"][name].append(e.get_iri())
+                else:
+                    if isinstance(
+                        self.__dict__[name], BaseModel
+                    ):  # contructed with object ref
+                        kw["__iris__"][name] = self.__dict__[name].get_iri()
 
         self.__iris__ = kw["__iris__"]
 
@@ -189,7 +254,8 @@ class LinkedBaseModel(
         # pprint(d)
         return d
 
-    def _resolve(self, iris):
+    @staticmethod
+    def _resolve(iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
         node_dict = resolver.resolve(ResolveParam(iris=iris)).nodes
         return node_dict

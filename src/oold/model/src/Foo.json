@@ -2,6 +2,9 @@
     "id": "Foo",
     "title": "Foo",
     "type": "object",
+    "required": [
+        "id"
+    ],
     "properties": {
         "id": {
             "type": "string"
@@ -20,6 +23,16 @@
         },
         "b": {
             "range": "Bar.json",
+            "default": "ex:b",
+            "allOf": [
+                {
+                    "$ref": "Bar.json"
+                }
+            ]
+        },
+        "b_default": {
+            "range": "Bar.json",
+            "default": "ex:b",
             "allOf": [
                 {
                     "$ref": "Bar.json"

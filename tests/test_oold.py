@@ -67,6 +67,7 @@ def _run(pydantic_version="v1"):
             "id": "Foo",
             "title": "Foo",
             "type": "object",
+            "required": ["id"],
             "properties": {
                 "id": {"type": "string"},
                 "type": {
@@ -75,7 +76,8 @@ def _run(pydantic_version="v1"):
                     "default": ["Foo"],
                 },
                 "literal": {"type": "string"},
-                "b": {"type": "string", "range": "Bar.json"},
+                "b": {"type": "string", "range": "Bar.json", "default": "ex:b"},
+                "b_default": {"type": "string", "range": "Bar.json", "default": "ex:b"},
                 "b2": {
                     "type": "array",
                     "items": {"type": "string", "range": "Bar.json"},
@@ -89,6 +91,8 @@ def _run(pydantic_version="v1"):
             "type": ["Foo"],
             "literal": "test1",
             "b": "ex:b",
+            # will be automatically added by the class constructor
+            # "b_default": "ex:b",
             "b2": ["ex:b1", "ex:b2"],
         },
         {"id": "ex:b", "type": ["Bar"], "prop1": "test2"},
@@ -129,6 +133,7 @@ def _run(pydantic_version="v1"):
         print(b)
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
+    assert f.b_default.id == "ex:b"
 
     f = model.Foo(
         id="ex:f",
@@ -147,8 +152,8 @@ def _run(pydantic_version="v1"):
             return obj.json(exclude_none=True)
         return obj.model_dump_json(exclude_none=True)
 
-    print(export_json(f.b))
-    assert json.loads(export_json(f)) == graph[0]
+    print(export_json(f))
+    assert json.loads(export_json(f)) == {**graph[0], **{"b_default": "ex:b"}}
     assert json.loads(export_json(f.b)) == graph[1]
     assert json.loads(export_json(f.b2[0])) == graph[2]
     assert json.loads(export_json(f.b2[1])) == graph[3]

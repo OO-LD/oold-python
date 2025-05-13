@@ -215,7 +215,7 @@ class LinkedBaseModel(
 
         else:
             if hasattr(self, "__iris__"):
-                if name in self.__iris__:
+                if name in self.__iris__ and len(self.__iris__[name]) > 0:
                     if self.__dict__[name] is None or (
                         isinstance(self.__dict__[name], list)
                         and len(self.__dict__[name]) == 0

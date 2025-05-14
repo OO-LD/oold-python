@@ -7,6 +7,14 @@ from pyld import jsonld
 
 
 class GenericLinkedBaseModel:
+    def _object_to_iri(self, d, exclude_none=False):
+        for name in list(d.keys()):  # force copy of keys for inline-delete
+            if name in self.__iris__:
+                d[name] = self.__iris__[name]
+            if exclude_none and d[name] is None:
+                del d[name]
+        return d
+
     @staticmethod
     def remove_none(d: Dict) -> Dict:
         """Remove None values from a dictionary recursively."""

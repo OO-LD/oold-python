@@ -220,15 +220,6 @@ class LinkedBaseModel(
 
         return BaseModel.__getattribute__(self, name)
 
-    def _object_to_iri(self, d, exclude_none=False):
-        for name in list(d.keys()):  # force copy of keys for inline-delete
-            if name in self.__iris__:
-                d[name] = self.__iris__[name]
-                # del d[name + "_iri"]
-            if exclude_none and d[name] is None:
-                del d[name]
-        return d
-
     def dict(self, **kwargs):  # extent BaseClass export function
         # print("dict")
         remove_none = kwargs.get("remove_none", False)

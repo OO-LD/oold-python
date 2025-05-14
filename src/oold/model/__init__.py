@@ -1,9 +1,10 @@
 import json
 from abc import abstractmethod
-from typing import Any, Dict, List, Literal, Optional, Self, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import pydantic
 from pydantic import BaseModel
+from typing_extensions import Self  # to support python < 3.11
 
 from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
@@ -89,9 +90,9 @@ class LinkedBaseModel(
         cls,
         obj: Any,
         *,
-        strict: bool | None = None,
-        from_attributes: bool | None = None,
-        context: Any | None = None,
+        strict: Union[bool, None] = None,
+        from_attributes: Union[bool, None] = None,
+        context: Union[Any, None] = None,
     ) -> Self:
         """Validate a pydantic model instance.
 

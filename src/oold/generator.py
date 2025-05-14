@@ -145,6 +145,12 @@ class Generator:
                             if "x-oold-required-iri" not in property:
                                 property["x-oold-required-iri"] = True
 
+                    if "properties" in property["items"]:
+                        self.preprocess([property["items"]])
+
+                if "properties" in property:
+                    self.preprocess([property])
+
     def generate(
         self,
         json_schemas,

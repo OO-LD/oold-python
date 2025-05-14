@@ -67,7 +67,7 @@ def _run(pydantic_version="v1"):
             "id": "Foo",
             "title": "Foo",
             "type": "object",
-            "required": ["id"],
+            "required": ["id", "b"],
             "properties": {
                 "id": {"type": "string"},
                 "type": {
@@ -76,7 +76,7 @@ def _run(pydantic_version="v1"):
                     "default": ["Foo"],
                 },
                 "literal": {"type": "string"},
-                "b": {"type": "string", "range": "Bar.json", "default": "ex:b"},
+                "b": {"type": "string", "range": "Bar.json"},
                 "b_default": {"type": "string", "range": "Bar.json", "default": "ex:b"},
                 "b2": {
                     "type": "array",
@@ -175,6 +175,21 @@ def _run(pydantic_version="v1"):
     f_json = json.loads(export_json(f))
     assert f_json["b_default"] == "ex:doesNotExist"
     assert f_json["b2"][1] == "ex:doesNotExist"
+
+    # test if skipping of a required property throws an exception
+    # assert that ValueError is raised, fail if non is raised
+    try:
+        f = model.Foo(
+            id="ex:f",
+            literal="test1",
+            # b="ex:b",
+            b_default="ex:doesNotExist",
+            b2=["ex:b1", "ex:doesNotExist"],
+        )
+    except Exception as e:
+        assert isinstance(e, ValueError)
+    else:
+        assert False, "ValueError not raised"
 
 
 def test_core():

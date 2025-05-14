@@ -3,7 +3,8 @@
     "title": "Foo",
     "type": "object",
     "required": [
-        "id"
+        "id",
+        "b"
     ],
     "properties": {
         "id": {
@@ -28,7 +29,8 @@
                 {
                     "$ref": "Bar.json"
                 }
-            ]
+            ],
+            "x-oold-required-iri": true
         },
         "b_default": {
             "range": "Bar.json",

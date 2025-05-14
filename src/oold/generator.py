@@ -76,6 +76,7 @@ class Generator:
                 additional_imports=["pydantic.ConfigDict"]
                 if output_model_type == DataModelType.PydanticV2BaseModel
                 else [],
+                apply_default_values_for_required_fields=True,
             )
 
             if main_schema is not None:
@@ -117,6 +118,12 @@ class Generator:
                         property["allOf"] = [{"$ref": property["range"]}]
                     else:
                         property["$ref"] = property["range"]
+                    if "required" in schema and property_key in schema["required"]:
+                        # if no default value is set, remove the property from required
+                        if "default" not in property:
+                            schema["required"].remove(property_key)
+                        if "x-oold-required-iri" not in property:
+                            property["x-oold-required-iri"] = True
                 if "items" in property:
                     if "range" in property["items"]:
                         if "type" in property["items"]:
@@ -130,6 +137,13 @@ class Generator:
                         else:
                             property["items"]["$ref"] = property["items"]["range"]
                         property["range"] = property["items"]["range"]
+                        if "required" in schema and property_key in schema["required"]:
+                            # if no default value is set,
+                            # remove the property from required
+                            if "default" not in property["items"]:
+                                schema["required"].remove(property_key)
+                            if "x-oold-required-iri" not in property:
+                                property["x-oold-required-iri"] = True
 
     def generate(
         self,

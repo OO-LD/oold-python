@@ -205,6 +205,24 @@ class LinkedBaseModel(
 
         self.__iris__ = kw["__iris__"]
 
+        # iterate over all fields
+        # if x-oold-required-iri occurs in extra and the field is not set in __iri__
+        # throw an error
+        for name in self.model_fields:
+            extra = None
+            # pydantic v1
+            # if name in self.__fields__:
+            #     if hasattr(self.__fields__[name].default, "json_schema_extra"):
+            #         extra = self.__fields__[name].default.json_schema_extra
+            #     elif hasattr(self.__fields__[name].field_info, "extra"):
+            #         extra = self.__fields__[name].field_info.extra
+            # pydantic v2
+            extra = self.model_fields[name].json_schema_extra
+
+            if extra and "x-oold-required-iri" in extra:
+                if name not in self.__iris__:
+                    raise ValueError(f"{name} is required but not set")
+
     def __getattribute__(self, name):
         # print("__getattribute__ ", name)
         # async? https://stackoverflow.com/questions/33128325/

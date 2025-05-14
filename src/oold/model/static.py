@@ -7,7 +7,19 @@ from pyld import jsonld
 
 
 class GenericLinkedBaseModel:
-    pass
+    @staticmethod
+    def remove_none(d: Dict) -> Dict:
+        """Remove None values from a dictionary recursively."""
+        if isinstance(d, dict):
+            return {
+                k: GenericLinkedBaseModel.remove_none(v)
+                for k, v in d.items()
+                if v is not None
+            }
+        elif isinstance(d, list):
+            return [GenericLinkedBaseModel.remove_none(i) for i in d]
+        else:
+            return d
 
 
 def get_jsonld_context_loader(model_cls, model_type) -> Callable:

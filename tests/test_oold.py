@@ -158,6 +158,24 @@ def _run(pydantic_version="v1"):
     assert json.loads(export_json(f.b2[0])) == graph[2]
     assert json.loads(export_json(f.b2[1])) == graph[3]
 
+    # Test nonexisting IRIs => properties should be initialized to None
+    # but IRI is persisted when exporting to JSON
+    f = model.Foo(
+        id="ex:f",
+        literal="test1",
+        b="ex:b",
+        b_default="ex:doesNotExist",
+        b2=["ex:b1", "ex:doesNotExist"],
+    )
+
+    print(f)
+    print(export_json(f))
+    assert f.b_default is None
+    assert f.b2[1] is None
+    f_json = json.loads(export_json(f))
+    assert f_json["b_default"] == "ex:doesNotExist"
+    assert f_json["b2"][1] == "ex:doesNotExist"
+
 
 def test_core():
     _run(pydantic_version="v1")

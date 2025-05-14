@@ -162,7 +162,7 @@ class LinkedBaseModel(
                         # pydantic v1
                         # kw[name] = None # else pydantic v1 will set a FieldInfo object
                         # pydantic v2
-                        del kw[name]
+                        kw[name] = None  # else default value may be set
                 else:
                     if isinstance(kw[name], BaseModel):  # contructed with object ref
                         # print(kw[name].id)
@@ -172,7 +172,7 @@ class LinkedBaseModel(
                         # pydantic v1
                         # kw[name] = None # else pydantic v1 will set a FieldInfo object
                         # pydantic v2
-                        del kw[name]
+                        kw[name] = None  # else default value may be set
 
         BaseModel.__init__(self, *a, **kw)
         # handle default values
@@ -239,18 +239,24 @@ class LinkedBaseModel(
 
         return BaseModel.__getattribute__(self, name)
 
-    def _object_to_iri(self, d):
+    def _object_to_iri(self, d, exclude_none=False):
         for name in list(d.keys()):  # force copy of keys for inline-delete
             if name in self.__iris__:
                 d[name] = self.__iris__[name]
                 # del d[name + "_iri"]
+            if exclude_none and d[name] is None:
+                del d[name]
         return d
 
     def dict(self, **kwargs):  # extent BaseClass export function
         # print("dict")
+        remove_none = kwargs.get("remove_none", False)
+        kwargs["exclude_none"] = False
         d = super().dict(**kwargs)
         # pprint(d)
         self._object_to_iri(d)
+        if remove_none:
+            d = self.remove_none(d)
         # pprint(d)
         return d
 
@@ -314,13 +320,17 @@ class LinkedBaseModel(
                 by_alias=by_alias,
                 exclude_unset=exclude_unset,
                 exclude_defaults=exclude_defaults,
-                exclude_none=exclude_none,
+                exclude_none=False,  # handle None values separately
                 round_trip=round_trip,
                 warnings=warnings,
                 serialize_as_any=serialize_as_any,
             )
         )  # ToDo directly use dict?
+        # this may replace some None values with IRIs in case they were never resolved
+        # thats why we handle exclude_none there
         self._object_to_iri(d)
+        if exclude_none:
+            d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)
 
     def to_jsonld(self) -> Dict:

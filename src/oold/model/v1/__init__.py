@@ -196,7 +196,7 @@ class LinkedBaseModel(
 
         else:
             if hasattr(self, "__iris__"):
-                if name in self.__iris__:
+                if name in self.__iris__ and len(self.__iris__[name]) > 0:
                     if self.__dict__[name] is None or (
                         isinstance(self.__dict__[name], list)
                         and len(self.__dict__[name]) == 0
@@ -220,18 +220,24 @@ class LinkedBaseModel(
 
         return BaseModel.__getattribute__(self, name)
 
-    def _object_to_iri(self, d):
+    def _object_to_iri(self, d, exclude_none=False):
         for name in list(d.keys()):  # force copy of keys for inline-delete
             if name in self.__iris__:
                 d[name] = self.__iris__[name]
                 # del d[name + "_iri"]
+            if exclude_none and d[name] is None:
+                del d[name]
         return d
 
     def dict(self, **kwargs):  # extent BaseClass export function
         # print("dict")
+        remove_none = kwargs.get("remove_none", False)
+        kwargs["exclude_none"] = False
         d = super().dict(**kwargs)
         # pprint(d)
         self._object_to_iri(d)
+        if remove_none:
+            d = self.remove_none(d)
         # pprint(d)
         return d
 
@@ -272,13 +278,17 @@ class LinkedBaseModel(
                 skip_defaults=skip_defaults,
                 exclude_unset=exclude_unset,
                 exclude_defaults=exclude_defaults,
-                exclude_none=exclude_none,
+                exclude_none=False,  # handle None values separately
                 encoder=encoder,
                 models_as_dict=models_as_dict,
                 **dumps_kwargs,
             )
         )  # ToDo directly use dict?
+        # this may replace some None values with IRIs in case they were never resolved
+        # thats why we handle exclude_none there
         self._object_to_iri(d)
+        if exclude_none:
+            d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)
 
     def to_jsonld(self) -> Dict:

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -72,8 +73,34 @@ class Generator:
                 reuse_model=True,
                 # create MyEnum(str, Enum) instead of MyEnum(Enum)
                 use_subclass_enum=True,
-                additional_imports=["pydantic.ConfigDict"],
+                additional_imports=["pydantic.ConfigDict"]
+                if output_model_type == DataModelType.PydanticV2BaseModel
+                else [],
             )
+
+            if main_schema is not None:
+                content = ""
+                with open(output, "r", encoding="utf-8") as f:
+                    content = f.read()
+                os.remove(output)
+
+                content = re.sub(
+                    r"(UUID = Field\(...)",
+                    r"UUID = Field(default_factory=uuid4",
+                    content,
+                )  # enable default value for uuid
+
+                if output_model_type == DataModelType.PydanticBaseModel:
+                    # we are now using pydantic.v1
+                    # pydantic imports lead to uninitialized fields
+                    # (FieldInfo still present)
+                    content = re.sub(
+                        r"(from pydantic import)", "from pydantic.v1 import", content
+                    )
+
+                # write the content to the file
+                with open(output, "w", encoding="utf-8") as f:
+                    f.write(content)
 
     def preprocess(self, json_schemas):
         for schema in json_schemas:

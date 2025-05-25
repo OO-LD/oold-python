@@ -75,9 +75,21 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
         return cls
 
 
-class LinkedBaseModel(
-    BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass
-):
+# the following switch ensures that autocomplete works in IDEs like VSCode
+if TYPE_CHECKING:
+
+    class _LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
+        pass
+
+else:
+
+    class _LinkedBaseModel(
+        BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass
+    ):
+        pass
+
+
+class LinkedBaseModel(_LinkedBaseModel):
     """LinkedBaseModel for pydantic v1"""
 
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = PrivateAttr()

@@ -1,6 +1,6 @@
 import json
 from abc import abstractmethod
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 import pydantic
 from pydantic import BaseModel
@@ -73,9 +73,21 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
         return cls
 
 
-class LinkedBaseModel(
-    BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass
-):
+# the following switch ensures that autocomplete works in IDEs like VSCode
+if TYPE_CHECKING:
+
+    class _LinkedBaseModel(BaseModel, GenericLinkedBaseModel):
+        pass
+
+else:
+
+    class _LinkedBaseModel(
+        BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass
+    ):
+        pass
+
+
+class LinkedBaseModel(_LinkedBaseModel):
     """LinkedBaseModel for pydantic v2"""
 
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}

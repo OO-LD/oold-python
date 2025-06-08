@@ -216,6 +216,58 @@ class LinkedBaseModel(_LinkedBaseModel):
                 if name not in self.__iris__:
                     raise ValueError(f"{name} is required but not set")
 
+    def _handle_value(self, name, value):
+        extra = None
+        # pydantic v1
+        if name in self.__fields__:
+            if hasattr(self.__fields__[name].default, "json_schema_extra"):
+                extra = self.__fields__[name].default.json_schema_extra
+            elif hasattr(self.__fields__[name].field_info, "extra"):
+                extra = self.__fields__[name].field_info.extra
+        # pydantic v2
+        # extra = self.model_fields[name].json_schema_extra
+
+        if extra and "range" in extra:
+            arg_is_list = isinstance(value, list)
+
+            if arg_is_list:
+                self.__iris__[name] = []
+                for e in value[:]:  # interate over copy of list
+                    if isinstance(e, BaseModel):  # contructed with object ref
+                        self.__iris__[name].append(e.get_iri())
+                    elif isinstance(e, str):  # constructed from json
+                        self.__iris__[name].append(e)
+                        value.remove(e)  # remove to construct valid instance
+                if len(value) == 0:
+                    # pydantic v1
+                    value = None  # else pydantic v1 will set a FieldInfo object
+                    # pydantic v2
+                    # del kw[name]
+            else:
+                if isinstance(value, BaseModel):  # contructed with object ref
+                    # print(value.id)
+                    self.__iris__[name] = value.get_iri()
+                elif isinstance(value, str):  # constructed from json
+                    self.__iris__[name] = value
+                    # pydantic v1
+                    value = None  # else pydantic v1 will set a FieldInfo object
+                    # pydantic v2
+                    # del kw[name]
+                elif value is None:
+                    del self.__iris__[name]
+        return value
+
+    def __setattr__(self, name, value, internal=False):
+        # print("__setattr__", name, value)
+        if not internal and name not in [
+            "__dict__",
+            "__pydantic_private__",
+            "__iris__",
+        ]:
+            value = self._handle_value(name, value)
+
+        return super().__setattr__(name, value)
+
     def __getattribute__(self, name):
         # print("__getattribute__ ", name)
         # async? https://stackoverflow.com/questions/33128325/
@@ -242,11 +294,11 @@ class LinkedBaseModel(_LinkedBaseModel):
                             for iri in iris:
                                 node = node_dict[iri]
                                 node_list.append(node)
-                            self.__setattr__(name, node_list)
+                            self.__setattr__(name, node_list, True)
                         else:
                             node = node_dict[iris[0]]
                             if node:
-                                self.__setattr__(name, node)
+                                self.__setattr__(name, node, True)
 
         return BaseModel.__getattribute__(self, name)
 

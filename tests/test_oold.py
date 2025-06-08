@@ -6,7 +6,7 @@ from typing import Any
 
 import datamodel_code_generator
 
-import oold.model.model as model
+import oold.model.example as model
 from oold.generator import Generator
 
 
@@ -78,6 +78,7 @@ def _run(pydantic_version="v1"):
                 "literal": {"type": "string"},
                 "b": {"type": "string", "range": "Bar.json"},
                 "b_default": {"type": "string", "range": "Bar.json", "default": "ex:b"},
+                "b_set_later": {"type": "string", "range": "Bar.json"},
                 "b2": {
                     "type": "array",
                     "items": {"type": "string", "range": "Bar.json"},
@@ -124,26 +125,30 @@ def _run(pydantic_version="v1"):
     r = MyResolver(graph=graph)
     set_resolver(SetResolverParam(iri="ex", resolver=r))
 
+    # Test if the model can be created with string IRIs
     f = model.Foo(id="ex:f", literal="test1", b="ex:b", b2=["ex:b1", "ex:b2"])
-    print(f.b)
+    f.b_set_later = "ex:b"
 
-    print(f.b.id)
     assert f.b.id == "ex:b"
+    assert f.b_set_later.id == "ex:b"
     for b in f.b2:
-        print(b)
+        assert b.id.startswith("ex:b")
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
     assert f.b_default.id == "ex:b"
 
+    # Test if the model can be created with objects
     f = model.Foo(
         id="ex:f",
         literal="test1",
         b=model.Bar(id="ex:b", prop1="test2"),
         b2=[model.Bar(id="ex:b1", prop1="test3"), model.Bar(id="ex:b2", prop1="test4")],
     )
+    f.b_set_later = model.Bar(id="ex:b", prop1="test2")
     assert f.b.id == "ex:b"
+    assert f.b_set_later.id == "ex:b"
     for b in f.b2:
-        print(b)
+        assert b.id.startswith("ex:b")
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
 
@@ -152,11 +157,19 @@ def _run(pydantic_version="v1"):
             return obj.json(exclude_none=True)
         return obj.model_dump_json(exclude_none=True)
 
-    print(export_json(f))
-    assert json.loads(export_json(f)) == {**graph[0], **{"b_default": "ex:b"}}
+    assert json.loads(export_json(f)) == {
+        **graph[0],
+        **{"b_default": "ex:b", "b_set_later": "ex:b"},
+    }
     assert json.loads(export_json(f.b)) == graph[1]
     assert json.loads(export_json(f.b2[0])) == graph[2]
     assert json.loads(export_json(f.b2[1])) == graph[3]
+
+    # unset property should be None
+    f.b_set_later = None
+    assert f.b_set_later is None
+    f_json = json.loads(export_json(f))
+    assert "b_set_later" not in f_json
 
     # Test nonexisting IRIs => properties should be initialized to None
     # but IRI is persisted when exporting to JSON
@@ -168,8 +181,6 @@ def _run(pydantic_version="v1"):
         b2=["ex:b1", "ex:doesNotExist"],
     )
 
-    print(f)
-    print(export_json(f))
     assert f.b_default is None
     assert f.b2[1] is None
     f_json = json.loads(export_json(f))

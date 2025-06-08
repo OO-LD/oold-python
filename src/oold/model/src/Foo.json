@@ -3,8 +3,7 @@
     "title": "Foo",
     "type": "object",
     "required": [
-        "id",
-        "b"
+        "id"
     ],
     "properties": {
         "id": {
@@ -24,7 +23,6 @@
         },
         "b": {
             "range": "Bar.json",
-            "default": "ex:b",
             "allOf": [
                 {
                     "$ref": "Bar.json"
@@ -35,6 +33,14 @@
         "b_default": {
             "range": "Bar.json",
             "default": "ex:b",
+            "allOf": [
+                {
+                    "$ref": "Bar.json"
+                }
+            ]
+        },
+        "b_set_later": {
+            "range": "Bar.json",
             "allOf": [
                 {
                     "$ref": "Bar.json"

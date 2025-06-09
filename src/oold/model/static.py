@@ -90,9 +90,11 @@ def export_jsonld(model_instance, model_type) -> Dict:
         context = model_instance.model_config.get("json_schema_extra", {}).get(
             "@context", {}
         )
+        data = model_instance.model_dump(exclude_none=True)
     if model_type == BaseModel_v1:
         context = model_instance.__class__.__config__.schema_extra.get("@context", {})
-    data = model_instance.dict()
+        data = model_instance.dict(exclude_none=True)
+
     if "id" not in data and "@id" not in data:
         data["id"] = model_instance.get_iri()
     jsonld_dict = {"@context": context, **data}

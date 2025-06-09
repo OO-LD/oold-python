@@ -324,7 +324,7 @@ class LinkedBaseModel(_LinkedBaseModel):
 
     def model_dump(self, **kwargs):  # extent BaseClass export function
         # print("dict")
-        remove_none = kwargs.get("remove_none", False)
+        remove_none = kwargs.get("exclude_none", False)
         kwargs["exclude_none"] = False
         d = super().model_dump(**kwargs)
         # pprint(d)

@@ -6,7 +6,7 @@ from typing import Any
 
 import datamodel_code_generator
 
-import oold.model.example as model
+import oold.model.model as model
 from oold.generator import Generator
 
 

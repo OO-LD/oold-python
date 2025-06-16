@@ -1,12 +1,11 @@
 """Tests for `oold` package."""
 
-import importlib
 import json
+from pathlib import Path
 from typing import Any
 
 import datamodel_code_generator
 
-import oold.model.model as model
 from oold.generator import Generator
 
 
@@ -102,8 +101,23 @@ def _run(pydantic_version="v1"):
     ]
 
     g = Generator()
-    g.generate(schemas, main_schema="Foo.json", output_model_type=output_model_type)
-    importlib.reload(model)
+    g.generate(
+        Generator.GenerateParams(
+            json_schemas=schemas,
+            main_schema="Foo.json",
+            output_model_type=output_model_type,
+            output_model_path=Path(__file__).parent
+            / "data"
+            / "test_core"
+            / ("model_" + pydantic_version + ".py"),
+            working_dir_path=Path(__file__).parent / "data" / "test_core" / "src",
+        )
+    )
+
+    if pydantic_version == "v1":
+        from data.test_core import model_v1 as model
+    else:
+        from data.test_core import model_v2 as model
 
     class MyResolver(Resolver):
         graph: (Any)
@@ -111,8 +125,9 @@ def _run(pydantic_version="v1"):
         def resolve_iri(self, iri):
             for node in self.graph:
                 if node["id"] == iri:
-                    cls = node["type"][0]
-                    entity = eval(f"model.{cls}(**node)")
+                    cls_name = node["type"][0]
+                    cls = getattr(model, cls_name)
+                    entity = cls(**node)
                     return entity
 
         def resolve(self, request: ResolveParam):

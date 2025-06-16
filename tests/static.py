@@ -1,9 +1,8 @@
-import importlib
+from pathlib import Path
 from typing import Callable, List
 
 import datamodel_code_generator
 
-import oold.model.model as model
 from oold.generator import Generator
 
 
@@ -36,8 +35,16 @@ def _run(
 
         g = Generator()
         g.generate(
-            schemas, main_schema=main_schema, output_model_type=output_model_type
+            Generator.GenerateParams(
+                json_schemas=schemas,
+                main_schema=main_schema,
+                output_model_type=output_model_type,
+                output_model_path=Path(__file__).parent
+                / "data"
+                / test.__name__
+                / ("model_" + pydantic_version + ".py"),
+                # working_dir_path=Path(__file__).parent / "data" / "test_core" / "src"
+            )
         )
-        importlib.reload(model)
 
         test(pydantic_version)

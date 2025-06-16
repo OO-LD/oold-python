@@ -84,18 +84,21 @@ class OOLDJsonSchemaParser(JsonSchemaParser):
                     )
                 )
                 if hasattr(so, "properties") and hasattr(obj, "properties"):
-                    for k, v in so.properties.items():
-                        if k in obj.properties:
-                            if obj.properties[k].extras:
-                                v.extras = self._deep_merge(
-                                    v.extras, obj.properties[k].extras
-                                )
-                        x_of_properties = getattr(target_attribute, "properties", {})
-                        if k in x_of_properties:
-                            if x_of_properties[k].extras:
-                                v.extras = self._deep_merge(
-                                    v.extras, x_of_properties[k].extras
-                                )
+                    if so.properties is not None and obj.properties is not None:
+                        for k, v in so.properties.items():
+                            if k in obj.properties:
+                                if obj.properties[k].extras:
+                                    v.extras = self._deep_merge(
+                                        v.extras, obj.properties[k].extras
+                                    )
+                            x_of_properties = getattr(
+                                target_attribute, "properties", {}
+                            )
+                            if k in x_of_properties:
+                                if x_of_properties[k].extras:
+                                    v.extras = self._deep_merge(
+                                        v.extras, x_of_properties[k].extras
+                                    )
                 combined_schemas.append(so)
 
         parsed_schemas = self.parse_list_item(
@@ -126,13 +129,28 @@ class OOLDJsonSchemaParserFixedRefs(OOLDJsonSchemaParser):
     """Overwrite # overwrite the original `_get_ref_body_from_remote` function to fix
     wrongly composed paths. This issue occurs only when using this parser class directy
     and occurs not if used through mokey patching and
-    `datamodel_code_generator.generate()`
+    `datamodel_code_generator.generate()`.
+    Only relevant for schema refs in subdirs
     """
 
     def _get_ref_body_from_remote(self, resolved_ref: str) -> Dict[Any, Any]:
-        # full_path = self.base_path / resolved_ref
-        # fix: merge the paths correctly
-        full_path = self.base_path / Path(resolved_ref).parts[-1]
+        # default behaviour:  full_path = self.base_path / resolved_ref
+        # fix: merge the paths correctly:
+        # resolved_ref:  'C:/Users/Example/Git/OO-LD/oold-python/src/oold/example/src/Bar.json' # noqa: E501
+        # self.base_path 'C:/Users/Example/Git/OO-LD/oold-python/src/oold/example/src'
+        # => full_path:  'C:/Users/Example/Git/OO-LD/oold-python/src/oold/example/src/Bar.json' # noqa: E501
+        # resolved_ref:  'C:/Users/Example/Git/OO-LD/oold-python/src/oold/example/src/Users/Example/Git/OO-LD/oold-python/src/oold/example/src/bar2/Bar2.json' # noqa: E501
+        # self.base_path 'C:/Users/Example/Git/OO-LD/oold-python/src/oold/example/src'
+        # => full_path:  'C:/Users/Example/Git/OO-LD/oold-python/src/oold/example/src/bar2/Bar2.json' # noqa: E501
+
+        # get path without drive and scheme, so that it works on Windows and Linux
+        resolved_ref = Path(resolved_ref).as_posix()  # remove drive and scheme
+        resolved_ref = resolved_ref.split(self.base_path.as_posix().split(":", 1)[-1])[
+            -1
+        ].lstrip(
+            "/"
+        )  # remove base path, leading '/'
+        full_path = self.base_path / Path(resolved_ref)
         return self.remote_object_cache.get_or_put(
             str(full_path),
             default_factory=lambda _: load_yaml_from_path(full_path, self.encoding),

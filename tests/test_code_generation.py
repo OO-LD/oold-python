@@ -1,6 +1,4 @@
-import oold.model.model as model
-
-from .static import _run
+from static import _run
 
 
 def test_oneof_subschema():
@@ -46,16 +44,20 @@ def test_oneof_subschema():
         },
     ]
 
-    def test(pydantic_version):
+    def oneof_subschema(pydantic_version):
         # Test the generated model, see
         # https://github.com/koxudaxi/datamodel-code-generator/issues/2403
 
         if pydantic_version == "v1":
+            import data.oneof_subschema.model_v1 as model
+
             assert (
                 model.Subschema1.__fields__["subprop1"].field_info.extra["custom_key"]
                 == "custom_value_1"
             )
         else:
+            import data.oneof_subschema.model_v2 as model
+
             model.Subschema1.model_fields["subprop1"].json_schema_extra[
                 "custom_key"
             ] == "custom_value_1"
@@ -63,7 +65,7 @@ def test_oneof_subschema():
     _run(
         schemas,
         main_schema="example.json",
-        test=test,
+        test=oneof_subschema,
         # pydantic_versions=["v1"],
     )
 

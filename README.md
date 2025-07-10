@@ -8,9 +8,29 @@
 
 Linked data class python package for object oriented linked data ([OO-LD](https://github.com/OO-LD/schema)). This package aims to implemment this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package - work in progress.
 
-# Features
+## Objectives
+- lossless transpilation between [OO-LD](https://github.com/OO-LD/schema) schemas and extended pydantic data classes
+- interprete string IRIs with `oold-range` annotation as typed class property
+- dynamically resolve such IRIs from one or multiple backends (simple in-memory dict, RDF-Graph, SPARQL-Endpoint, Document Store, etc.)
+- serialized class instances to JSON-LD while replacing python object-references with IRIs
+- apply filters / queries to backend-requests (SPARQL, GraphQL, ...)
 
-## Code Generation
+## Related Work
+
+| **Lib Name** | **Repo**                                                                                     | **Description**                                                                                                                                                                    |
+|--------------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **RDFLib**   | [https://github.com/RDFLib/rdflib](https://github.com/RDFLib/rdflib)                         | Widely used for managing RDF data; lacks built-in schema validation or type safety, requires external reasoning tools. Provides local/remote SPARQL support (used as backend for oold-python).  |
+| **SuRF**     | [https://github.com/cosminbasca/surfrdf](https://github.com/cosminbasca/surfrdf)             | ORM-like approach for RDF; Dynamically generated class definitions, no static type checking.                                                                                                    |
+| **Owlready2**| [https://github.com/pwin/owlready2](https://github.com/pwin/owlready2)                       | Provides Python classes aligned with OWL and includes native reasoning (HermiT/Pellet). Limited runtime type validation; no direct remote SPARQL endpoint support.                              |
+| **twa**      | [https://github.com/TheWorldAvatar/baselib/tree/main/python_wrapper](https://github.com/TheWorldAvatar/baselib/tree/main/python_wrapper) | Pydantic-based OGM with built-in schema validation/type safety; Strong coupling of RDF-Properties and type annotations.                             |
+| **COLD**     | [https://github.com/DigiBatt/cold/](https://github.com/DigiBatt/cold/)                       | Generates static python classes from OWL classes to offer RDF generation. No object-to-graph mapping                                                                                            |
+
+see also Bai et al. https://doi.org/10.1039/D5DD00069F
+
+
+## Features
+
+### Code Generation
 Generate Python data models from OO-LD Schemas (based on [datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator)):
 
 ```python
@@ -42,7 +62,7 @@ This example uses the built-in `Generator` to create a basic Pydantic model (v1 
 
 More details see [example code](./tests/test_oold.py)
 
-## Object Graph Mapping
+### Object Graph Mapping
 
 ![Concept](./docs/assets/oold_concept.png)
 
@@ -81,7 +101,7 @@ Thanks to the resolver mechanism, these IRIs turn into fully-fledged objects as 
 
 More details see [example code](./tests/test_oold.py)
 
-## RDF-Export
+### RDF-Export
 Easily convert your objects to RDF (JSON-LD) and integrate with SPARQL queries:
 
 ```python

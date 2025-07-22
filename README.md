@@ -8,6 +8,11 @@
 
 Linked data class python package for object oriented linked data ([OO-LD](https://github.com/OO-LD/schema)) based on [pydantic](https://github.com/pydantic/pydantic). This package aims to implemment this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package - work in progress.
 
+## Installation
+```
+pip install oold
+```
+
 ## Objectives
 - lossless transpilation between [OO-LD](https://github.com/OO-LD/schema) schemas and extended pydantic data classes
 - interprete string IRIs with `oold-range` annotation as typed class property

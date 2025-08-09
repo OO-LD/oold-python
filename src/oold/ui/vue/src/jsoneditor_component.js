@@ -14,7 +14,7 @@ export function render({ model, el }) {
   const e = document.createElement('div')
   e.setAttribute("id", "jsoneditor-container")
   el.append(e);
-  console.log("Create App");
+  console.debug("Create App");
   //debugger
   let options = model.get("options");
   options = options || {
@@ -29,11 +29,21 @@ export function render({ model, el }) {
   const app = createApp(JsonEditorComponent, {
     options: options,
     onChange: (value) => {
-      console.log("CHANGE", value);
+      console.debug("CHANGE", value);
       model.set("value", value);
       model.save_changes();
     }
   });
-  app.mount(el);
-  //return e;
+  const root = app.mount(el);
+
+  // event wiring from python to javascript
+  model.on("change:value", () => {
+    root.setValue(model.get("value"))
+  });
+  model.on("change:options", () => {
+    root.setOptions(model.get("options"))
+  });
+  model.on("change:schema", () => {
+    root.setSchema(model.get("schema"))
+  });
 }

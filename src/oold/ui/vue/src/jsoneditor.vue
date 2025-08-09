@@ -31,11 +31,43 @@ export default {
     },
   },
 
+  methods: {
+
+    setValue(val) {
+      console.debug("setValue: ", val);
+      if (this.editor) {
+        this.editor.setValue(val);
+      } else {
+        console.warn("Editor not initialized yet, skipping data update")
+      }
+    },
+    setOptions(options) {
+      console.debug("setOptions: ", options);
+      var startval = null;
+      if (this.editor) {
+        if (!options["startval"]) startval = this.editor.getValue();
+        this.editor.destroy();
+      }
+      this._options = {...this._options, ...options, startval: startval};
+      this.editor = new JSONEditor(this.$el, this._options);
+    },
+    setSchema(schema) {
+      console.debug("setSchema: ", schema);
+      var startval = null;
+      if (this.editor) {
+        startval = this.editor.getValue();
+        this.editor.destroy();
+      }
+      this._options = {...this._options, schema: schema, startval: startval};
+      this.editor = new JSONEditor(this.$el, this._options);
+    },
+  },
+
   async mounted() {
-    //debugger;
-    // access our input using template refs, then focus
     await import("jsoneditor");
-    const options = {...{
+
+    // default options
+    this._options = {...{
       "theme": "bootstrap4",
       "iconlib": "spectre",
       "remove_button_labels": true,
@@ -58,23 +90,21 @@ export default {
       //"form_name_root": "this.jsonschema.getSchema().id",
       //"user_language": "this.config.lang"
     }, ...this.options}
-    console.warn("Options: ", options)
-    var editor = new JSONEditor(this.$el, options);
-    console.warn("Editor: ", this.editor)
 
-    editor.on('ready', () => {
+    console.debug("Options: ", this._options)
+    this.editor = new JSONEditor(this.$el, this._options);
+    console.debug("Editor: ", this.editor)
+
+    this.editor.on('ready', () => {
       // Now the api methods will be available
-      if (this.enabled === false) {
-        editor.disable();
-      }
+      console.debug("JSONEditor is ready");
     });
 
-    editor.on('change' , () => {
-      this.$emit('change' , editor.getValue())
+    this.editor.on('change' , () => {
+      this.$emit('change' , this.editor.getValue())
     })
 
   },
-
 
   emits: ['onChange'],
 };

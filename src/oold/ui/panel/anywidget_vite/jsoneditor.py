@@ -70,6 +70,14 @@ class JsonEditor(AnyWidgetComponent):
         json_str = json.dumps(self.value, cls=self.encoder)
         return json.loads(json_str)
 
+    def set_value(self, value: dict):
+        """Set the value of the JSON editor."""
+        self.value = value
+
+    def set_schema(self, schema: dict):
+        """Set the schema of the JSON editor."""
+        self.options["schema"] = schema
+
 
 class OswEditor(JsonEditor):
     # entity:  = Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1],

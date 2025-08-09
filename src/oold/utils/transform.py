@@ -94,7 +94,7 @@ def jsonld_to_jsonld(graph: dict, transformation_context: dict) -> dict:
 
     graph["@context"] = {**transformation_context, **temp2}
     graph = jsonld.flatten(graph)  # may introduce blank node @ids
-    # graph = jsonld.expand(graph) # does not resulve @reverse relations
+    # graph = jsonld.expand(graph) # does not resolve @reverse relations
 
     graph = jsonld.compact(graph, {**transformation_context, **temp3})
 

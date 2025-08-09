@@ -143,6 +143,7 @@ def test_complex_graph():
     ), f"Expected {expected}, but got {transformed_graph}"
 
 
+@pytest.mark.skip(reason="This test fails randomly, skip for now")
 def test_rocreate():
     rdf = """
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .

@@ -6,7 +6,6 @@ import time
 
 import panel as pn
 import pytest
-from panel_app import App
 from playwright.sync_api import Page
 
 # pytest ./tests/ui/panel/panel_frontend_test.py --headed --slowmo 1000
@@ -15,6 +14,8 @@ from playwright.sync_api import Page
 # required playwright installed, skip for now
 @pytest.mark.skip(reason="Playwright tests do not run in CI")
 def test_component(page: Page, port):
+    from panel_app import App
+
     app = App()
     url = f"http://localhost:{port}"
 

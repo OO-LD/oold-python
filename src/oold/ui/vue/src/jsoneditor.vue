@@ -58,12 +58,10 @@ export default {
     },
     setOptions(options) {
       console.debug("setOptions: ", options);
-      var startval = null;
       if (this.editor) {
-        if (!options["startval"]) startval = this.editor.getValue();
         this.editor.destroy();
       }
-      this._options = {...this._options, ...options, startval: startval};
+      this._options = {...this._options, ...options}
       this.editor = new JSONEditor(this.$el, this._options);
       this.$emit('ready', false)
       this.init();
@@ -72,6 +70,7 @@ export default {
       console.debug("setSchema: ", schema);
       var startval = null;
       if (this.editor) {
+        // keep the current value if the editor is already initialized
         startval = this.editor.getValue();
         this.editor.destroy();
       }

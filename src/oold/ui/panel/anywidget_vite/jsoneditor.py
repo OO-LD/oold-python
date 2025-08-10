@@ -75,10 +75,15 @@ class JsonEditor(AnyWidgetComponent):
         """Set the value of the JSON editor."""
         self.value = value
 
-    def set_schema(self, schema: dict):
+    def set_schema(self, schema: dict, keep_value: bool = True):
         """Set the schema of the JSON editor."""
         # override options param to trigger change event
-        self.options = {**self.options, "schema": schema}
+        new_options = {**self.options, "schema": schema}
+        if keep_value:
+            new_options["startval"] = self.get_value()
+        else:
+            new_options["startval"] = None
+        self.options = new_options
 
 
 class OswEditor(JsonEditor):

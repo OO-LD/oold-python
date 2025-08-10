@@ -25,6 +25,10 @@ export default {
       type: Boolean,
       default: true
     },
+    ready: {
+      type: Boolean,
+      default: false
+    },
     title: {
       type: String,
       default: ""
@@ -32,7 +36,18 @@ export default {
   },
 
   methods: {
+    init() {
+      console.debug("init: ", this.$el);
+      this.editor.on('ready', () => {
+        // Now the api methods will be available
+        console.debug("JSONEditor is ready");
+        this.$emit('ready', true)
+      });
 
+      this.editor.on('change' , () => {
+        this.$emit('change' , this.editor.getValue())
+      })
+    },
     setValue(val) {
       console.debug("setValue: ", val);
       if (this.editor) {
@@ -50,6 +65,8 @@ export default {
       }
       this._options = {...this._options, ...options, startval: startval};
       this.editor = new JSONEditor(this.$el, this._options);
+      this.$emit('ready', false)
+      this.init();
     },
     setSchema(schema) {
       console.debug("setSchema: ", schema);
@@ -60,6 +77,8 @@ export default {
       }
       this._options = {...this._options, schema: schema, startval: startval};
       this.editor = new JSONEditor(this.$el, this._options);
+      this.$emit('ready', false)
+      this.init();
     },
   },
 
@@ -95,18 +114,11 @@ export default {
     this.editor = new JSONEditor(this.$el, this._options);
     console.debug("Editor: ", this.editor)
 
-    this.editor.on('ready', () => {
-      // Now the api methods will be available
-      console.debug("JSONEditor is ready");
-    });
-
-    this.editor.on('change' , () => {
-      this.$emit('change' , this.editor.getValue())
-    })
+    this.init();
 
   },
 
-  emits: ['onChange'],
+  emits: ['onChange', 'onReady'],
 };
 </script>
 

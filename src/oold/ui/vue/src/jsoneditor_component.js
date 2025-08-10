@@ -32,7 +32,12 @@ export function render({ model, el }) {
       console.debug("CHANGE", value);
       model.set("value", value);
       model.save_changes();
-    }
+    },
+    onReady: (value) => {
+      console.debug("JSONEditor is ready");
+      model.set("ready", value);
+      model.save_changes();
+    },
   });
   const root = app.mount(el);
 

@@ -58,6 +58,7 @@ class JsonEditor(AnyWidgetComponent):
             },
         }
     )
+    ready = param.Boolean(default=False, doc="Indicates if the JSONEditor is ready.")
 
     encoder = param.ClassSelector(
         class_=json.JSONEncoder,
@@ -76,14 +77,15 @@ class JsonEditor(AnyWidgetComponent):
 
     def set_schema(self, schema: dict):
         """Set the schema of the JSON editor."""
-        self.options["schema"] = schema
+        # override options param to trigger change event
+        self.options = {**self.options, "schema": schema}
 
 
 class OswEditor(JsonEditor):
     # entity:  = Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1],
     def __init__(
         self,
-        entity: Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1],
+        entity: Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1] = None,
         **params
     ):
         options = {

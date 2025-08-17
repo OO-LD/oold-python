@@ -59,7 +59,7 @@ const h = (e, t) => {
   id: "jsoneditor",
   class: "bootstrap-wrapper"
 };
-function f(e, t, s, o, n, i) {
+function f(e, t, s, o, n, a) {
   return r(), d("div", u, [
     l("h2", null, p(s.title), 1)
   ], 512);
@@ -79,21 +79,21 @@ function b({ model: e, el: t }) {
     }
     //   startval: this.data
   };
-  const i = c(y, {
+  const a = c(y, {
     options: o,
-    onChange: (a) => {
-      console.debug("CHANGE", a), e.set("value", a), e.save_changes();
+    onChange: (i) => {
+      console.debug("CHANGE", i), i instanceof Event || (e.set("value", i), e.save_changes());
     },
-    onReady: (a) => {
-      console.debug("JSONEditor is ready"), e.set("ready", a), e.save_changes();
+    onReady: (i) => {
+      console.debug("JSONEditor is ready"), e.set("ready", i), e.save_changes();
     }
   }).mount(t);
   e.on("change:value", () => {
-    i.setValue(e.get("value"));
+    a.setValue(e.get("value"));
   }), e.on("change:options", () => {
-    i.setOptions(e.get("options"));
+    a.setOptions(e.get("options"));
   }), e.on("change:schema", () => {
-    i.setSchema(e.get("schema"));
+    a.setSchema(e.get("schema"));
   });
 }
 export {

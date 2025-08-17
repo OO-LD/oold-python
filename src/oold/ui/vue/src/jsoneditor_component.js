@@ -30,8 +30,15 @@ export function render({ model, el }) {
     options: options,
     onChange: (value) => {
       console.debug("CHANGE", value);
-      model.set("value", value);
-      model.save_changes();
+      /*
+      * somehow also selection in the additional property list
+      * are triggering this change event
+      * filter values that are Event objects
+      */
+      if (!(value instanceof Event)) {
+        model.set("value", value);
+        model.save_changes();
+      }
     },
     onReady: (value) => {
       console.debug("JSONEditor is ready");

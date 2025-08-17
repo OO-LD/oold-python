@@ -1,9 +1,50 @@
-from typing import Callable, Dict
+import json
+from enum import Enum
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
+import jsondiff
 import pyld
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
+from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
 from pydantic.v1 import BaseModel as BaseModel_v1
+from pydantic.v1 import create_model as create_model_v1
+from pydantic_core import CoreSchema
 from pyld import jsonld
+
+
+class OOLDJsonSchemaGenerator(GenerateJsonSchema):
+    def generate(
+        self, schema: CoreSchema, mode: JsonSchemaMode = "validation"
+    ) -> JsonSchemaValue:
+        return super().generate(schema, mode)
+
+    def nullable_schema(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Override to handle nullable schemas - do not add 'null' type
+        since optional fields are already handled by 'required'."""
+        inner_json_schema = self.generate_inner(schema["schema"])
+        return inner_json_schema
+
+
+class SchemaExportMode(str, Enum):
+    """Enum for schema export modes."""
+
+    FULL = "full"
+    """Export the full schema including all base classes.
+    Equivalent to cutoff at the BaseModel class"""
+    PARTIAL = "partial"
+    """Export the schema of a model up to the specified cutoff
+    base class, default the direct parent class"""
+
+
+class PartialSchemaExportMode(str, Enum):
+    """Enum for partial schema export modes."""
+
+    BASE_CLASS_CUTOFF = "base_class_cutoff"
+    """Export the schema of a model up to the specified base class
+    by cutoff the class hierarchy"""
+    BASE_CLASS_DIFF = "base_class_diff"
+    """Export the schema of a model up to the specified base class
+    by calculating the diff to the base class schema."""
 
 
 class GenericLinkedBaseModel:
@@ -28,6 +69,20 @@ class GenericLinkedBaseModel:
             return [GenericLinkedBaseModel.remove_none(i) for i in d]
         else:
             return d
+
+    @classmethod
+    def export_schema(
+        cls,
+        mode: Optional[SchemaExportMode] = SchemaExportMode.FULL,
+        cutoff_base_cls: Optional[
+            Union[Union[BaseModel, BaseModel_v1], Tuple[Union[BaseModel, BaseModel_v1]]]
+        ] = None,
+        partial_mode: Optional[
+            PartialSchemaExportMode
+        ] = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
+    ) -> Dict:
+        """Export the schema of the model as a dictionary."""
+        return export_schema(cls, mode, cutoff_base_cls, partial_mode)
 
 
 def get_jsonld_context_loader(model_cls, model_type) -> Callable:
@@ -55,8 +110,18 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
         if model_type == BaseModel_v1:
             if hasattr(base_class, "__config__"):
                 schema = base_class.__config__.schema_extra
-        id = schema.get("iri", None)
-        schemas[id] = schema
+        iri = schema.get("iri", None)
+        title = schema.get("title", None)
+        if iri is None and title is None:
+            continue
+        if iri is None:
+            schema.get("title")
+            if title in ["Entity", "Category", "Property"]:
+                iri = "Category:" + schema.get("title")
+            else:
+                iri = "Category:" + "OSW" + schema.get("uuid").replace("-", "")
+        # iri = base_class.get_iri() # does not work on class level
+        schemas[iri] = schema
 
     # print(schemas)
 
@@ -64,6 +129,8 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
         if options is None:
             options = {}
         # print("Requesting", url)
+        if "/wiki/" in url:
+            url = url.split("/")[-1].split("?")[0]
         if url in schemas:
             schema = schemas[url]
 
@@ -137,3 +204,294 @@ def import_jsonld(model_type, jsonld_dict: Dict, _types: Dict[str, type]):
     if "@context" in jsonld_dict:
         del jsonld_dict["@context"]
     return model_cls(**jsonld_dict)
+
+
+def _get_schema(model_cls):
+    """Return the schema of the model as a dictionary."""
+    if issubclass(model_cls, BaseModel):
+        return model_cls.model_json_schema(
+            ref_template="#/$defs/{model}",
+            schema_generator=OOLDJsonSchemaGenerator,
+        )
+    elif issubclass(model_cls, BaseModel_v1):
+        return model_cls.schema(ref_template="#/$defs/{model}")
+
+
+def _inverse_preprocess(schema: Dict):
+    """Inverse preprocess the JSON schemas to remove
+    the $refs generated from x-oold-range annotations."""
+
+    def handle_property(property):
+        if "range" in property:
+            # restore a string type, remove allOf and $ref
+            # if they (or one element) match the range value
+            if isinstance(property["range"], str):
+                if "allOf" in property:
+                    # remove the array element that matches the range
+                    # or a self-referencing $ref
+                    property["allOf"] = [
+                        item
+                        for item in property["allOf"]
+                        if item["$ref"] in ["#", property["range"]]
+                    ]
+                if "$ref" in property:
+                    if property["$ref"] in ["#", property["range"]]:
+                        del property["$ref"]
+            else:
+                if "allOf" in property:
+                    # remove the array element that matches the range
+                    property["allOf"] = [
+                        item for item in property["allOf"] if item == property["range"]
+                    ]
+            if "allOf" in property and len(property["allOf"]) == 0:
+                del property["allOf"]
+            if "type" not in property:
+                property["type"] = "string"
+        if "properties" in property:
+            _inverse_preprocess(property)
+
+    for property_key in schema.get("properties", {}):
+        property = schema["properties"][property_key]
+        if "x-oold-required-iri" in property:
+            # remove the x-oold-required-iri property
+            # add property to required
+            del property["x-oold-required-iri"]
+            if "required" not in schema:
+                schema["required"] = []
+            if property_key not in schema["required"]:
+                schema["required"].append(property_key)
+
+        if "items" in property:
+            property["items"]["range"] = property["range"]
+            del property["range"]
+            handle_property(property["items"])
+
+        else:
+            handle_property(property)
+    return schema
+
+
+def _export_schema_from_dynamic_model(
+    model_cls: Union[BaseModel, BaseModel_v1]
+) -> Dict:
+    """Export the OO-LD schema of a single pydantic model.
+    Class hierarchy is not considered, only the model itself
+    by generating a model copy without base classes.
+    """
+
+    if issubclass(model_cls, BaseModel):
+        field_dict = {}
+        for field_name, field in model_cls.model_fields.items():
+            field_dict[field_name] = (field.annotation, field)
+
+        # create model dynamically
+        model_cls_copy = create_model(
+            model_cls.__name__,
+            __config__=model_cls.model_config,
+            __doc__=model_cls.__doc__,
+            __module__=model_cls.__module__,
+            **field_dict,
+            # __base__=BaseModel,
+        )
+
+    elif issubclass(model_cls, BaseModel_v1):
+        model_cls: BaseModel_v1 = model_cls  # type: ignore
+        field_dict = {}
+        for field_name, model_field in model_cls.__fields__.items():
+            field_dict[field_name] = (model_field.annotation, model_field.field_info)
+
+        # create model dynamically
+        model_cls_copy = create_model_v1(
+            model_cls.__name__,
+            __config__=model_cls.__config__,
+            __doc__=model_cls.__doc__,
+            __module__=model_cls.__module__,
+            **field_dict,
+            # __base__=BaseModel_v1,
+        )
+
+    my_schema_full = _get_schema(model_cls_copy)
+
+    return my_schema_full
+
+
+def export_schema(
+    model_cls: Union[BaseModel, BaseModel_v1],
+    mode: Optional[SchemaExportMode] = SchemaExportMode.FULL,
+    cutoff_base_cls: Optional[
+        Union[Union[BaseModel, BaseModel_v1], Tuple[Union[BaseModel, BaseModel_v1]]]
+    ] = None,
+    partial_mode: Optional[
+        PartialSchemaExportMode
+    ] = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
+) -> Dict:
+    """Export the OO-LD schema of the model as a JSON-SCHEMA with JSON-LD context"""
+
+    if mode == SchemaExportMode.FULL:
+        print(f"ExportingX full schema for {model_cls.__name__} with mode {mode}")
+        # export the full schema including all base classes
+        result_schema = _get_schema(model_cls)
+        if result_schema is None:
+            raise ValueError(f"Model {model_cls.__name__} has no schema.")
+
+    elif mode == SchemaExportMode.PARTIAL:
+        # export the schema of a model up to the specified cutoff base class
+
+        baseclass_schema = {}
+        imports = []
+
+        if cutoff_base_cls is None:
+            cutoff_base_cls = model_cls.__bases__
+        if not isinstance(cutoff_base_cls, tuple):
+            cutoff_base_cls = (cutoff_base_cls,)
+
+        # if partial_mode == PartialSchemaExportMode.BASE_CLASS_CUTOFF:
+
+        for baseclass in cutoff_base_cls:
+            if baseclass in [BaseModel, BaseModel_v1]:
+                continue
+            schema = _get_schema(baseclass)
+            if schema is not None:
+                # ToDO: Use deepmerge
+                baseclass_schema = {**baseclass_schema, **schema}
+
+            # ToDo: determine import references
+            # baseclass_oswid = ""
+            # if baseclass.__name__ in toplevel_classes:
+            #     baseclass_oswid = toplevel_classes[baseclass.__name__]
+            # else:
+            #     baseclass_oswid = get_osw_id(
+            #         baseclass.__config__.schema_extra["uuid"]
+            #     )
+
+            # imports.append(f"/wiki/Category:{baseclass_oswid}?action=raw&slot=jsonschema")
+            # try the follwing schema extra attributes: $id, iri, class name
+            import_ref = None
+            if issubclass(model_cls, BaseModel):
+                import_ref = baseclass.model_config.get("json_schema_extra", {}).get(
+                    "$id", None
+                )
+                if import_ref is None:
+                    import_ref = baseclass.model_config.get(
+                        "json_schema_extra", {}
+                    ).get("iri", None)
+                if import_ref is None:
+                    import_ref = baseclass.__name__
+
+            if issubclass(model_cls, BaseModel_v1):
+                import_ref = baseclass.__config__.schema_extra.get("$id", None)
+                if import_ref is None:
+                    import_ref = baseclass.__config__.schema_extra.get("iri", None)
+                if import_ref is None:
+                    import_ref = baseclass.__name__
+
+            if import_ref is not None:
+                imports.append(import_ref)
+
+        if partial_mode == PartialSchemaExportMode.BASE_CLASS_DIFF:
+            # option 1: calculate a schema diff
+            # implementation not yet complete
+
+            for baseclass in cutoff_base_cls:
+                if baseclass in [BaseModel, BaseModel_v1]:
+                    continue
+                schema = _get_schema(baseclass)
+                if schema is not None:
+                    # ToDO: Use deepmerge
+                    baseclass_schema = {**baseclass_schema, **schema}
+
+            model_schema_full = _get_schema(model_cls)
+            model_schema_diff = jsondiff.diff(
+                baseclass_schema, model_schema_full, marshal=True
+            )
+
+            # implementation note: jsonpath does not work
+            # since we cannot reconstruct the diff document
+            # import jsonpatch
+            # patch = jsonpatch.make_patch(baseclass_schema, model_schema_full)
+            # print("Patch: ", json.dumps(patch.patch, indent=2))
+            # this fails due to missing root paths
+            # see https://github.com/stefankoegl/python-json-patch/issues/153
+            # print("Diff: ", json.dumps(patch.apply({}), indent=2))
+
+            required = []
+            if "required" in model_schema_diff:
+                if "$insert" in model_schema_diff["required"]:
+                    for r in model_schema_diff["required"]["$insert"]:
+                        required.append(r[1])
+                    del model_schema_diff["required"]
+            model_schema_diff["required"] = required
+            if "$delete" in model_schema_diff:
+                del model_schema_diff["$delete"]
+            # todo: handle all "$insert", "$delete" and "$replace" keys
+
+        elif partial_mode == PartialSchemaExportMode.BASE_CLASS_CUTOFF:
+            # option 2: export the schema of a model up to the specified
+            # base class by cutoff the class hierarchy
+            model_schema_diff = _export_schema_from_dynamic_model(model_cls)
+
+        context = None
+        if "@context" in model_schema_diff:
+            context = model_schema_diff.pop("@context")
+
+            if not isinstance(context, list):
+                context = [context]
+            missing_imports = []
+            for imp in imports:
+                if imp not in context:
+                    missing_imports.append(imp)
+            context = [*missing_imports, *context]
+
+        defs = None
+        if "definitions" in model_schema_diff:
+            defs = model_schema_diff.pop("definitions")
+        if "$defs" in model_schema_diff:
+            if defs is None:
+                defs = {}
+            defs = {**defs, **model_schema_diff.pop("$defs")}
+        result_schema = {
+            "@context": context,
+            "$defs": defs,
+            **json.loads(
+                json.dumps(model_schema_diff)
+                .replace("title_", "title*")
+                .replace("description_", "description*")
+                .replace("$$ref", "$ref")
+            ),
+        }
+
+    # ToDo: move this to general json utils
+
+    # if schema has a $ref on the root level, resolve it by following the reference
+    # e.g. {"$defs": {"Entity": {"title": "Entity"}}, "$ref": "#/$defs/Entity"}
+    # => {"title": "Entity"}
+    if "$ref" in result_schema:
+        ref = result_schema["$ref"]
+        if ref.startswith("#/"):
+            # follow the ref path elements
+            ref_path = ref.split("/")[1:]  # remove the leading "#/"
+            ref_target = result_schema
+            for path_element in ref_path:
+                if path_element in ref_target:
+                    ref_target = ref_target[path_element]
+                else:
+                    raise ValueError(f"Reference {ref} not found in schema.")
+            result_schema = {**ref_target, **result_schema}
+
+            # rewrite other $ref to the current schema
+            # => e.g. replace all {"$ref": "#/$defs/Entity"} with {"$ref": "#"}
+            # iterate over all result_schema['properties']
+            # and schema['properties']['items']and remove the $ref
+            for property_key in result_schema.get("properties", {}):
+                property = result_schema["properties"][property_key]
+                if "$ref" in property:
+                    if property["$ref"] == ref:
+                        property["$ref"] = "#"
+                if "items" in property:
+                    if "$ref" in property["items"]:
+                        if property["items"]["$ref"] == ref:
+                            property["items"]["$ref"] = "#"
+
+            del result_schema["$ref"]
+    result_schema = _inverse_preprocess(result_schema)
+    return result_schema

@@ -279,6 +279,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#oold.model.static.GenericLinkedBaseModel.export_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      export_schema
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#oold.model.static.GenericLinkedBaseModel.remove_none" class="md-nav__link">
     <span class="md-ellipsis">
       remove_none
@@ -353,6 +362,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#oold.model.static.GenericLinkedBaseModel.export_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      export_schema
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#oold.model.static.GenericLinkedBaseModel.remove_none" class="md-nav__link">
     <span class="md-ellipsis">
       remove_none
@@ -397,28 +415,42 @@
 
               <details class="quote">
                 <summary>Source code in <code>src/oold/model/static.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 9</span>
-<span class="normal">10</span>
-<span class="normal">11</span>
-<span class="normal">12</span>
-<span class="normal">13</span>
-<span class="normal">14</span>
-<span class="normal">15</span>
-<span class="normal">16</span>
-<span class="normal">17</span>
-<span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">GenericLinkedBaseModel</span><span class="p">:</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">GenericLinkedBaseModel</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_object_to_iri</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">exclude_none</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>  <span class="c1"># force copy of keys for inline-delete</span>
             <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iris__</span><span class="p">:</span>
@@ -440,6 +472,20 @@
             <span class="k">return</span> <span class="p">[</span><span class="n">GenericLinkedBaseModel</span><span class="o">.</span><span class="n">remove_none</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">d</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">d</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">export_schema</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SchemaExportMode</span><span class="p">]</span> <span class="o">=</span> <span class="n">SchemaExportMode</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>
+        <span class="n">cutoff_base_cls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">BaseModel_v1</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">BaseModel_v1</span><span class="p">]]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">partial_mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">PartialSchemaExportMode</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">PartialSchemaExportMode</span><span class="o">.</span><span class="n">BASE_CLASS_CUTOFF</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Export the schema of the model as a dictionary.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">export_schema</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">mode</span><span class="p">,</span> <span class="n">cutoff_base_cls</span><span class="p">,</span> <span class="n">partial_mode</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
               </details>
 
@@ -454,6 +500,57 @@
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="oold.model.static.GenericLinkedBaseModel.export_schema" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">export_schema</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="n">SchemaExportMode</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span> <span class="n">cutoff_base_cls</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">partial_mode</span><span class="o">=</span><span class="n">PartialSchemaExportMode</span><span class="o">.</span><span class="n">BASE_CLASS_CUTOFF</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Export the schema of the model as a dictionary.</p>
+
+
+            <details class="quote">
+              <summary>Source code in <code>src/oold/model/static.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">export_schema</span><span class="p">(</span>
+    <span class="bp">cls</span><span class="p">,</span>
+    <span class="n">mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SchemaExportMode</span><span class="p">]</span> <span class="o">=</span> <span class="n">SchemaExportMode</span><span class="o">.</span><span class="n">FULL</span><span class="p">,</span>
+    <span class="n">cutoff_base_cls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">BaseModel_v1</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">BaseModel_v1</span><span class="p">]]]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">partial_mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">PartialSchemaExportMode</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="n">PartialSchemaExportMode</span><span class="o">.</span><span class="n">BASE_CLASS_CUTOFF</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Export the schema of the model as a dictionary.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">export_schema</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">mode</span><span class="p">,</span> <span class="n">cutoff_base_cls</span><span class="p">,</span> <span class="n">partial_mode</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -475,19 +572,19 @@
 
             <details class="quote">
               <summary>Source code in <code>src/oold/model/static.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">18</span>
-<span class="normal">19</span>
-<span class="normal">20</span>
-<span class="normal">21</span>
-<span class="normal">22</span>
-<span class="normal">23</span>
-<span class="normal">24</span>
-<span class="normal">25</span>
-<span class="normal">26</span>
-<span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@staticmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@staticmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">remove_none</span><span class="p">(</span><span class="n">d</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Remove None values from a dictionary recursively.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>

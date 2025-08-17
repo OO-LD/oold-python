@@ -1,12 +1,11 @@
-import json
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Type, Union
 
 from nicegui.element import Element
 from nicegui.events import GenericEventArguments, Handler, handle_event
 from typing_extensions import Self
 
-from oold.model import LinkedBaseModelMetaClass
-from oold.model.v1 import LinkedBaseModelMetaClass as LinkedBaseModelMetaClass_v1
+from oold.model import LinkedBaseModel
+from oold.model.v1 import LinkedBaseModel as LinkedBaseModel_v1
 
 
 # class JsonEditor(ui.element,
@@ -60,7 +59,7 @@ class OswEditor(JsonEditor):
         self,
         options: Optional[Dict] = None,
         on_change: Optional[Handler[GenericEventArguments]] = None,
-        entity: Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1] = None,
+        entity: Union[Type[LinkedBaseModel], Type[LinkedBaseModel_v1]] = None,
     ) -> None:
         options = options or {
             # "theme": 'tailwind',
@@ -73,7 +72,7 @@ class OswEditor(JsonEditor):
             # "startval": {}
         }
         if entity is not None:
-            options["schema"] = json.loads(entity.schema_json())
+            options["schema"] = entity.export_schema()
         self.entity = entity
         super().__init__(options, on_change)
 

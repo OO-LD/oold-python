@@ -1,21 +1,23 @@
 import json
 from pathlib import Path
-from typing import Optional, Union
+from typing import Type, Union
 
 import panel as pn
 import param
 from panel.custom import AnyWidgetComponent
 
-from oold.model import LinkedBaseModelMetaClass
-from oold.model.v1 import LinkedBaseModelMetaClass as LinkedBaseModelMetaClass_v1
+from oold.model import LinkedBaseModel
+from oold.model.v1 import LinkedBaseModel as LinkedBaseModel_v1
 
 pn.extension()
 
 bundled_assets_dir = Path(__file__).parent.parent.parent / "vue" / "dist" / "default"
 
 
-# class JsonEditor(JSComponent):
 class JsonEditor(AnyWidgetComponent):
+    """A JSON-SCHEMA based form editor using
+    https://github.com/json-editor/json-editor"""
+
     _esm = (bundled_assets_dir / "jsoneditor_vue.mjs").read_text()
 
     _stylesheets = [
@@ -86,56 +88,18 @@ class JsonEditor(AnyWidgetComponent):
         self.options = new_options
 
 
-class OswEditor(JsonEditor):
-    # entity:  = Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1],
+class OoldEditor(JsonEditor):
+    """JsonEditor generated from an oold model schema."""
+
     def __init__(
         self,
-        entity: Union[LinkedBaseModelMetaClass, LinkedBaseModelMetaClass_v1] = None,
+        oold_model: Union[Type[LinkedBaseModel], Type[LinkedBaseModel_v1]] = None,
         **params
     ):
-        options = {
-            # "theme": "bootstrap4",
-            # "iconlib": 'fontawesome5',
-            # "iconlib": "spectre",
-            "schema": {
-                "required": ["testxy"],
-                "properties": {"testxy": {"type": "string"}},
-            },
-        }
+        options = params.get("options", {})
 
-        if entity is not None:
-            if isinstance(entity, LinkedBaseModelMetaClass_v1):
-                schema = entity.schema()
-            else:
-                schema = entity.model_json_schema()
-            options["schema"] = schema
+        if oold_model is not None:
+            options["schema"] = oold_model.export_schema()
 
         params["options"] = options
         super().__init__(**params)
-
-
-if __name__ == "__main__":
-    # jsoneditor = JsonEditor(height=500, max_width=800)
-    from oold.model.v1 import LinkedBaseModel
-
-    class Item(LinkedBaseModel):
-
-        """A sample item model."""
-
-        name: str
-        description: Optional[str] = "This is a sample item description."
-
-        class Config:
-            schema_extra = {
-                "required": ["name"],
-                "defaultProperties": ["name", "description"],
-            }
-
-    jsoneditor = OswEditor(Item)
-    pn.serve(
-        pn.Column(
-            jsoneditor, pn.pane.JSON(jsoneditor.param.value, theme="light")
-        ).servable()
-    )
-
-    jsoneditor.get_value()

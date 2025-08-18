@@ -1,8 +1,8 @@
 import { openBlock as a, createElementBlock as r, createElementVNode as n, toDisplayString as l } from "vue";
 const d = (e, t) => {
   const s = e.__vccOpts || e;
-  for (const [o, i] of t)
-    s[o] = i;
+  for (const [i, o] of t)
+    s[i] = o;
   return s;
 }, _ = {
   name: "dm-json-form3",
@@ -35,7 +35,8 @@ const d = (e, t) => {
       console.debug("init: ", this.$el), this.editor.on("ready", () => {
         console.debug("JSONEditor is ready"), this.$emit("ready", !0);
       }), this.editor.on("change", () => {
-        this.$emit("change", this.editor.getValue());
+        let e = this.editor.getValue();
+        e === "" && (e = null), this.$emit("change", e);
       });
     },
     setValue(e) {
@@ -59,7 +60,7 @@ const d = (e, t) => {
   id: "jsoneditor",
   class: "bootstrap-wrapper"
 };
-function p(e, t, s, o, i, c) {
+function p(e, t, s, i, o, c) {
   return a(), r("div", h, [
     n("h2", null, l(s.title), 1)
   ], 512);

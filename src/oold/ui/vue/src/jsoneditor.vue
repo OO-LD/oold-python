@@ -45,7 +45,10 @@ export default {
       });
 
       this.editor.on('change' , () => {
-        this.$emit('change' , this.editor.getValue())
+        let value = this.editor.getValue();
+        // handle empty value of schema is empty
+        if (value === "") value = null;
+        this.$emit('change' , value)
       })
     },
     setValue(val) {

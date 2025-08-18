@@ -100,6 +100,8 @@ class OoldEditor(JsonEditor):
 
         if oold_model is not None:
             options["schema"] = oold_model.export_schema()
+        else:
+            options["schema"] = {}
 
         params["options"] = options
         super().__init__(**params)

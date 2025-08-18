@@ -3675,7 +3675,8 @@ const zo = (e, t) => {
       console.debug("init: ", this.$el), this.editor.on("ready", () => {
         console.debug("JSONEditor is ready"), this.$emit("ready", !0);
       }), this.editor.on("change", () => {
-        this.$emit("change", this.editor.getValue());
+        let e = this.editor.getValue();
+        e === "" && (e = null), this.$emit("change", e);
       });
     },
     setValue(e) {

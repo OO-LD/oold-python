@@ -262,8 +262,9 @@ def _inverse_preprocess(schema: Dict):
                 schema["required"].append(property_key)
 
         if "items" in property:
-            property["items"]["range"] = property["range"]
-            del property["range"]
+            if "range" in property["items"]:
+                property["items"]["range"] = property["range"]
+                del property["range"]
             handle_property(property["items"])
 
         else:
@@ -328,7 +329,6 @@ def export_schema(
     """Export the OO-LD schema of the model as a JSON-SCHEMA with JSON-LD context"""
 
     if mode == SchemaExportMode.FULL:
-        print(f"ExportingX full schema for {model_cls.__name__} with mode {mode}")
         # export the full schema including all base classes
         result_schema = _get_schema(model_cls)
         if result_schema is None:

@@ -167,8 +167,6 @@ class Generator:
                 if "range" in property:
                     if "type" in property:
                         del property["type"]
-                    if "format" in property:
-                        del property["format"]
                     # if range is a string we create a allOf with a ref to the range
                     if isinstance(property["range"], str):
                         property["allOf"] = [{"$ref": property["range"]}]
@@ -184,8 +182,6 @@ class Generator:
                     if "range" in property["items"]:
                         if "type" in property["items"]:
                             del property["items"]["type"]
-                        if "format" in property["items"]:
-                            del property["items"]["format"]
                         if isinstance(property["items"]["range"], str):
                             property["items"]["allOf"] = [
                                 {"$ref": property["items"]["range"]}

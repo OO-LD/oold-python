@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List, Optional
 
 import panel as pn
@@ -33,6 +34,17 @@ class Entity(LinkedBaseModel):
         return "ex:" + self.name
 
 
+class Hobby(str, Enum):
+    """Various hobbies as an enum."""
+
+    SPORTS = "ex:sports"
+    """Sports hobby, e.g. football, basketball, etc."""
+    MUSIC = "ex:music"
+    """Music hobby, e.g. playing instruments, singing, etc."""
+    ART = "ex:art"
+    """Art hobby, e.g. painting, drawing, etc."""
+
+
 class Person(Entity):
     """A simple Person schema"""
 
@@ -42,18 +54,24 @@ class Person(Entity):
                 "Entity.json",  # import the context of the parent class
                 {
                     # object property definition
+                    "hobbies": {
+                        "@id": "ex:hobbies",
+                        "@type": "@id",
+                    },
                     "knows": {
                         "@id": "schema:knows",
                         "@type": "@id",
                         "@container": "@set",
-                    }
+                    },
                 },
             ],
             "iri": "Person.json",
-            "defaultProperties": ["type", "name"],
+            "defaultProperties": ["type", "name", "hobbies"],
         }
     )
     type: Optional[str] = "ex:Person.json"
+    hobbies: Optional[List[Hobby]] = None
+    """interests of the person, e.g. sports, music, art"""
     knows: Optional[List["Person"]] = Field(
         None,
         # object property pointing to another Person

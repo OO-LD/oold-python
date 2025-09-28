@@ -4,12 +4,14 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jsondiff
 import pyld
+import yaml
 from pydantic import BaseModel, create_model
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
 from pydantic.v1 import BaseModel as BaseModel_v1
 from pydantic.v1 import create_model as create_model_v1
 from pydantic_core import CoreSchema
 from pyld import jsonld
+from typing_extensions import Literal
 
 
 class OOLDJsonSchemaGenerator(GenerateJsonSchema):
@@ -80,9 +82,19 @@ class GenericLinkedBaseModel:
         partial_mode: Optional[
             PartialSchemaExportMode
         ] = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
+        serialize: Optional[Literal["json", "yaml"]] = None,
     ) -> Dict:
         """Export the schema of the model as a dictionary."""
-        return export_schema(cls, mode, cutoff_base_cls, partial_mode)
+        schema = export_schema(cls, mode, cutoff_base_cls, partial_mode)
+        if serialize == "json":
+            return json.dumps(schema, indent=2)
+        elif serialize == "yaml":
+            _ignore_aliases = yaml.Dumper.ignore_aliases
+            yaml.Dumper.ignore_aliases = lambda *args: True
+            yaml_doc = yaml.dump(schema, indent=2)
+            yaml.Dumper.ignore_aliases = _ignore_aliases
+            return yaml_doc
+        return schema
 
 
 def get_jsonld_context_loader(model_cls, model_type) -> Callable:
@@ -152,15 +164,18 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
 
 def export_jsonld(model_instance, model_type) -> Dict:
     """Return the RDF representation of the object as JSON-LD."""
+
+    # serialize the model to a dictionary
+    # to_string().to_json() roundtrips is needed to serialize enums correctly
     if model_type == BaseModel:
         # get the context from self.ConfigDict.json_schema_extra["@context"]
         context = model_instance.model_config.get("json_schema_extra", {}).get(
             "@context", {}
         )
-        data = model_instance.model_dump(exclude_none=True)
+        data = json.loads(model_instance.model_dump_json(exclude_none=True))
     if model_type == BaseModel_v1:
         context = model_instance.__class__.__config__.schema_extra.get("@context", {})
-        data = model_instance.dict(exclude_none=True)
+        data = json.loads(model_instance.json(exclude_none=True))
 
     if "id" not in data and "@id" not in data:
         data["id"] = model_instance.get_iri()

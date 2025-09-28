@@ -1,17 +1,77 @@
+import ast
+import inspect
 import json
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from functools import partial
+from operator import is_
+from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, Union
 
 import jsondiff
+import pydantic_core.core_schema as core_schema
 import pyld
 import yaml
 from pydantic import BaseModel, create_model
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
 from pydantic.v1 import BaseModel as BaseModel_v1
 from pydantic.v1 import create_model as create_model_v1
-from pydantic_core import CoreSchema
+from pydantic_core import CoreSchema, to_jsonable_python
 from pyld import jsonld
 from typing_extensions import Literal
+
+E = TypeVar("E", bound=Enum)
+
+
+# from https://stackoverflow.com/a/79229811
+# see also https://stackoverflow.com/a/78943193
+def enum_docstrings(enum: type[E]) -> type[E]:
+    '''Attach docstrings to enum members
+
+    Docstrings are string literals that appear directly below the enum member
+    assignment expression:
+
+    ```
+    @enum_docstrings
+    class SomeEnum(Enum):
+        """Docstring for the SomeEnum enum"""
+
+        foo_member = "foo_value"
+        """Docstring for the foo_member enum member"""
+
+    SomeEnum.foo_member.__doc__  # 'Docstring for the foo_member enum member'
+    ```
+
+    '''
+    try:
+        mod = ast.parse(inspect.getsource(enum))
+    except OSError:
+        # no source code available
+        return enum
+
+    if mod.body and isinstance(class_def := mod.body[0], ast.ClassDef):
+        # An enum member docstring is unassigned if it is the exact same object
+        # as enum.__doc__.
+        unassigned = partial(is_, enum.__doc__)
+        names = enum.__members__.keys()
+        member: E | None = None
+        for node in class_def.body:
+            match node:
+                case ast.Assign(targets=[ast.Name(id=name)]) if name in names:
+                    # Enum member assignment, look for a docstring next
+                    member = enum[name]
+                    continue
+
+                case ast.Expr(
+                    value=ast.Constant(value=str(docstring))
+                ) if member and unassigned(member.__doc__):
+                    # docstring immediately following a member assignment
+                    member.__doc__ = docstring
+
+                case _:
+                    pass
+
+            member = None
+
+    return enum
 
 
 class OOLDJsonSchemaGenerator(GenerateJsonSchema):
@@ -25,6 +85,61 @@ class OOLDJsonSchemaGenerator(GenerateJsonSchema):
         since optional fields are already handled by 'required'."""
         inner_json_schema = self.generate_inner(schema["schema"])
         return inner_json_schema
+
+    def enum_schema(self, schema: core_schema.EnumSchema) -> JsonSchemaValue:
+        """Generates a JSON schema that matches an Enum value.
+
+        Args:
+            schema: The core schema.
+
+        Returns:
+            The generated JSON schema.
+        """
+        enum_type = enum_docstrings(schema["cls"])
+        description = (
+            None if not enum_type.__doc__ else inspect.cleandoc(enum_type.__doc__)
+        )
+        if (
+            description == "An enumeration."
+        ):  # This is the default value provided by enum.EnumMeta.__new__; don't use it
+            description = None
+        result: dict[str, Any] = {
+            "title": enum_type.__name__,
+            "description": description,
+        }
+        result = {k: v for k, v in result.items() if v is not None}
+
+        expected = [to_jsonable_python(v.value) for v in schema["members"]]
+
+        result["enum"] = expected
+
+        # interate over all enum values and collect their docstrings
+        enum_descriptions = []
+        for v in enum_type:
+            if v.value in expected and v.__doc__:
+                enum_descriptions.append(f"{inspect.cleandoc(v.__doc__)}")
+            else:
+                enum_descriptions.append(f"{v.value}")
+        if "options" not in result:
+            result["options"] = {}
+        result["options"]["enum_titles"] = enum_descriptions
+
+        result["x-enum-varnames"] = [v.name for v in enum_type if v.value in expected]
+        result["x-enum-descriptions"] = enum_descriptions
+
+        types = {type(e) for e in expected}
+        if isinstance(enum_type, str) or types == {str}:
+            result["type"] = "string"
+        elif isinstance(enum_type, int) or types == {int}:
+            result["type"] = "integer"
+        elif isinstance(enum_type, float) or types == {float}:
+            result["type"] = "number"
+        elif types == {bool}:
+            result["type"] = "boolean"
+        elif types == {list}:
+            result["type"] = "array"
+
+        return result
 
 
 class SchemaExportMode(str, Enum):

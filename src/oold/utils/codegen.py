@@ -124,6 +124,25 @@ class OOLDJsonSchemaParser(JsonSchemaParser):
             for i, d in enumerate(parsed_schemas)
         ]
 
+    def parse_enum(
+        self,
+        name: str,
+        obj: JsonSchemaObject,
+        path: list[str],
+        singular_name: bool = False,  # noqa: FBT001, FBT002
+        unique: bool = True,  # noqa: FBT001, FBT002
+    ) -> DataType:
+        """Override to handle enum schemas - add enum descriptions as docstrings."""
+        schema = super().parse_enum(name, obj, path, singular_name, unique)
+        ref = schema.reference
+        for r in self.results:
+            if r.reference == ref:
+                if "options" in obj.extras and "enum_titles" in obj.extras["options"]:
+                    for i, v in enumerate(obj.extras["options"]["enum_titles"]):
+                        if "description" not in r.fields[i].extras:
+                            r.fields[i].extras["description"] = v
+        return schema
+
 
 class OOLDJsonSchemaParserFixedRefs(OOLDJsonSchemaParser):
     """Overwrite # overwrite the original `_get_ref_body_from_remote` function to fix

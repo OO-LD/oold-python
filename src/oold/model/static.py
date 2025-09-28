@@ -496,16 +496,24 @@ def export_schema(
             # rewrite other $ref to the current schema
             # => e.g. replace all {"$ref": "#/$defs/Entity"} with {"$ref": "#"}
             # iterate over all result_schema['properties']
-            # and schema['properties']['items']and remove the $ref
+            # and schema['properties']['items'] and remove the $ref
+            refs = []
             for property_key in result_schema.get("properties", {}):
                 property = result_schema["properties"][property_key]
                 if "$ref" in property:
+                    refs.append(property["$ref"])
                     if property["$ref"] == ref:
                         property["$ref"] = "#"
                 if "items" in property:
                     if "$ref" in property["items"]:
+                        refs.append(property["items"]["$ref"])
                         if property["items"]["$ref"] == ref:
                             property["items"]["$ref"] = "#"
+            # if non of the refs is a subpath of the ref, remove $defs element
+            # in case it is at root level of $defs
+            if not any(_ref.startswith(ref + "/") for _ref in refs):
+                if ref.split("/")[:-1] == ["#", "$defs"]:
+                    del result_schema["$defs"][ref.split("/")[-1]]
 
             del result_schema["$ref"]
     result_schema = _inverse_preprocess(result_schema)

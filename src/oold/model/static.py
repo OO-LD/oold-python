@@ -18,6 +18,8 @@ from pydantic_core import CoreSchema, to_jsonable_python
 from pyld import jsonld
 from typing_extensions import Literal
 
+from oold.utils.environment import get_object_source
+
 E = TypeVar("E", bound=Enum)
 
 
@@ -41,12 +43,11 @@ def enum_docstrings(enum: type[E]) -> type[E]:
     ```
 
     '''
-    try:
-        mod = ast.parse(inspect.getsource(enum))
-    except OSError:
-        # no source code available
+    source_code = get_object_source(enum)
+    if source_code is None:
         return enum
 
+    mod = ast.parse(source_code)
     if mod.body and isinstance(class_def := mod.body[0], ast.ClassDef):
         # An enum member docstring is unassigned if it is the exact same object
         # as enum.__doc__.

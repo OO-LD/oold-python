@@ -303,7 +303,9 @@ def export_jsonld(model_instance, model_type) -> Dict:
         data = json.loads(model_instance.json(exclude_none=True))
 
     if "id" not in data and "@id" not in data:
-        data["id"] = model_instance.get_iri()
+        id = model_instance.get_iri()
+        if id is not None:
+            data["id"] = id
     jsonld_dict = {"@context": context, **data}
     jsonld.set_document_loader(
         get_jsonld_context_loader(model_instance.__class__, model_type)

@@ -4,7 +4,7 @@ import json
 from enum import Enum
 from functools import partial
 from operator import is_
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 import jsondiff
 import pydantic_core.core_schema as core_schema
@@ -287,6 +287,75 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
     return loader
 
 
+def _interate_annotation_args(field_annotation_class):
+    """Get the annotation class from a field annotation.
+    e.g. <SomeClass> or List[SomeClass] or Optional[SomeClass]"""
+    annotation_class = None
+    if hasattr(field_annotation_class, "__origin__"):
+        # if _origin__ is List or list or Union interate over __args__
+        if field_annotation_class.__origin__ in [list, List, Union]:
+            for arg in field_annotation_class.__args__:
+                # recursive call if arg is List or Union
+                # Todo: handle multiple types in Union
+                if hasattr(arg, "__origin__"):
+                    annotation_class = _interate_annotation_args(arg)
+                    if annotation_class is not None:
+                        break
+                if arg is not type(None):
+                    annotation_class = arg
+                    break
+    return annotation_class
+
+
+def build_context(model_cls, model_type, visited=None) -> Dict:
+    """Takes the base context from the model_type.
+    Iterate over the model_type fields.
+    If the field is another LinkedBaseModel, a nested context is built recursively."""
+
+    if visited is None:
+        visited = set()
+    if model_cls in visited:
+        return None
+    visited.add(model_cls)
+    context = {}
+
+    if model_type == BaseModel:
+        # get the context from self.ConfigDict.json_schema_extra["@context"]
+        context = model_cls.model_config.get("json_schema_extra", {}).get(
+            "@context", {}
+        )
+        for field_name, field_value in model_cls.model_fields.items():
+            annotation_class = _interate_annotation_args(field_value.annotation)
+            if annotation_class is not None and issubclass(annotation_class, BaseModel):
+                nested_context = build_context(annotation_class, model_type, visited)
+                target_context = context
+                # if target context is a list,
+                # find the dict that contains the field_name
+                if isinstance(target_context, list):
+                    for ctx in target_context:
+                        if isinstance(ctx, dict) and field_name in ctx:
+                            target_context = ctx
+                            break
+                if nested_context is not None:
+                    if target_context[field_name] is None:
+                        continue
+                    if isinstance(target_context[field_name], str):
+                        target_context[field_name] = {
+                            "@id": target_context[field_name],
+                            "@context": nested_context,
+                        }
+                    elif isinstance(target_context[field_name], dict):
+                        target_context[field_name] = {
+                            **target_context[field_name],
+                            **{"@context": nested_context},
+                        }
+
+    if model_type == BaseModel_v1:
+        context = model_cls.__config__.schema_extra.get("@context", {})
+
+    return context
+
+
 def export_jsonld(model_instance, model_type) -> Dict:
     """Return the RDF representation of the object as JSON-LD."""
 
@@ -297,6 +366,7 @@ def export_jsonld(model_instance, model_type) -> Dict:
         context = model_instance.model_config.get("json_schema_extra", {}).get(
             "@context", {}
         )
+        context = build_context(model_instance.__class__, model_type)
         data = json.loads(model_instance.model_dump_json(exclude_none=True))
     if model_type == BaseModel_v1:
         context = model_instance.__class__.__config__.schema_extra.get("@context", {})
@@ -336,9 +406,7 @@ def import_jsonld(model_type, jsonld_dict: Dict, _types: Dict[str, type]):
         return None
     if model_type == BaseModel:
         # get the context from self.ConfigDict.json_schema_extra["@context"]
-        context = model_cls.model_config.get("json_schema_extra", {}).get(
-            "@context", {}
-        )
+        context = build_context(model_cls, model_type)
     if model_type == BaseModel_v1:
         context = model_cls.__config__.schema_extra.get("@context", {})
     jsonld.set_document_loader(get_jsonld_context_loader(model_cls, model_type))

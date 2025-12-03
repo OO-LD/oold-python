@@ -217,6 +217,12 @@ def _run(pydantic_version="v1"):
     else:
         assert False, "ValueError not raised"
 
+    # test index operator for getting objects by IRI
+    f = model.Foo["ex:f"]
+    assert f.id == "ex:f"
+    [b1, b2] = model.Bar[["ex:b1", "ex:b2"]]
+    assert b1.id == "ex:b1" and b2.id == "ex:b2"
+
 
 def test_core():
     _run(pydantic_version="v1")

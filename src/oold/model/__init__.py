@@ -1,10 +1,10 @@
 import json
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union, overload
 
 import pydantic
 from pydantic import BaseModel
-from typing_extensions import Self  # to support python < 3.11
+from typing_extensions import Self
 
 from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
@@ -60,17 +60,29 @@ _types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
 class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass):
     def __new__(mcs, name, bases, namespace):
         cls = super().__new__(mcs, name, bases, namespace)
-        schema = {}
 
-        # pydantic v2
-        if "model_config" in namespace:
-            if "json_schema_extra" in namespace["model_config"]:
-                schema = namespace["model_config"]["json_schema_extra"]
-
-        if "iri" in schema:
-            iri = schema["iri"]
-            _types[iri] = cls
+        if hasattr(cls, "get_cls_iri"):
+            iri = cls.get_cls_iri()
+            if iri is not None:
+                _types[iri] = cls
         return cls
+
+    # override operators, see https://docs.python.org/3/library/operator.html
+
+    @overload
+    def __getitem__(cls: "LinkedBaseModel", item: str) -> Self:
+        ...
+
+    @overload
+    def __getitem__(cls: "LinkedBaseModel", item: List[str]) -> List[Self]:
+        ...
+
+    def __getitem__(
+        cls: "LinkedBaseModel", item: Union[str, List[str]]
+    ) -> Union[Self, List[Self]]:
+        """Allow access to the class by its IRI."""
+        result = cls._resolve(item if isinstance(item, list) else [item])
+        return result[item] if isinstance(item, str) else [result[i] for i in item]
 
 
 # the following switch ensures that autocomplete works in IDEs like VSCode
@@ -91,6 +103,20 @@ class LinkedBaseModel(_LinkedBaseModel):
     """LinkedBaseModel for pydantic v2"""
 
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = {}
+
+    @classmethod
+    def get_cls_iri(cls) -> str:
+        """Return the unique IRI of the class.
+        Overwrite this method in the subclass."""
+        schema = {}
+        if hasattr(cls, "__config__"):
+            if hasattr(cls.__config__, "schema_extra"):
+                schema = cls.__config__.schema_extra
+
+        if "iri" in schema:
+            return schema["iri"]
+        else:
+            return None
 
     def get_iri(self) -> str:
         """Return the unique IRI of the object.

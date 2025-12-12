@@ -109,9 +109,10 @@ class LinkedBaseModel(_LinkedBaseModel):
         """Return the unique IRI of the class.
         Overwrite this method in the subclass."""
         schema = {}
-        if hasattr(cls, "__config__"):
-            if hasattr(cls.__config__, "schema_extra"):
-                schema = cls.__config__.schema_extra
+        # pydantic v2
+        if hasattr(cls, "model_config"):
+            if "json_schema_extra" in cls.model_config:
+                schema = cls.model_config["json_schema_extra"]
 
         if "iri" in schema:
             return schema["iri"]

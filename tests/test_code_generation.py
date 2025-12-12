@@ -140,6 +140,83 @@ def test_enum_docstrings():
     )
 
 
+def test_subclass_inheritance():
+    """
+    Test that subclass inheritance of properties from parent classes works correctly.
+    """
+
+    schemas = [
+        {
+            "id": "Thing",
+            "title": "Thing",
+            "type": "object",
+            "required": ["type", "name"],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "default": "playground:Thing",
+                    "options": {"hidden": True},
+                },
+                "name": {
+                    "type": "string",
+                    "description": "The things name",
+                    "minLength": 1,
+                    "default": "A Thing",
+                },
+            },
+        },
+        {
+            "id": "Person",
+            "title": "Person",
+            "type": "object",
+            "allOf": [{"$ref": "Thing.json"}],
+            "required": ["name"],
+            "properties": {
+                "type": {
+                    "$comment": "Already defined in playground:Thing -> we override just the default",  # noqa: E501
+                    "default": "playground:Person",
+                },
+                "name": {
+                    "description": "First and Last name",
+                    "minLength": 4,
+                    "default": "John Doe",
+                },
+                "age": {"type": "integer"},
+            },
+        },
+    ]
+
+    def subclass_inheritance(pydantic_version):
+        # 'Person' should be a subclass of 'Thing' and inherit its properties
+        # the default value of 'name' in 'Thing' should be 'A Thing'
+        # the default value of 'name' in 'Person' should be 'John Doe'
+        # the type of 'name' in 'Person' should be string
+
+        if pydantic_version == "v1":
+            import data.subclass_inheritance.model_v1 as model
+
+            assert issubclass(model.Person, model.Thing)
+            assert model.Thing.__fields__["name"].default == "A Thing"
+            assert model.Person.__fields__["name"].default == "John Doe"
+            # fails with datamodel-code-generator 0.28.2, fixed in 0.43.0
+            # assert model.Person.__fields__["name"].type_ == str
+
+        else:
+            import data.subclass_inheritance.model_v2 as model
+
+            assert issubclass(model.Person, model.Thing)
+            assert model.Thing.model_fields["name"].default == "A Thing"
+            assert model.Person.model_fields["name"].default == "John Doe"
+            # assert model.Person.model_fields["name"].annotation == str
+
+    _run(
+        schemas,
+        main_schema="Person.json",
+        test=subclass_inheritance,
+    )
+
+
 if __name__ == "__main__":
     test_oneof_subschema()
     test_enum_docstrings()
+    test_subclass_inheritance()

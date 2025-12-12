@@ -121,6 +121,7 @@ class Generator:
                 use_field_description=True,
                 encoding="utf-8",
                 use_double_quotes=True,
+                disable_timestamp=True,
                 collapse_root_models=True,
                 reuse_model=True,
                 # create MyEnum(str, Enum) instead of MyEnum(Enum)

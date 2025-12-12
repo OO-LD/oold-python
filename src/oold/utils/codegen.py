@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict
 
-from datamodel_code_generator import load_yaml_from_path
+from datamodel_code_generator import load_yaml
 from datamodel_code_generator.model import pydantic as pydantic_v1_model
 from datamodel_code_generator.model import pydantic_v2 as pydantic_v2_model
 from datamodel_code_generator.parser.jsonschema import (
@@ -152,6 +152,13 @@ class OOLDJsonSchemaParserFixedRefs(OOLDJsonSchemaParser):
     Only relevant for schema refs in subdirs
     """
 
+    @staticmethod
+    def _load_yaml_from_path(path: Path, encoding: str):
+        """Load YAML content from a file path."""
+
+        with path.open(encoding=encoding) as f:
+            return load_yaml(f)
+
     def _get_ref_body_from_remote(self, resolved_ref: str) -> Dict[Any, Any]:
         # default behaviour:  full_path = self.base_path / resolved_ref
         # fix: merge the paths correctly:
@@ -170,7 +177,10 @@ class OOLDJsonSchemaParserFixedRefs(OOLDJsonSchemaParser):
             "/"
         )  # remove base path, leading '/'
         full_path = self.base_path / Path(resolved_ref)
+
         return self.remote_object_cache.get_or_put(
             str(full_path),
-            default_factory=lambda _: load_yaml_from_path(full_path, self.encoding),
+            default_factory=lambda _: self._load_yaml_from_path(
+                full_path, self.encoding
+            ),
         )

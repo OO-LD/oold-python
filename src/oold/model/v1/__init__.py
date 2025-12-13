@@ -1,58 +1,23 @@
 import json
-from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union, overload
 
 import pydantic
 from pydantic.v1 import BaseModel, PrivateAttr
 from typing_extensions import Self
 
+from oold.backend.interface import (  # noqa
+    GetResolverParam,
+    ResolveParam,
+    Resolver,
+    ResolveResult,
+    SetResolverParam,
+    get_resolver,
+    set_resolver,
+)
 from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import AbstractSetIntStr, MappingIntStrAny
-
-
-class SetResolverParam(BaseModel):
-    iri: str
-    resolver: "Resolver"
-
-
-class GetResolverParam(BaseModel):
-    iri: str
-
-
-class GetResolverResult(BaseModel):
-    resolver: "Resolver"
-
-
-class ResolveParam(BaseModel):
-    iris: List[str]
-
-
-class ResolveResult(BaseModel):
-    nodes: Dict[str, Union[None, "LinkedBaseModel"]]
-
-
-class Resolver(BaseModel):
-    @abstractmethod
-    def resolve(self, request: ResolveParam) -> ResolveResult:
-        pass
-
-
-global _resolvers
-_resolvers = {}
-
-
-def set_resolver(param: SetResolverParam) -> None:
-    _resolvers[param.iri] = param.resolver
-
-
-def get_resolver(param: GetResolverParam) -> GetResolverResult:
-    # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
-    iri = param.iri.split(":")[0]
-    if iri not in _resolvers:
-        raise ValueError(f"No resolvers found for {iri}")
-    return GetResolverResult(resolver=_resolvers[iri])
 
 
 # pydantic v1
@@ -399,9 +364,3 @@ class LinkedBaseModel(_LinkedBaseModel):
     def from_jsonld(self, jsonld: Dict) -> "LinkedBaseModel":
         """Constructs a model instance from a JSON-LD representation."""
         return import_jsonld(BaseModel, jsonld, _types)
-
-
-# required for pydantic v1
-SetResolverParam.update_forward_refs()
-GetResolverResult.update_forward_refs()
-ResolveResult.update_forward_refs()

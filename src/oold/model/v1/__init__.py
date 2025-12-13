@@ -286,18 +286,6 @@ class LinkedBaseModel(_LinkedBaseModel):
 
         return BaseModel.__getattribute__(self, name)
 
-    def dict(self, **kwargs):  # extent BaseClass export function
-        # print("dict")
-        remove_none = kwargs.get("exclude_none", False)
-        kwargs["exclude_none"] = False
-        d = super().dict(**kwargs)
-        # pprint(d)
-        self._object_to_iri(d)
-        if remove_none:
-            d = self.remove_none(d)
-        # pprint(d)
-        return d
-
     @staticmethod
     def _resolve(iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver

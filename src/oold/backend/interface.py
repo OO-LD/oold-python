@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
@@ -21,6 +21,7 @@ class GetResolverResult(BaseModel):
 
 class ResolveParam(BaseModel):
     iris: List[str]
+    model_cls: Optional[Type[GenericLinkedBaseModel]] = None
 
 
 class ResolveResult(BaseModel):
@@ -31,9 +32,27 @@ class ResolveResult(BaseModel):
 
 
 class Resolver(BaseModel):
+    model_cls: Optional[Type[GenericLinkedBaseModel]] = None
+
     @abstractmethod
-    def resolve(self, request: ResolveParam) -> ResolveResult:
+    def resolve_iri(self, iri) -> Dict:
         pass
+
+    def resolve(self, request: ResolveParam):
+        # print("RESOLVE", request)
+
+        model_cls = request.model_cls
+        if model_cls is None:
+            model_cls = self.model_cls
+        if model_cls is None:
+            raise ValueError("No model_cls provided in request or resolver")
+
+        nodes = {}
+        for iri in request.iris:
+            # nodes[iri] = self.resolve_iri(iri)
+            jsonld_dict = self.resolve_iri(iri)
+            nodes[iri] = model_cls.from_jsonld(jsonld_dict)
+        return ResolveResult(nodes=nodes)
 
 
 global _resolvers

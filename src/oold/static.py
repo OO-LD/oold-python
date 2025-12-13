@@ -1,6 +1,7 @@
 import ast
 import inspect
 import json
+from abc import abstractmethod
 from enum import Enum
 from functools import partial
 from operator import is_
@@ -220,6 +221,11 @@ class GenericLinkedBaseModel:
             yaml.Dumper.ignore_aliases = _ignore_aliases
             return yaml_doc
         return schema
+
+    @abstractmethod
+    def from_jsonld(self, jsonld: Dict) -> "GenericLinkedBaseModel":
+        """Constructs a model instance from a JSON-LD representation."""
+        pass
 
 
 def get_jsonld_context_loader(model_cls, model_type) -> Callable:

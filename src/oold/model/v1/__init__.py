@@ -289,7 +289,9 @@ class LinkedBaseModel(_LinkedBaseModel):
     @staticmethod
     def _resolve(iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
-        node_dict = resolver.resolve(ResolveParam(iris=iris)).nodes
+        node_dict = resolver.resolve(
+            ResolveParam(iris=iris, model_cls=LinkedBaseModel)
+        ).nodes
         return node_dict
 
     # pydantic v1

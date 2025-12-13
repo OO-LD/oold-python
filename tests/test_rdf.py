@@ -1,13 +1,7 @@
-import json
 from typing import List, Optional
 
-from oold.backend.interface import (
-    ResolveParam,
-    Resolver,
-    ResolveResult,
-    SetResolverParam,
-    set_resolver,
-)
+from oold.backend.interface import SetResolverParam, set_resolver
+from oold.backend.sparql import LocalSparqlResolver
 
 
 def _run(pydantic_version):
@@ -142,53 +136,11 @@ def _run(pydantic_version):
         assert str(row.name) == "Alice"
 
     # create a resolver to resolve IRIs to objects
-    class SparqlResolver(Resolver):
-        # model_config = ConfigDict(
-        #    arbitrary_types_allowed=True
-        # )
-        class Config:
-            arbitrary_types_allowed = True
-
-        graph: Graph
-
-        def resolve_iri(self, iri):
-            # sparql query to get a node by IRI with all its properties
-            # using CONSTRUCT to get the full node
-            # format the result as json-ld
-            iri_filter = f"FILTER (?s = {iri})"
-            # check if the iri is a full IRI or a prefix
-            if iri.startswith("http"):
-                iri_filter = f"FILTER (?s = <{iri}>)"
-            qres = self.graph.query(
-                """
-                PREFIX ex: <https://example.com/>
-                CONSTRUCT {
-                    ?s ?p ?o .
-                }
-                WHERE {
-                    ?s ?p ?o .
-                    {{{iri_filter}}}
-                }
-                """.replace(
-                    "{{{iri_filter}}}", iri_filter
-                )
-            )
-            jsonld_dict = json.loads(qres.serialize(format="json-ld"))[0]
-            res = LinkedBaseModel.from_jsonld(jsonld_dict)
-            return res
-
-        def resolve(self, request: ResolveParam):
-            # print("RESOLVE", request)
-            nodes = {}
-            for iri in request.iris:
-                nodes[iri] = self.resolve_iri(iri)
-            return ResolveResult(nodes=nodes)
-
-    r = SparqlResolver(graph=g)
+    r = LocalSparqlResolver(graph=g)
     set_resolver(SetResolverParam(iri="ex", resolver=r))
 
     # load bob from the graph
-    bob = r.resolve_iri("ex:Bob")
+    bob = Person["ex:Bob"]
     print(bob)
     # accessing 'knows' will trigger a sparql query
     # to get the full node of Alice from the graph

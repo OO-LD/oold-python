@@ -147,6 +147,18 @@ git clone https://github.com/OpenSemanticWorld/oold-python
 pip install -e .[dev]
 ```
 
+### Run tests
+```
+tox -e test
+```
+
+### Contribute
+We welcome contributions! Please fork the repository and submit a pull request with your changes.
+Please enable pre-commit hooks in your fork to ensure code quality.
+```
+pre-commit install
+```
+Please enable GitHub Actions for your fork to run the tests automatically.
 
 <!-- pyscaffold-notes -->
 

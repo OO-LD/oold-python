@@ -6,29 +6,20 @@ from typing import Any
 
 import datamodel_code_generator
 
+from oold.backend.interface import (
+    ResolveParam,
+    Resolver,
+    ResolveResult,
+    SetResolverParam,
+    set_resolver,
+)
 from oold.generator import Generator
 
 
 def _run(pydantic_version="v1"):
     if pydantic_version == "v1":
-        from oold.model.v1 import (
-            ResolveParam,
-            Resolver,
-            ResolveResult,
-            SetResolverParam,
-            set_resolver,
-        )
-
         output_model_type = datamodel_code_generator.DataModelType.PydanticBaseModel
     else:
-        from oold.model import (
-            ResolveParam,
-            Resolver,
-            ResolveResult,
-            SetResolverParam,
-            set_resolver,
-        )
-
         output_model_type = datamodel_code_generator.DataModelType.PydanticV2BaseModel
 
     """Tests for `oold` package."""

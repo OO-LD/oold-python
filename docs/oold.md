@@ -1,7 +1,7 @@
 LinkedBaseModel Class
 
 # LinkedBaseModel
-::: oold.model.static.GenericLinkedBaseModel
+::: oold.static.GenericLinkedBaseModel
 
 # LinkedBaseModel v1
 ::: oold.model.v1.LinkedBaseModel

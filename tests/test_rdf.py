@@ -1,20 +1,21 @@
 import json
 from typing import List, Optional
 
+from oold.backend.interface import (
+    ResolveParam,
+    Resolver,
+    ResolveResult,
+    SetResolverParam,
+    set_resolver,
+)
+
 
 def _run(pydantic_version):
     if pydantic_version == "v1":
         from pydantic.v1 import Field
 
         # based on pydantic v1
-        from oold.model.v1 import (
-            LinkedBaseModel,
-            ResolveParam,
-            Resolver,
-            ResolveResult,
-            SetResolverParam,
-            set_resolver,
-        )
+        from oold.model.v1 import LinkedBaseModel
 
         class Entity(LinkedBaseModel):
             class Config:
@@ -67,11 +68,6 @@ def _run(pydantic_version):
 
         # based on pydantic v2
         from oold.model import LinkedBaseModel  # noqa
-        from oold.model import ResolveParam  # noqa
-        from oold.model import Resolver  # noqa
-        from oold.model import ResolveResult  # noqa
-        from oold.model import SetResolverParam  # noqa
-        from oold.model import set_resolver  # noqa
 
         class Entity(LinkedBaseModel):
             model_config = ConfigDict(

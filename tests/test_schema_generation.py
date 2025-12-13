@@ -3,7 +3,7 @@ from typing import Optional
 
 import jsondiff
 
-from oold.model.static import SchemaExportMode
+from oold.static import SchemaExportMode
 
 
 def _run(pydantic_version="v1"):

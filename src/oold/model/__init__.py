@@ -5,16 +5,8 @@ import pydantic
 from pydantic import BaseModel
 from typing_extensions import Self
 
-from oold.backend.interface import (  # noqa
-    GetResolverParam,
-    ResolveParam,
-    Resolver,
-    ResolveResult,
-    SetResolverParam,
-    get_resolver,
-    set_resolver,
-)
-from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
+from oold.backend.interface import GetResolverParam, ResolveParam, get_resolver
+from oold.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
 # pydantic v2
 _types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}

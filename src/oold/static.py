@@ -399,6 +399,8 @@ def import_jsonld(model_type, jsonld_dict: Dict, _types: Dict[str, type]):
         type_iri = type_iri[0]
     # get the class from the _types dict
     # Todo: IRI normalization
+    if isinstance(type_iri, dict):
+        type_iri = type_iri.get("@id")
     type_iri = type_iri.split("/")[-1]
     model_cls = _types.get(type_iri, None)
     # if model_type is None, return None

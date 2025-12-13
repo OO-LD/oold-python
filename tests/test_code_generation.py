@@ -1,6 +1,6 @@
 from static import _run
 
-from oold.model.static import enum_docstrings as parse_enum_docstrings
+from oold.static import enum_docstrings as parse_enum_docstrings
 
 
 def test_oneof_subschema():

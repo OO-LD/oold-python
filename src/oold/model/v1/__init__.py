@@ -5,16 +5,8 @@ import pydantic
 from pydantic.v1 import BaseModel, PrivateAttr
 from typing_extensions import Self
 
-from oold.backend.interface import (  # noqa
-    GetResolverParam,
-    ResolveParam,
-    Resolver,
-    ResolveResult,
-    SetResolverParam,
-    get_resolver,
-    set_resolver,
-)
-from oold.model.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
+from oold.backend.interface import GetResolverParam, ResolveParam, get_resolver
+from oold.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import AbstractSetIntStr, MappingIntStrAny

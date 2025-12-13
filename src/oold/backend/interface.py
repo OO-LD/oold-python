@@ -3,7 +3,7 @@ from typing import Dict, List, Union
 
 from pydantic import BaseModel
 
-from oold.model.static import GenericLinkedBaseModel
+from oold.static import GenericLinkedBaseModel
 
 
 class SetResolverParam(BaseModel):
@@ -34,3 +34,19 @@ class Resolver(BaseModel):
     @abstractmethod
     def resolve(self, request: ResolveParam) -> ResolveResult:
         pass
+
+
+global _resolvers
+_resolvers = {}
+
+
+def set_resolver(param: SetResolverParam) -> None:
+    _resolvers[param.iri] = param.resolver
+
+
+def get_resolver(param: GetResolverParam) -> GetResolverResult:
+    # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
+    iri = param.iri.split(":")[0]
+    if iri not in _resolvers:
+        raise ValueError(f"No resolvers found for {iri}")
+    return GetResolverResult(resolver=_resolvers[iri])

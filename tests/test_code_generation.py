@@ -198,8 +198,11 @@ def test_subclass_inheritance():
             assert issubclass(model.Person, model.Thing)
             assert model.Thing.__fields__["name"].default == "A Thing"
             assert model.Person.__fields__["name"].default == "John Doe"
-            # fails with datamodel-code-generator 0.28.2, fixed in 0.43.0
-            # assert model.Person.__fields__["name"].type_ == str
+            # fails with datamodel-code-generator 0.28.2, fixed in 0.43.1
+            assert (
+                str(model.Person.__fields__["type"].annotation)
+                == "typing.Optional[str]"
+            )
 
         else:
             import data.subclass_inheritance.model_v2 as model
@@ -207,7 +210,10 @@ def test_subclass_inheritance():
             assert issubclass(model.Person, model.Thing)
             assert model.Thing.model_fields["name"].default == "A Thing"
             assert model.Person.model_fields["name"].default == "John Doe"
-            # assert model.Person.model_fields["name"].annotation == str
+            assert (
+                str(model.Person.model_fields["type"].annotation)
+                == "typing.Optional[str]"
+            )
 
     _run(
         schemas,

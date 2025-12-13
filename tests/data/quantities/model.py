@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import ConfigDict, Field
 
@@ -59,7 +59,7 @@ class Bar(Bar2):
     )
     type: Optional[List[str]] = ["Bar"]
     prop2: Optional[str] = None
-    unit: Optional[Any] = Field(
+    unit: Optional[str] = Field(
         None,
         json_schema_extra={"_allOf": [{"$ref": "./bar2/Bar2.json#/properties/unit"}]},
         title="DiameterUnit",

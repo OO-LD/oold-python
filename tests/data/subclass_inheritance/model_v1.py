@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic.v1 import Field, constr
 
@@ -25,11 +25,11 @@ class Person(Thing):
     class Config:
         schema_extra = {"title": "Person"}
 
-    type: Optional[Any] = Field(
+    type: Optional[str] = Field(
         "playground:Person",
         field_comment="Already defined in playground:Thing -> we override just the default",
     )
-    name: Optional[Any] = "John Doe"
+    name: Optional[constr(min_length=1)] = "John Doe"
     """
     First and Last name
     """

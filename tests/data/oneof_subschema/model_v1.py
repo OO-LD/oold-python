@@ -12,7 +12,7 @@ from oold.model.v1 import LinkedBaseModel
 
 class Subschema1(LinkedBaseModel):
     class Config:
-        schema_extra = {"title": "Subschema1"}
+        schema_extra = {"custom_key": "custom_value", "title": "Subschema1"}
 
     subprop0: Optional[str] = Field(None, custom_key="custom_value_0")
     subprop1: Optional[str] = Field(None, custom_key="custom_value_1")
@@ -20,7 +20,7 @@ class Subschema1(LinkedBaseModel):
 
 class Subschema2(LinkedBaseModel):
     class Config:
-        schema_extra = {"title": "Subschema2"}
+        schema_extra = {"custom_key": "custom_value", "title": "Subschema2"}
 
     subprop0: Optional[str] = Field(None, custom_key="custom_value_0")
     subprop2: Optional[str] = Field(None, custom_key="custom_value_2")

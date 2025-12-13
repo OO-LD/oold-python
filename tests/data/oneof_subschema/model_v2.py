@@ -12,7 +12,7 @@ from oold.model import LinkedBaseModel
 
 class Subschema1(LinkedBaseModel):
     model_config = ConfigDict(
-        json_schema_extra={"title": "Subschema1"},
+        json_schema_extra={"custom_key": "custom_value", "title": "Subschema1"},
     )
     subprop0: Optional[str] = Field(
         None, json_schema_extra={"custom_key": "custom_value_0"}
@@ -24,7 +24,7 @@ class Subschema1(LinkedBaseModel):
 
 class Subschema2(LinkedBaseModel):
     model_config = ConfigDict(
-        json_schema_extra={"title": "Subschema2"},
+        json_schema_extra={"custom_key": "custom_value", "title": "Subschema2"},
     )
     subprop0: Optional[str] = Field(
         None, json_schema_extra={"custom_key": "custom_value_0"}

@@ -35,7 +35,7 @@ class Resolver(BaseModel):
     model_cls: Optional[Type[GenericLinkedBaseModel]] = None
 
     @abstractmethod
-    def resolve_iri(self, iri) -> Dict:
+    def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
         pass
 
     def resolve(self, request: ResolveParam):
@@ -47,11 +47,15 @@ class Resolver(BaseModel):
         if model_cls is None:
             raise ValueError("No model_cls provided in request or resolver")
 
+        jsonld_dicts = self.resolve_iris(request.iris)
         nodes = {}
-        for iri in request.iris:
-            # nodes[iri] = self.resolve_iri(iri)
-            jsonld_dict = self.resolve_iri(iri)
-            nodes[iri] = model_cls.from_jsonld(jsonld_dict)
+        for iri, jsonld_dict in jsonld_dicts.items():
+            if jsonld_dict is None:
+                nodes[iri] = None
+            else:
+                node = model_cls.from_jsonld(jsonld_dict)
+                nodes[iri] = node
+
         return ResolveResult(nodes=nodes)
 
 
@@ -65,7 +69,71 @@ def set_resolver(param: SetResolverParam) -> None:
 
 def get_resolver(param: GetResolverParam) -> GetResolverResult:
     # ToDo: Handle prefixes (ex:) as well as full IRIs (http://example.com/)
+    # ToDo: Handle list of IRIs with mixed domains
     iri = param.iri.split(":")[0]
     if iri not in _resolvers:
         raise ValueError(f"No resolvers found for {iri}")
     return GetResolverResult(resolver=_resolvers[iri])
+
+
+class SetBackendParam(BaseModel):
+    iri: str
+    backend: "Backend"
+
+
+class GetBackendParam(BaseModel):
+    iri: str
+
+
+class GetBackendResult(BaseModel):
+    backend: "Backend"
+
+
+class StoreParam(BaseModel):
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+    nodes: Dict[str, Union[None, GenericLinkedBaseModel]]
+
+
+class StoreResult(BaseModel):
+    success: bool
+
+
+class Query(BaseModel):
+    pass
+
+
+class Backend(Resolver):
+    def store(self, param: StoreParam) -> StoreResult:
+        jsonld_dicts = {}
+        for iri, node in param.nodes.items():
+            if node is None:
+                jsonld_dicts[iri] = None
+            else:
+                jsonld_dicts[iri] = node.to_jsonld()
+        return self.store_jsonld_dicts(jsonld_dicts)
+
+    @abstractmethod
+    def store_jsonld_dicts(self, jsonld_dicts: Dict[str, Dict]) -> StoreResult:
+        pass
+
+    @abstractmethod
+    def query(self, query: Query) -> ResolveResult:
+        """Query the backend and return a ResolveResult."""
+        pass
+
+
+global _backends
+_backends = {}
+
+
+def set_backend(param: SetBackendParam) -> None:
+    _backends[param.iri] = param.backend
+
+
+def get_backend(param: GetBackendParam) -> GetBackendResult:
+    iri = param.iri.split(":")[0]
+    if iri not in _backends:
+        raise ValueError(f"No backends found for {iri}")
+    return GetBackendResult(backend=_backends[iri])

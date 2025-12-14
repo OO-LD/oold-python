@@ -5,7 +5,14 @@ import pydantic
 from pydantic.v1 import BaseModel, PrivateAttr
 from typing_extensions import Self
 
-from oold.backend.interface import GetResolverParam, ResolveParam, get_resolver
+from oold.backend.interface import (
+    GetBackendParam,
+    GetResolverParam,
+    ResolveParam,
+    StoreParam,
+    get_backend,
+    get_resolver,
+)
 from oold.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
 
 if TYPE_CHECKING:
@@ -293,6 +300,14 @@ class LinkedBaseModel(_LinkedBaseModel):
             ResolveParam(iris=iris, model_cls=LinkedBaseModel)
         ).nodes
         return node_dict
+
+    def _store(self):
+        backend = get_backend(GetBackendParam(iri=self.get_iri())).backend
+        backend.store(StoreParam(nodes={self.get_iri(): self}))
+
+    def store_jsonld(self):
+        """Store the model instance in a backend matching its IRI."""
+        self._store()
 
     # pydantic v1
     def json(

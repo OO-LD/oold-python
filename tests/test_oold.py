@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 import datamodel_code_generator
 
@@ -113,19 +113,28 @@ def _run(pydantic_version="v1"):
     class MyResolver(Resolver):
         graph: (Any)
 
-        def resolve_iri(self, iri):
-            for node in self.graph:
-                if node["id"] == iri:
-                    cls_name = node["type"][0]
-                    cls = getattr(model, cls_name)
-                    entity = cls(**node)
-                    return entity
+        def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+            jsonld_dicts = {}
+            for iri in iris:
+                jsonld_dicts[iri] = None
+                for node in self.graph:
+                    if node["id"] == iri:
+                        jsonld_dicts[iri] = node
+                        break
+            return jsonld_dicts
 
         def resolve(self, request: ResolveParam):
             # print("RESOLVE", request)
             nodes = {}
-            for iri in request.iris:
-                nodes[iri] = self.resolve_iri(iri)
+            jsonld_dicts = self.resolve_iris(request.iris)
+            for iri, jsonld_dict in jsonld_dicts.items():
+                if jsonld_dict is None:
+                    nodes[iri] = None
+                    continue
+                cls_name = jsonld_dict["type"][0]
+                cls = getattr(model, cls_name)
+                entity = cls(**jsonld_dict)
+                nodes[iri] = entity
             return ResolveResult(nodes=nodes)
 
     r = MyResolver(graph=graph)

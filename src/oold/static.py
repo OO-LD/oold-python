@@ -227,6 +227,16 @@ class GenericLinkedBaseModel:
         """Constructs a model instance from a JSON-LD representation."""
         pass
 
+    @abstractmethod
+    def to_jsonld(self) -> Dict:
+        """Returns the JSON-LD representation of the model instance."""
+        pass
+
+    @abstractmethod
+    def store_jsonld(self):
+        """Store the model instance in a backend matching its IRI."""
+        pass
+
 
 def get_jsonld_context_loader(model_cls, model_type) -> Callable:
     """to overwrite the default jsonld document loader to load

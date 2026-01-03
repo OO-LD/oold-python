@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any, Dict
 
@@ -10,6 +11,8 @@ from datamodel_code_generator.parser.jsonschema import (
     JsonSchemaParser,
     get_special_path,
 )
+
+logger = logging.getLogger(__name__)
 
 # https://docs.pydantic.dev/1.10/usage/schema/#schema-customization
 # https://docs.pydantic.dev/latest/concepts/json_schema/#using-json_schema_extra-with-a-dict
@@ -138,9 +141,20 @@ class OOLDJsonSchemaParser(JsonSchemaParser):
         for r in self.results:
             if r.reference == ref:
                 if "options" in obj.extras and "enum_titles" in obj.extras["options"]:
-                    for i, v in enumerate(obj.extras["options"]["enum_titles"]):
+                    max_index = min(
+                        len(r.fields), len(obj.extras["options"]["enum_titles"])
+                    )
+                    if len(r.fields) != len(obj.extras["options"]["enum_titles"]):
+                        logger.warning(
+                            f"Warning: Enum field count {len(r.fields)} and enum_title"
+                            f" count {len(obj.extras['options']['enum_titles'])}"
+                            f" do not match for enum {ref}. Using minimum {max_index}."
+                        )
+                    for i in range(max_index):
                         if "description" not in r.fields[i].extras:
-                            r.fields[i].extras["description"] = v
+                            r.fields[i].extras["description"] = obj.extras["options"][
+                                "enum_titles"
+                            ][i]
         return schema
 
 

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic.v1 import Field
 
@@ -15,7 +15,7 @@ class Bar2(LinkedBaseModel):
         schema_extra = {"title": "Bar2"}
 
     id: Optional[str] = None
-    type: Optional[List[str]] = ["Bar2"]
+    type: Optional[list[str]] = ["Bar2"]
     prop1: Optional[str] = None
 
 
@@ -23,7 +23,7 @@ class Bar(Bar2):
     class Config:
         schema_extra = {"title": "Bar"}
 
-    type: Optional[List[str]] = ["Bar"]
+    type: Optional[list[str]] = ["Bar"]
     prop2: Optional[str] = None
 
 
@@ -32,11 +32,11 @@ class Foo(LinkedBaseModel):
         schema_extra = {"title": "Foo"}
 
     id: str
-    type: Optional[List[str]] = ["Foo"]
+    type: Optional[list[str]] = ["Foo"]
     literal: Optional[str] = None
     b: Optional[Bar] = Field(None, range="Bar.json", x_oold_required_iri=True)
     b_default: Optional[Bar] = Field(
         default_factory=lambda: Bar.parse_obj("ex:b"), range="Bar.json"
     )
     b_set_later: Optional[Bar] = Field(None, range="Bar.json")
-    b2: Optional[List[Bar]] = Field(None, range="Bar.json")
+    b2: Optional[list[Bar]] = Field(None, range="Bar.json")

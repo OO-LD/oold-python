@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -34,8 +33,8 @@ class Example(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"title": "Example"},
     )
-    type: Optional[str] = ["example"]
-    hobby: Optional[Hobby] = Field(
+    type: str | None = ["example"]
+    hobby: Hobby | None = Field(
         None,
         json_schema_extra={
             "x-enum-varnames": ["SPORTS", "MUSIC", "ART"],

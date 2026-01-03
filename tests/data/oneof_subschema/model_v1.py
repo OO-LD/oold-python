@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
-
 from pydantic.v1 import Field
 
 from oold.model.v1 import LinkedBaseModel
@@ -14,24 +12,22 @@ class Subschema1(LinkedBaseModel):
     class Config:
         schema_extra = {"custom_key": "custom_value", "title": "Subschema1"}
 
-    subprop0: Optional[str] = Field(None, custom_key="custom_value_0")
-    subprop1: Optional[str] = Field(None, custom_key="custom_value_1")
+    subprop0: str | None = Field(None, custom_key="custom_value_0")
+    subprop1: str | None = Field(None, custom_key="custom_value_1")
 
 
 class Subschema2(LinkedBaseModel):
     class Config:
         schema_extra = {"custom_key": "custom_value", "title": "Subschema2"}
 
-    subprop0: Optional[str] = Field(None, custom_key="custom_value_0")
-    subprop2: Optional[str] = Field(None, custom_key="custom_value_2")
+    subprop0: str | None = Field(None, custom_key="custom_value_0")
+    subprop2: str | None = Field(None, custom_key="custom_value_2")
 
 
 class Example(LinkedBaseModel):
     class Config:
         schema_extra = {"title": "Example"}
 
-    type: Optional[str] = ["example"]
-    prop1: Optional[str] = Field(None, custom_key="custom_value")
-    prop2: Optional[Union[Subschema1, Subschema2]] = Field(
-        None, custom_key="custom_value"
-    )
+    type: str | None = ["example"]
+    prop1: str | None = Field(None, custom_key="custom_value")
+    prop2: Subschema1 | Subschema2 | None = Field(None, custom_key="custom_value")

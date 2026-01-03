@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
-
 from pydantic import ConfigDict, Field
 
 from oold.model import LinkedBaseModel
@@ -14,10 +12,10 @@ class Subschema1(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"custom_key": "custom_value", "title": "Subschema1"},
     )
-    subprop0: Optional[str] = Field(
+    subprop0: str | None = Field(
         None, json_schema_extra={"custom_key": "custom_value_0"}
     )
-    subprop1: Optional[str] = Field(
+    subprop1: str | None = Field(
         None, json_schema_extra={"custom_key": "custom_value_1"}
     )
 
@@ -26,10 +24,10 @@ class Subschema2(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"custom_key": "custom_value", "title": "Subschema2"},
     )
-    subprop0: Optional[str] = Field(
+    subprop0: str | None = Field(
         None, json_schema_extra={"custom_key": "custom_value_0"}
     )
-    subprop2: Optional[str] = Field(
+    subprop2: str | None = Field(
         None, json_schema_extra={"custom_key": "custom_value_2"}
     )
 
@@ -38,8 +36,8 @@ class Example(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"title": "Example"},
     )
-    type: Optional[str] = ["example"]
-    prop1: Optional[str] = Field(None, json_schema_extra={"custom_key": "custom_value"})
-    prop2: Optional[Union[Subschema1, Subschema2]] = Field(
+    type: str | None = ["example"]
+    prop1: str | None = Field(None, json_schema_extra={"custom_key": "custom_value"})
+    prop2: Subschema1 | Subschema2 | None = Field(
         None, json_schema_extra={"custom_key": "custom_value"}
     )

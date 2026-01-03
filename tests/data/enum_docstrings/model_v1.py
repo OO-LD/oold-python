@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic.v1 import Field
 
@@ -34,8 +33,8 @@ class Example(LinkedBaseModel):
     class Config:
         schema_extra = {"title": "Example"}
 
-    type: Optional[str] = ["example"]
-    hobby: Optional[Hobby] = Field(
+    type: str | None = ["example"]
+    hobby: Hobby | None = Field(
         None,
         options={
             "enum_titles": [

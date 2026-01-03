@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -36,7 +36,7 @@ class Bar2(LinkedBaseModel):
         },
     )
     id: Optional[str] = None
-    type: Optional[List[str]] = ["Bar2"]
+    type: Optional[list[str]] = ["Bar2"]
     prop1: Optional[str] = None
     unit: Optional[LengthUnit] = Field(
         None,
@@ -57,7 +57,7 @@ class Bar(Bar2):
     model_config = ConfigDict(
         json_schema_extra={"@context": ["./bar2/Bar2.json"], "title": "Bar"},
     )
-    type: Optional[List[str]] = ["Bar"]
+    type: Optional[list[str]] = ["Bar"]
     prop2: Optional[str] = None
     unit: Optional[str] = Field(
         None,
@@ -71,7 +71,7 @@ class Foo(LinkedBaseModel):
         json_schema_extra={"title": "Foo"},
     )
     id: Optional[str] = None
-    type: Optional[List[str]] = ["Foo"]
+    type: Optional[list[str]] = ["Foo"]
     literal: Optional[str] = None
     b: Optional[Bar] = Field(None, json_schema_extra={"range": "Bar.json"})
-    b2: Optional[List[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})
+    b2: Optional[list[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})

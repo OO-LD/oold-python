@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -15,7 +15,7 @@ class Bar2(LinkedBaseModel):
         json_schema_extra={"title": "Bar2"},
     )
     id: Optional[str] = None
-    type: Optional[List[str]] = ["Bar2"]
+    type: Optional[list[str]] = ["Bar2"]
     prop1: Optional[str] = None
 
 
@@ -23,7 +23,7 @@ class Bar(Bar2):
     model_config = ConfigDict(
         json_schema_extra={"title": "Bar"},
     )
-    type: Optional[List[str]] = ["Bar"]
+    type: Optional[list[str]] = ["Bar"]
     prop2: Optional[str] = None
 
 
@@ -32,7 +32,7 @@ class Foo(LinkedBaseModel):
         json_schema_extra={"title": "Foo"},
     )
     id: str
-    type: Optional[List[str]] = ["Foo"]
+    type: Optional[list[str]] = ["Foo"]
     literal: Optional[str] = None
     b: Optional[Bar] = Field(
         None, json_schema_extra={"range": "Bar.json", "x-oold-required-iri": True}
@@ -42,4 +42,4 @@ class Foo(LinkedBaseModel):
         json_schema_extra={"range": "Bar.json"},
     )
     b_set_later: Optional[Bar] = Field(None, json_schema_extra={"range": "Bar.json"})
-    b2: Optional[List[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})
+    b2: Optional[list[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})

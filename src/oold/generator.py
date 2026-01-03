@@ -115,7 +115,10 @@ class Generator:
                 field_include_all_keys=True,
                 base_class=base_class,
                 # use_default = True,
-                enum_field_as_literal="all",
+                allof_class_hierarchy=(
+                    datamodel_code_generator.AllOfClassHierarchy.Always
+                ),
+                enum_field_as_literal=datamodel_code_generator.LiteralType.Off,
                 use_title_as_name=True,
                 use_schema_description=True,
                 use_field_description=True,

@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import ConfigDict, Field, constr
 
 from oold.model import LinkedBaseModel
@@ -14,10 +12,10 @@ class Thing(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"title": "Thing"},
     )
-    type: Optional[str] = Field(
+    type: str | None = Field(
         "playground:Thing", json_schema_extra={"options": {"hidden": True}}
     )
-    name: Optional[constr(min_length=1)] = "A Thing"
+    name: constr(min_length=1) | None = "A Thing"
     """
     The things name
     """
@@ -27,14 +25,14 @@ class Person(Thing):
     model_config = ConfigDict(
         json_schema_extra={"title": "Person"},
     )
-    type: Optional[str] = Field(
+    type: str | None = Field(
         "playground:Person",
         json_schema_extra={
             "$comment": "Already defined in playground:Thing -> we override just the default"
         },
     )
-    name: Optional[constr(min_length=1)] = "John Doe"
+    name: constr(min_length=1) | None = "John Doe"
     """
     First and Last name
     """
-    age: Optional[int] = None
+    age: int | None = None

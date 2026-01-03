@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic.v1 import Field, constr
 
 from oold.model.v1 import LinkedBaseModel
@@ -14,8 +12,8 @@ class Thing(LinkedBaseModel):
     class Config:
         schema_extra = {"title": "Thing"}
 
-    type: Optional[str] = Field("playground:Thing", options={"hidden": True})
-    name: Optional[constr(min_length=1)] = "A Thing"
+    type: str | None = Field("playground:Thing", options={"hidden": True})
+    name: constr(min_length=1) | None = "A Thing"
     """
     The things name
     """
@@ -25,12 +23,12 @@ class Person(Thing):
     class Config:
         schema_extra = {"title": "Person"}
 
-    type: Optional[str] = Field(
+    type: str | None = Field(
         "playground:Person",
         field_comment="Already defined in playground:Thing -> we override just the default",
     )
-    name: Optional[constr(min_length=1)] = "John Doe"
+    name: constr(min_length=1) | None = "John Doe"
     """
     First and Last name
     """
-    age: Optional[int] = None
+    age: int | None = None

@@ -352,6 +352,8 @@ def build_context(model_cls, model_type, visited=None) -> Dict:
                         if isinstance(ctx, dict) and field_name in ctx:
                             target_context = ctx
                             break
+                    if isinstance(target_context, list):
+                        continue  # definition not found
                 if nested_context is not None:
                     if target_context[field_name] is None:
                         continue

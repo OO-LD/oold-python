@@ -1,6 +1,7 @@
 import ast
 import inspect
 import json
+import logging
 from abc import abstractmethod
 from enum import Enum
 from functools import partial
@@ -20,6 +21,8 @@ from pyld import jsonld
 from typing_extensions import Literal
 
 from oold.utils.environment import get_object_source
+
+_logger = logging.getLogger(__name__)
 
 E = TypeVar("E", bound=Enum)
 
@@ -268,20 +271,27 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
         if iri is None and title is None:
             continue
         if iri is None:
-            schema.get("title")
-            if title in ["Entity", "Category", "Property"]:
+            # to support OSW schemas
+            if title in [
+                "Entity",
+                "Category",
+                "Item",
+                "Property",
+                "AnnotationProperty",
+                "ObjectProperty",
+                "DataProperty",
+                "QuantityProperty",
+            ]:
                 iri = "Category:" + schema.get("title")
             else:
                 iri = "Category:" + "OSW" + schema.get("uuid").replace("-", "")
-        # iri = base_class.get_iri() # does not work on class level
+        # ToDo: use iri = base_class.get_class_iri()
         schemas[iri] = schema
-
-    # print(schemas)
 
     def loader(url, options=None):
         if options is None:
             options = {}
-        # print("Requesting", url)
+        # to support OSW wiki context loading
         if "/wiki/" in url:
             url = url.split("/")[-1].split("?")[0]
         if url in schemas:
@@ -293,10 +303,11 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
                 "documentUrl": url,
                 "document": schema,
             }
-            # print("Loaded", doc)
+            _logger.debug("Resolve local context: %s", url)
             return doc
 
         else:
+            _logger.debug("Resolve remote context: %s", url)
             requests_loader = pyld.documentloader.requests.requests_document_loader()
             return requests_loader(url, options)
 

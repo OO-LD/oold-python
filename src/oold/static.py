@@ -703,6 +703,12 @@ def export_schema(
 
     # ToDo: move this to general json utils
 
+    # normalize definitions
+    # pydantic.v1 schemas may contain "definitions" instead of "$defs"
+    # but $refs are pointing to "#/$defs/..."
+    if "definitions" in result_schema:
+        result_schema["$defs"] = result_schema.pop("definitions")
+
     # if schema has a $ref on the root level, resolve it by following the reference
     # e.g. {"$defs": {"Entity": {"title": "Entity"}}, "$ref": "#/$defs/Entity"}
     # => {"title": "Entity"}

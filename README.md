@@ -152,6 +152,16 @@ pip install -e .[dev]
 tox -e test
 ```
 
+### Benchmarking
+```
+tox -e benchmark
+```
+
+Compare to previous benchmark run without storing new results:
+```
+tox -e benchmark-compare
+```
+
 ### Contribute
 We welcome contributions! Please fork the repository and submit a pull request with your changes.
 Please enable pre-commit hooks in your fork to ensure code quality.

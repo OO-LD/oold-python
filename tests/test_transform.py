@@ -8,7 +8,7 @@ from pyld import jsonld
 from oold.utils.transform import json_to_json, jsonld_to_jsonld
 
 
-def test_simple_json():
+def _test_simple_json():
     input_data = {"type": "Human", "label": "Jane Doe"}
 
     input_context = {
@@ -40,7 +40,15 @@ def test_simple_json():
     ), f"Expected {expected_output_data}, but got {output_data}"
 
 
-def test_complex_graph():
+@pytest.mark.benchmark(group="transform")
+def test_simple_json(benchmark):
+    if benchmark is not None:
+        benchmark(_test_simple_json)
+    else:
+        _test_simple_json()
+
+
+def _test_complex_graph():
     graph = {
         "@context": {
             "schema": "http://schema.org/",
@@ -141,6 +149,14 @@ def test_complex_graph():
     assert (
         transformed_graph == expected
     ), f"Expected {expected}, but got {transformed_graph}"
+
+
+@pytest.mark.benchmark(group="transform")
+def test_complex_graph(benchmark):
+    if benchmark is not None:
+        benchmark(_test_complex_graph)
+    else:
+        _test_complex_graph()
 
 
 @pytest.mark.skip(reason="This test fails randomly, skip for now")
@@ -305,7 +321,7 @@ def test_literal_types():
 
 
 if __name__ == "__main__":
-    test_simple_json()
-    test_complex_graph()
-    test_rocreate()
-    test_literal_types()
+    test_simple_json(None)
+    test_complex_graph(None)
+    # test_rocreate()
+    # test_literal_types()

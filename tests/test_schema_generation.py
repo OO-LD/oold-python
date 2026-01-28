@@ -2,6 +2,7 @@ import json
 from typing import Optional
 
 import jsondiff
+import pytest
 
 from oold.static import SchemaExportMode
 
@@ -126,11 +127,13 @@ def _run(pydantic_version="v1"):
     assert diff == {}, f"Schema mismatch for {pydantic_version}:\n{diff}"
 
 
-def test_schema_generation():
-    _run(pydantic_version="v1")
-    _run(pydantic_version="v2")
+@pytest.mark.parametrize("pydantic_version", ["v1", "v2"])
+@pytest.mark.benchmark(group="schema_generation")
+def test_schema_generation(pydantic_version, benchmark):
+    benchmark(_run, pydantic_version)
 
 
 if __name__ == "__main__":
     # Run the test function
-    test_schema_generation()
+    _run(pydantic_version="v1")
+    _run(pydantic_version="v2")

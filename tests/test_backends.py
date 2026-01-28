@@ -1,5 +1,7 @@
 from typing import Optional
 
+import pytest
+
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import (
     Backend,
@@ -88,28 +90,41 @@ def _run(store: Backend):
     _store_procedure(store, pydantic_version="v2")
 
 
-def test_simple_dict_document_store():
+@pytest.mark.benchmark(group="backend")
+def test_simple_dict_document_store(benchmark):
     store = SimpleDictDocumentStore()
-    _run(store)
+
+    if benchmark is not None:
+        benchmark(_run, store)
+    else:
+        _run(store)
 
 
-def test_sqlite_document_store():
+@pytest.mark.benchmark(group="backend")
+def test_sqlite_document_store(benchmark):
     from oold.backend.document_store import SqliteDocumentStore
 
     store = SqliteDocumentStore(db_path=":memory:")
 
-    _run(store)
+    if benchmark is not None:
+        benchmark(_run, store)
+    else:
+        _run(store)
 
 
-def test_local_sparql_store():
+@pytest.mark.benchmark(group="backend")
+def test_local_sparql_store(benchmark):
     from oold.backend.sparql import LocalSparqlBackend
 
     store = LocalSparqlBackend()
 
-    _run(store)
+    if benchmark is not None:
+        benchmark(_run, store)
+    else:
+        _run(store)
 
 
 if __name__ == "__main__":
-    # test_simple_dict_document_store()
-    # test_sqlite_document_store()
-    test_local_sparql_store()
+    test_simple_dict_document_store(None)
+    test_sqlite_document_store(None)
+    test_local_sparql_store(None)

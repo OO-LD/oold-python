@@ -93,6 +93,103 @@ jobs:
           flag-name: ${{ matrix.platform }} - py${{ matrix.python }}
           parallel: true
 
+  benchmark:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Need history for comparison
+      - uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          python-version: "3.11"
+      - name: Retrieve pre-built distribution files
+        uses: actions/download-artifact@v4
+        with: {name: python-distribution-files, path: dist/}
+
+      # Run current benchmarks
+      - name: Run benchmark tests
+        run: >-
+          pipx run --python '${{ steps.setup-python.outputs.python-path }}'
+          tox -e benchmark --installpkg '${{ needs.prepare.outputs.wheel-distribution }}'
+        continue-on-error: true
+
+      # Try to get baseline from main branch
+      - name: Get baseline benchmarks
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main:main || true
+          git checkout main || exit 0
+          pipx run --python '${{ steps.setup-python.outputs.python-path }}' \
+            tox -e benchmark --installpkg '${{ needs.prepare.outputs.wheel-distribution }}' || true
+          if [ -f benchmark_results.json ]; then
+            mv benchmark_results.json baseline_benchmark.json
+          fi
+          git checkout ${{ github.head_ref }}
+        continue-on-error: true
+
+      # Compare benchmarks if baseline exists
+      - name: Compare with baseline
+        if: github.event_name == 'pull_request' && hashFiles('baseline_benchmark.json') != ''
+        run: |
+          python scripts/compare_benchmarks.py \
+            baseline_benchmark.json \
+            benchmark_results.json \
+            --threshold 1.3 > benchmark_comparison.txt || true
+        continue-on-error: true
+
+      # Comment on PR with results
+      - name: Post benchmark results to PR
+        if: github.event_name == 'pull_request' && hashFiles('benchmark_comparison.txt') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comparison = '';
+            try {
+              comparison = fs.readFileSync('benchmark_comparison.txt', 'utf8');
+            } catch (e) {
+              comparison = 'Benchmark comparison not available';
+            }
+
+            const body = `## 📊 Benchmark Results
+
+            <details>
+            <summary>Click to see benchmark comparison</summary>
+
+            \`\`\`
+            ${comparison}
+            \`\`\`
+
+            </details>
+
+            **Note:** Benchmarks are informational only and won't fail the build.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+        continue-on-error: true
+
+      # Upload benchmark artifacts
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: |
+            benchmark_results.json
+            baseline_benchmark.json
+            .benchmarks/
+          retention-days: 30
+
   finalize:
     needs: test
     runs-on: ubuntu-latest

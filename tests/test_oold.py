@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import datamodel_code_generator
+import pytest
 
 from oold.backend.interface import (
     ResolveParam,
@@ -224,10 +225,13 @@ def _run(pydantic_version="v1"):
     assert b1.id == "ex:b1" and b2.id == "ex:b2"
 
 
-def test_core():
-    _run(pydantic_version="v1")
-    _run(pydantic_version="v2")
+@pytest.mark.parametrize("pydantic_version", ["v1", "v2"])
+@pytest.mark.benchmark(group="test_core")
+def test_core(pydantic_version, benchmark):
+    # benchmark.group += f"{pydantic_version = }"
+    benchmark(_run, pydantic_version)
 
 
 if __name__ == "__main__":
-    test_core()
+    _run("v1")
+    _run("v2")

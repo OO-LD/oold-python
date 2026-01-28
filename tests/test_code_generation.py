@@ -3,7 +3,7 @@ from static import _run
 from oold.static import enum_docstrings as parse_enum_docstrings
 
 
-def test_oneof_subschema():
+def test_oneof_subschema(benchmark):
     # json schema with property that contains a oneOf with two subschemas
 
     schemas = [
@@ -64,15 +64,24 @@ def test_oneof_subschema():
                 "custom_key"
             ] == "custom_value_1"
 
-    _run(
-        schemas,
-        main_schema="example.json",
-        test=oneof_subschema,
-        # pydantic_versions=["v1"],
-    )
+    if benchmark:
+        benchmark(
+            _run,
+            schemas,
+            main_schema="example.json",
+            test=oneof_subschema,
+            # pydantic_versions=["v1"],
+        )
+    else:
+        _run(
+            schemas,
+            main_schema="example.json",
+            test=oneof_subschema,
+            # pydantic_versions=["v1"],
+        )
 
 
-def test_enum_docstrings():
+def test_enum_docstrings(benchmark):
     schemas = [
         {
             "id": "example",
@@ -132,15 +141,24 @@ def test_enum_docstrings():
                 Hobby.ART.__doc__.strip() == "Art hobby, e.g. painting, drawing, etc."
             )
 
-    _run(
-        schemas,
-        main_schema="example.json",
-        test=enum_docstrings,
-        # pydantic_versions=["v1"],
-    )
+    if benchmark:
+        benchmark(
+            _run,
+            schemas,
+            main_schema="example.json",
+            test=enum_docstrings,
+            # pydantic_versions=["v1"],
+        )
+    else:
+        _run(
+            schemas,
+            main_schema="example.json",
+            test=enum_docstrings,
+            # pydantic_versions=["v1"],
+        )
 
 
-def test_subclass_inheritance():
+def test_subclass_inheritance(benchmark):
     """
     Test that subclass inheritance of properties from parent classes works correctly.
     """
@@ -209,14 +227,22 @@ def test_subclass_inheritance():
             assert model.Person.model_fields["name"].default == "John Doe"
             assert str(model.Person.model_fields["type"].annotation) == "str | None"
 
-    _run(
-        schemas,
-        main_schema="Person.json",
-        test=subclass_inheritance,
-    )
+    if benchmark:
+        benchmark(
+            _run,
+            schemas,
+            main_schema="Person.json",
+            test=subclass_inheritance,
+        )
+    else:
+        _run(
+            schemas,
+            main_schema="Person.json",
+            test=subclass_inheritance,
+        )
 
 
-def test_class_hierarchy():
+def test_class_hierarchy(benchmark):
     schemas = [
         {
             "id": "NestedSubSchema",
@@ -311,15 +337,23 @@ def test_class_hierarchy():
                 == "data.class_hierarchy.model_v2.SimpleSubSchema | None"
             )
 
-    _run(
-        schemas,
-        main_schema="Entity.json",
-        test=class_hierarchy,
-    )
+    if benchmark:
+        benchmark(
+            _run,
+            schemas,
+            main_schema="Entity.json",
+            test=class_hierarchy,
+        )
+    else:
+        _run(
+            schemas,
+            main_schema="Entity.json",
+            test=class_hierarchy,
+        )
 
 
 if __name__ == "__main__":
-    test_oneof_subschema()
-    test_enum_docstrings()
-    test_subclass_inheritance()
-    test_class_hierarchy()
+    test_oneof_subschema(None)
+    test_enum_docstrings(None)
+    test_subclass_inheritance(None)
+    test_class_hierarchy(None)

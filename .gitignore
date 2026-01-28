@@ -38,6 +38,13 @@ junit*.xml
 coverage.xml
 .pytest_cache/
 
+# Benchmark results
+.benchmarks/
+benchmark_results.json
+baseline_benchmark.json
+benchmark_comparison.txt
+*_benchmark.json
+
 # Build and docs folder/files
 build/*
 dist/*
@@ -55,3 +62,7 @@ MANIFEST
 
 # node_modules
 node_modules/
+
+# Automatically added by osw.auth.CredentialManager.save_credentials_to_file:
+*/osw_files/*
+*.pwd.yaml

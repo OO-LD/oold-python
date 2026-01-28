@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import ConfigDict, Field
 
 from oold.model import LinkedBaseModel
@@ -14,17 +12,17 @@ class Bar2(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"title": "Bar2"},
     )
-    id: Optional[str] = None
-    type: Optional[list[str]] = ["Bar2"]
-    prop1: Optional[str] = None
+    id: str | None = None
+    type: list[str] | None = ["Bar2"]
+    prop1: str | None = None
 
 
 class Bar(Bar2):
     model_config = ConfigDict(
         json_schema_extra={"title": "Bar"},
     )
-    type: Optional[list[str]] = ["Bar"]
-    prop2: Optional[str] = None
+    type: list[str] | None = ["Bar"]
+    prop2: str | None = None
 
 
 class Foo(LinkedBaseModel):
@@ -32,14 +30,14 @@ class Foo(LinkedBaseModel):
         json_schema_extra={"title": "Foo"},
     )
     id: str
-    type: Optional[list[str]] = ["Foo"]
-    literal: Optional[str] = None
-    b: Optional[Bar] = Field(
+    type: list[str] | None = ["Foo"]
+    literal: str | None = None
+    b: Bar | None = Field(
         None, json_schema_extra={"range": "Bar.json", "x-oold-required-iri": True}
     )
-    b_default: Optional[Bar] = Field(
+    b_default: Bar | None = Field(
         default_factory=lambda: Bar.model_validate("ex:b"),
         json_schema_extra={"range": "Bar.json"},
     )
-    b_set_later: Optional[Bar] = Field(None, json_schema_extra={"range": "Bar.json"})
-    b2: Optional[list[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})
+    b_set_later: Bar | None = Field(None, json_schema_extra={"range": "Bar.json"})
+    b2: list[Bar] | None = Field(None, json_schema_extra={"range": "Bar.json"})

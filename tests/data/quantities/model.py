@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -35,10 +34,10 @@ class Bar2(LinkedBaseModel):
             "title": "Bar2",
         },
     )
-    id: Optional[str] = None
-    type: Optional[list[str]] = ["Bar2"]
-    prop1: Optional[str] = None
-    unit: Optional[LengthUnit] = Field(
+    id: str | None = None
+    type: list[str] | None = ["Bar2"]
+    prop1: str | None = None
+    unit: LengthUnit | None = Field(
         None,
         json_schema_extra={
             "defaut": "Item:OSWf101d25e944856e3bd4b4c9863db7de2",
@@ -57,9 +56,9 @@ class Bar(Bar2):
     model_config = ConfigDict(
         json_schema_extra={"@context": ["./bar2/Bar2.json"], "title": "Bar"},
     )
-    type: Optional[list[str]] = ["Bar"]
-    prop2: Optional[str] = None
-    unit: Optional[str] = Field(
+    type: list[str] | None = ["Bar"]
+    prop2: str | None = None
+    unit: str | None = Field(
         None,
         json_schema_extra={"_allOf": [{"$ref": "./bar2/Bar2.json#/properties/unit"}]},
         title="DiameterUnit",
@@ -70,8 +69,8 @@ class Foo(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"title": "Foo"},
     )
-    id: Optional[str] = None
-    type: Optional[list[str]] = ["Foo"]
-    literal: Optional[str] = None
-    b: Optional[Bar] = Field(None, json_schema_extra={"range": "Bar.json"})
-    b2: Optional[list[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})
+    id: str | None = None
+    type: list[str] | None = ["Foo"]
+    literal: str | None = None
+    b: Bar | None = Field(None, json_schema_extra={"range": "Bar.json"})
+    b2: list[Bar] | None = Field(None, json_schema_extra={"range": "Bar.json"})

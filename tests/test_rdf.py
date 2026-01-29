@@ -24,10 +24,10 @@ def _run(pydantic_version):
                         # literal property
                         "name": "schema:name",
                     },
-                    "iri": "Entity.json",  # the IRI of the schema
+                    "$id": "https://example.com/Entity",  # the id of the schema
                 }
 
-            type: Optional[str] = "ex:Entity.json"
+            type: Optional[str] = "ex:Entity"
             name: str
 
             def get_iri(self):
@@ -37,7 +37,8 @@ def _run(pydantic_version):
             class Config:
                 schema_extra = {
                     "@context": [
-                        "Entity.json",  # import the context of the parent class
+                        # import the context of the parent class
+                        "https://example.com/Entity",
                         {
                             # object property definition
                             "knows": {
@@ -47,14 +48,14 @@ def _run(pydantic_version):
                             }
                         },
                     ],
-                    "iri": "Person.json",
+                    "$id": "https://example.com/Person",
                 }
 
-            type: Optional[str] = "ex:Person.json"
+            type: Optional[str] = "ex:Person"
             knows: Optional[List["Person"]] = Field(
                 None,
                 # object property pointing to another Person
-                range="Person.json",
+                range="ex:Person",
             )
 
     if pydantic_version == "v2":
@@ -76,10 +77,10 @@ def _run(pydantic_version):
                         # literal property
                         "name": "schema:name",
                     },
-                    "iri": "Entity.json",  # the IRI of the schema
+                    "$id": "https://example.com/Entity",  # the IRI of the schema
                 }
             )
-            type: Optional[str] = "ex:Entity.json"
+            type: str | None = "ex:Entity"
             name: str
 
             def get_iri(self):
@@ -89,7 +90,8 @@ def _run(pydantic_version):
             model_config = ConfigDict(
                 json_schema_extra={
                     "@context": [
-                        "Entity.json",  # import the context of the parent class
+                        # import the context of the parent class
+                        "https://example.com/Entity",
                         {
                             # object property definition
                             "knows": {
@@ -99,14 +101,14 @@ def _run(pydantic_version):
                             }
                         },
                     ],
-                    "iri": "Person.json",
+                    "$id": "https://example.com/Person",
                 }
             )
-            type: Optional[str] = "ex:Person.json"
-            knows: Optional[List["Person"]] = Field(
+            type: str | None = "ex:Person"
+            knows: list["Person"] | None = Field(
                 None,
                 # object property pointing to another Person
-                json_schema_extra={"range": "Person.json"},
+                json_schema_extra={"range": "ex:Person"},
             )
 
     p1 = Person(name="Alice")

@@ -13,7 +13,12 @@ from oold.backend.interface import (
     get_backend,
     get_resolver,
 )
-from oold.static import GenericLinkedBaseModel, export_jsonld, import_jsonld
+from oold.static import (
+    GenericLinkedBaseModel,
+    export_jsonld,
+    import_json,
+    import_jsonld,
+)
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import AbstractSetIntStr, MappingIntStrAny
@@ -31,7 +36,11 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
         if hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
-                _types[iri] = cls
+                if isinstance(iri, list):
+                    for i in iri:
+                        _types[i] = cls
+                else:
+                    _types[iri] = cls
         return cls
 
     # override operators, see https://docs.python.org/3/library/operator.html
@@ -72,18 +81,33 @@ class LinkedBaseModel(_LinkedBaseModel):
     __iris__: Optional[Dict[str, Union[str, List[str]]]] = PrivateAttr()
 
     @classmethod
-    def get_cls_iri(cls) -> str:
+    def get_cls_iri(cls) -> Union[str, List[str], None]:
         """Return the unique IRI of the class.
         Overwrite this method in the subclass."""
         schema = {}
+        # pydantic v1
         if hasattr(cls, "__config__"):
             if hasattr(cls.__config__, "schema_extra"):
                 schema = cls.__config__.schema_extra
 
-        if "iri" in schema:
-            return schema["iri"]
-        else:
+        cls_iri = []
+        # schema annotation - should be expanded IRI
+        if "$id" in schema:
+            cls_iri.append(schema["$id"])
+        elif "iri" in schema:
+            cls_iri.append(schema["iri"])
+        # default value of type field - may be compacted IRI
+        type_field_name = cls.get_type_field()
+        # pydantic v2
+        type_field = cls.__fields__.get(type_field_name, None)
+        if type_field is not None:
+            cls_iri.append(type_field.default)
+        if len(cls_iri) == 0:
             return None
+        elif len(cls_iri) == 1:
+            return cls_iri[0]
+        else:
+            return cls_iri
 
     def get_iri(self) -> str:
         """Return the unique IRI of the object.
@@ -358,6 +382,15 @@ class LinkedBaseModel(_LinkedBaseModel):
         return export_jsonld(self, BaseModel)
 
     @classmethod
-    def from_jsonld(self, jsonld: Dict) -> "LinkedBaseModel":
+    def from_jsonld(cls, jsonld: Dict) -> "LinkedBaseModel":
         """Constructs a model instance from a JSON-LD representation."""
-        return import_jsonld(BaseModel, jsonld, _types)
+        return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _types)
+
+    def to_json(self) -> Dict:
+        """Return the JSON representation of the object as dict."""
+        return json.loads(self.json(exclude_none=True))
+
+    @classmethod
+    def from_json(cls, json_dict: Dict) -> "LinkedBaseModel":
+        """Constructs a model instance from a JSON representation."""
+        return import_json(BaseModel, LinkedBaseModel, cls, json_dict, _types)

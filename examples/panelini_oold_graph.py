@@ -1,8 +1,11 @@
 ## uv pip install "git+https://github.com/opensemanticworld/panelini.git@add-panel-visnetwork"
 
 import panel as pn
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 from enum import Enum
+import pandas as pd
+import json
+import time
 
 from panelini.panels.visnetwork import GraphDetailTool
 from rdflib import Graph as RDFGraph
@@ -10,10 +13,7 @@ from rdflib import Node as RDFNode
 from rdflib.term import URIRef, Literal
 from oold.model import LinkedBaseModel
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional
 from oold.ui.panel import JsonEditor, OoldEditor
-import time
-import json
 
 pn.extension("tabulator")  # For tables
 pn.extension("jsoneditor")  # For viewing/editing node details
@@ -178,6 +178,12 @@ class OOLDGraphDetailTool(GraphDetailTool):
             value=current_entity.model_dump()
         )
 
+        # Store current node ID for the callback
+        self._current_single_node_id = node_id
+
+        # Watch for changes in the JSON editor
+        self.current_node_oold_editor.param.watch(self.on_single_node_edit, "value")
+
         #self.current_node_oold_editor = OoldEditor(
         #    oold_model = type(current_entity)
         #)
@@ -186,6 +192,525 @@ class OOLDGraphDetailTool(GraphDetailTool):
         #self.current_node_oold_editor.value=current_entity.model_dump()
 
         self.detail_tabs.active = 2 # switch to the OO-LD details tab
+
+    # ===== Multi-Node Comparison Functionality =====
+
+    def show_multi_node_editor(self, node_ids: List[Any]) -> None:
+        """Override to show OO-LD-aware multi-node comparison tables.
+
+        Displays two comparison tables in the OO-LD Details tab:
+        1. Comparison table for editing individual entity properties
+        2. Set-all table for bulk editing all selected entities
+
+        Args:
+            node_ids: List of node IDs (IRIs) to compare
+        """
+        # Let parent handle visual properties in Details tab
+        super().show_multi_node_editor(node_ids)
+
+        # Now populate OO-LD Details tab with semantic properties
+        self.oold_detail_col.clear()
+        self.oold_detail_col.append(
+            pn.pane.Markdown(f"### OO-LD Multi-Node Editor ({len(node_ids)} nodes)")
+        )
+
+        # Get entities
+        selected_entities = [self.entity_dict[nid] for nid in node_ids if nid in self.entity_dict]
+
+        if not selected_entities:
+            self.oold_detail_col.append(pn.pane.Markdown("*No entities found for selected nodes*"))
+            return
+
+        # Find common properties
+        common_props = self._get_common_properties(selected_entities)
+
+        if not common_props:
+            self.oold_detail_col.append(pn.pane.Markdown("*No common properties found*"))
+            return
+
+        # Build comparison DataFrame
+        comp_df = self._build_comparison_dataframe(selected_entities, common_props)
+
+        # Build editor configs
+        editors = {"_iri": None}  # IRI column not editable
+        for prop in common_props:
+            editors[prop] = self._get_property_editor_config(selected_entities[0], prop)
+
+        # Create comparison tabulator
+        self.oold_detail_col.append(pn.pane.Markdown("#### Property Comparison Table"))
+        self.oold_detail_col.append(pn.pane.Markdown("*Edit cells to update individual entities*"))
+
+        self.oold_comparison_tabulator = pn.widgets.Tabulator(
+            comp_df,
+            editors=editors,
+            hidden_columns=["_iri"],  # Hide IRI column
+            width=700,
+            height=min(400, 50 + len(node_ids) * 30),
+        )
+        self.oold_comparison_tabulator.on_edit(self.on_oold_tabulator_cell_edit)
+        self.oold_detail_col.append(self.oold_comparison_tabulator)
+
+        # Build set-all table
+        self.oold_detail_col.append(pn.pane.Markdown("#### Set Value for All Selected Entities"))
+        self.oold_detail_col.append(pn.pane.Markdown("*Edit cells to apply value to ALL selected entities*"))
+
+        table_data = comp_df.to_dict('records')
+        set_all_row = self._build_set_all_row(table_data, common_props)
+        set_all_df = pd.DataFrame([set_all_row])
+
+        self.oold_set_all_tabulator = pn.widgets.Tabulator(
+            set_all_df,
+            editors=editors,
+            width=700,
+            height=100,
+        )
+        self.oold_set_all_tabulator.on_edit(self.on_oold_set_all_cell_edit)
+        self.oold_detail_col.append(self.oold_set_all_tabulator)
+
+        # Store selected IDs for callbacks
+        self._current_selected_node_ids = node_ids
+
+        # Switch to OO-LD Details tab
+        self.detail_tabs.active = 2
+
+    # ===== Property Introspection Helpers =====
+
+    def _get_common_properties(self, entities: List[LinkedBaseModel]) -> List[str]:
+        """Find properties common to all selected entities.
+
+        Args:
+            entities: List of LinkedBaseModel instances
+
+        Returns:
+            Sorted list of property names that exist on all entities
+        """
+        if not entities:
+            return []
+
+        # Get model fields from first entity as baseline
+        first_model_fields = set(entities[0].model_fields.keys())
+
+        # Find intersection across all entities
+        common_fields = first_model_fields.copy()
+        for entity in entities[1:]:
+            entity_fields = set(entity.model_fields.keys())
+            common_fields &= entity_fields
+
+        # Filter out internal/system fields
+        exclude_fields = {'id', 'type', '__iris__'}
+        common_fields -= exclude_fields
+
+        # Prioritize 'name' and 'label' to appear first
+        priority_fields = ['name', 'label']
+        result = []
+
+        # Add priority fields first (if they exist)
+        for field in priority_fields:
+            if field in common_fields:
+                result.append(field)
+                common_fields.remove(field)
+
+        # Add remaining fields in sorted order
+        result.extend(sorted(common_fields))
+
+        return result
+
+    def _get_property_editor_config(self, entity: LinkedBaseModel, prop_name: str) -> Dict[str, Any]:
+        """Get Tabulator editor configuration for a property.
+
+        Args:
+            entity: Sample entity to inspect
+            prop_name: Name of the property
+
+        Returns:
+            Dict with 'type' and optionally 'values' for editor config
+        """
+        field = entity.model_fields[prop_name]
+        annotation = field.annotation
+
+        # Handle Optional/Union types
+        origin = getattr(annotation, '__origin__', None)
+        if origin is Union:
+            non_none = [t for t in annotation.__args__ if t is not type(None)]
+            if non_none:
+                annotation = non_none[0]
+                origin = getattr(annotation, '__origin__', None)
+
+        # Check for Enum
+        try:
+            if isinstance(annotation, type) and issubclass(annotation, Enum):
+                return {
+                    "type": "list",
+                    "values": [e.value for e in annotation]
+                }
+        except TypeError:
+            pass
+
+        # Check for List
+        if origin is list:
+            return {"type": "input"}  # JSON string input for lists
+
+        # Primitive types
+        if annotation in (int, float):
+            return {"type": "number"}
+        elif annotation is bool:
+            return {"type": "tickCross"}
+        else:
+            return {"type": "input"}  # Default to text input
+
+    def _serialize_property_value(self, value: Any) -> Any:
+        """Serialize a property value for display in tabulator.
+
+        Handles enums, lists, and other complex types.
+
+        Args:
+            value: Property value from entity
+
+        Returns:
+            Serialized value suitable for tabulator display
+        """
+        if value is None:
+            return None
+        elif isinstance(value, Enum):
+            return value.value
+        elif isinstance(value, list):
+            if all(isinstance(v, str) for v in value):
+                return json.dumps(value)  # List of strings/IRIs
+            elif all(isinstance(v, Enum) for v in value):
+                return json.dumps([v.value for v in value])
+            else:
+                return json.dumps([str(v) for v in value])
+        elif isinstance(value, (str, int, float, bool)):
+            return value
+        else:
+            return str(value)
+
+    def _deserialize_property_value(self, entity: LinkedBaseModel, prop_name: str, value: Any) -> Any:
+        """Deserialize a tabulator value back to property type.
+
+        Handles type conversion, enums, and lists.
+
+        Args:
+            entity: Entity to update
+            prop_name: Property name
+            value: Value from tabulator
+
+        Returns:
+            Deserialized value suitable for entity assignment
+        """
+        field = entity.model_fields[prop_name]
+        annotation = field.annotation
+
+        # Handle Optional types
+        origin = getattr(annotation, '__origin__', None)
+        args = getattr(annotation, '__args__', ())
+
+        if origin is Union:
+            # Filter out NoneType
+            non_none_types = [t for t in args if t is not type(None)]
+            if non_none_types:
+                annotation = non_none_types[0]
+                origin = getattr(annotation, '__origin__', None)
+                args = getattr(annotation, '__args__', ())
+
+        # Handle List types
+        if origin is list:
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        # Check if list of enums
+                        if args:
+                            try:
+                                if issubclass(args[0], Enum):
+                                    return [args[0](v) for v in parsed]
+                            except TypeError:
+                                pass
+                        return parsed
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            return value
+
+        # Handle Enum types
+        try:
+            if isinstance(annotation, type) and issubclass(annotation, Enum):
+                return annotation(value)
+        except TypeError:
+            pass
+
+        # Handle primitives
+        if annotation in (int, float, bool, str):
+            if value == "" or value is None:
+                return None
+            return annotation(value)
+
+        return value
+
+    # ===== Table Building =====
+
+    def _build_comparison_dataframe(self, entities: List[LinkedBaseModel], properties: List[str]) -> pd.DataFrame:
+        """Build DataFrame for comparison table.
+
+        Args:
+            entities: List of entities to compare
+            properties: List of property names to include
+
+        Returns:
+            DataFrame with one row per entity
+        """
+        rows = []
+        for entity in entities:
+            row = {"_iri": str(entity.get_iri())}  # Hidden column for callbacks
+
+            # Use model_dump to get serialized values (avoids lazy resolution)
+            entity_dict = entity.model_dump()
+
+            for prop in properties:
+                # Get value from the dumped dict to avoid triggering __getattribute__ resolution
+                value = entity_dict.get(prop, None)
+                row[prop] = self._serialize_property_value(value)
+            rows.append(row)
+
+        return pd.DataFrame(rows)
+
+    def _build_set_all_row(self, table_data: List[Dict[str, Any]], properties: List[str]) -> Dict[str, Any]:
+        """Build single row for set-all table showing common values.
+
+        Args:
+            table_data: List of row dicts from comparison table
+            properties: List of property names
+
+        Returns:
+            Dict with common values or empty/None for differing values
+        """
+        set_all_row = {}
+
+        # Always include _iri as None (not editable)
+        set_all_row["_iri"] = None
+
+        for prop in properties:
+            values = [row[prop] for row in table_data]
+            first_val = values[0]
+
+            # Check if all values are the same
+            if all(v == first_val for v in values):
+                set_all_row[prop] = first_val
+            else:
+                # Values differ - show empty for better UX
+                set_all_row[prop] = "" if isinstance(first_val, str) else None
+
+        return set_all_row
+
+    def _refresh_oold_tabulators(self) -> None:
+        """Refresh OO-LD comparison and set-all tables with current entity data."""
+        if not hasattr(self, 'oold_comparison_tabulator') or not hasattr(self, 'oold_set_all_tabulator'):
+            return
+
+        # Get current selected entities
+        selected_entities = [
+            self.entity_dict[nid] for nid in self._current_selected_node_ids
+            if nid in self.entity_dict
+        ]
+
+        if not selected_entities:
+            return
+
+        # Get common properties
+        common_props = self._get_common_properties(selected_entities)
+
+        if not common_props:
+            return
+
+        # Rebuild comparison DataFrame
+        comp_df = self._build_comparison_dataframe(selected_entities, common_props)
+        self.oold_comparison_tabulator.value = comp_df
+
+        # Rebuild set-all row
+        table_data = comp_df.to_dict('records')
+        set_all_row = self._build_set_all_row(table_data, common_props)
+        set_all_df = pd.DataFrame([set_all_row])
+        self.oold_set_all_tabulator.value = set_all_df
+
+    # ===== Synchronization =====
+
+    def _rebuild_rdf_graph(self) -> None:
+        """Rebuild RDF graph from all entities in entity_list."""
+        self.rdf_graph = RDFGraph()
+        for entity in self.entity_list:
+            self.rdf_graph.parse(data=entity.to_jsonld(), format="json-ld")
+
+    def _rebuild_visjs_edges(self) -> None:
+        """Rebuild visjs edges from RDF graph.
+
+        Preserves nodes, rebuilds edges based on current entity relationships.
+        """
+        self.visjs_edges = []
+        available_ids = set(node["id"] for node in self.visjs_nodes)
+
+        for s, p, o in self.rdf_graph:
+            if str(s) in available_ids:
+                self.visjs_edges.append({
+                    "from": str(s),
+                    "to": str(o),
+                    "label": str(p.split("/")[-1].split("#")[-1]),
+                    "arrows": "to",
+                })
+
+    def _sync_entity_to_visjs(self, entity: LinkedBaseModel) -> None:
+        """Sync a single entity's data to its corresponding visjs node.
+
+        Updates node label if entity.name changed.
+
+        Args:
+            entity: The updated entity
+        """
+        iri = str(entity.get_iri())
+        for node in self.visjs_nodes:
+            if node["id"] == iri:
+                if hasattr(entity, "name"):
+                    node["label"] = entity.name
+                break
+
+    def _full_sync_after_edit(self) -> None:
+        """Perform full sync of all data structures after entity edit.
+
+        Ensures consistency between LinkedBaseModel instances, RDF graph,
+        and visualization (nodes and edges).
+        """
+        # Rebuild RDF graph
+        self._rebuild_rdf_graph()
+
+        # Rebuild edges
+        self._rebuild_visjs_edges()
+
+        # Sync node labels
+        for entity in self.entity_list:
+            self._sync_entity_to_visjs(entity)
+
+        # Update visnetwork (triggers Panel update)
+        self.visnetwork_panel.nodes = self.visjs_nodes
+        self.visnetwork_panel.edges = self.visjs_edges
+
+        # Refresh tables if displayed
+        if hasattr(self, 'oold_comparison_tabulator'):
+            self._refresh_oold_tabulators()
+
+    # ===== Event Handlers =====
+
+    def on_oold_tabulator_cell_edit(self, event: Any) -> None:
+        """Callback when a cell is edited in the OO-LD comparison table.
+
+        Updates the specific entity and syncs all data structures.
+
+        Args:
+            event: Panel event with row, column, value
+        """
+        try:
+            row_index = event.row
+            column = event.column
+            value = event.value
+
+            # Get entity IRI from hidden column
+            row_data = self.oold_comparison_tabulator.value.iloc[row_index]
+            entity_iri = row_data["_iri"]
+
+            # Get entity
+            entity = self.entity_dict[entity_iri]
+
+            # Deserialize and set property
+            deserialized = self._deserialize_property_value(entity, column, value)
+            setattr(entity, column, deserialized)
+
+            print(f"Updated {entity_iri} property '{column}' to: {deserialized}")
+
+            # Full sync
+            self._full_sync_after_edit()
+
+        except Exception as e:
+            print(f"Error updating entity: {e}")
+            import traceback
+            traceback.print_exc()
+            # Revert to current state
+            self._refresh_oold_tabulators()
+
+    def on_oold_set_all_cell_edit(self, event: Any) -> None:
+        """Callback when a cell is edited in the OO-LD set-all table.
+
+        Updates ALL selected entities and syncs all data structures.
+
+        Args:
+            event: Panel event with column, value
+        """
+        try:
+            column = event.column
+            value = event.value
+
+            print(f"Setting property '{column}' to '{value}' for all selected entities")
+
+            # Update all selected entities
+            for node_id in self._current_selected_node_ids:
+                if node_id in self.entity_dict:
+                    entity = self.entity_dict[node_id]
+                    deserialized = self._deserialize_property_value(entity, column, value)
+                    setattr(entity, column, deserialized)
+                    print(f"  Updated {node_id}")
+
+            # Full sync
+            self._full_sync_after_edit()
+
+        except Exception as e:
+            print(f"Error updating entities: {e}")
+            import traceback
+            traceback.print_exc()
+            # Revert to current state
+            self._refresh_oold_tabulators()
+
+    def on_single_node_edit(self, event: Any) -> None:
+        """Callback when the single-node JSON editor is modified.
+
+        Updates the entity from the edited JSON and syncs all data structures.
+
+        Args:
+            event: Panel parameter event with new value
+        """
+        try:
+            if not hasattr(self, '_current_single_node_id'):
+                return
+
+            node_id = self._current_single_node_id
+            new_value_dict = event.new
+
+            if node_id not in self.entity_dict:
+                print(f"Warning: Entity {node_id} not found in entity_dict")
+                return
+
+            entity = self.entity_dict[node_id]
+
+            print(f"Updating entity {node_id} from JSON editor")
+
+            # Update each property from the edited JSON
+            for prop_name, prop_value in new_value_dict.items():
+                # Skip internal fields
+                if prop_name in ['id', '__iris__']:
+                    continue
+
+                # Check if property exists in model
+                if prop_name in entity.model_fields:
+                    try:
+                        # Deserialize the value to the correct type
+                        deserialized = self._deserialize_property_value(entity, prop_name, prop_value)
+                        setattr(entity, prop_name, deserialized)
+                        print(f"  Updated property '{prop_name}' to: {deserialized}")
+                    except Exception as e:
+                        print(f"  Warning: Could not update property '{prop_name}': {e}")
+
+            # Full sync to update all data structures
+            self._full_sync_after_edit()
+
+        except Exception as e:
+            print(f"Error in single node edit: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 class Hobby(str, Enum):
@@ -217,6 +742,9 @@ class Person(Entity):
                         "@type": "@id",
                         "@container": "@set",
                     },
+                    "age": {
+                        "@id": "ex:HasAge"
+                    }
                 },
             ],
             "iri": "Person.json",
@@ -230,6 +758,10 @@ class Person(Entity):
         None,
         # object property pointing to another Person
         json_schema_extra={"range": "Person.json"},
+    )
+    age: Optional[int] = Field(
+        None,
+        description="Age of the person",
     )
 if __name__ == "__main__":
 

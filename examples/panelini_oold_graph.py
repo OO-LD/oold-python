@@ -74,11 +74,24 @@ class EdgeLabelConfig(Enum):
 
 
 class OOLDGraphDetailTool(GraphDetailTool):
-    def __init__(self, entity_list:List[Entity], edge_label_config: EdgeLabelConfig = "rdf", **kwargs):
+    def __init__(self, entity_list:List[Entity], edge_label_config: EdgeLabelConfig = "rdf",
+                 entity_types: Optional[Dict[str, type]] = None, **kwargs):
 
         # a dictionary for fast access by iri
         self.entity_list = entity_list
         self.entity_dict = {str(element.get_iri()): element for element in self.entity_list}
+
+        # Store available entity types for creating new entities
+        # Default to collecting types from existing entities if not provided
+        if entity_types is None:
+            self.entity_types = {}
+            for entity in entity_list:
+                entity_type = type(entity)
+                type_name = entity_type.__name__
+                if type_name not in self.entity_types:
+                    self.entity_types[type_name] = entity_type
+        else:
+            self.entity_types = entity_types
 
         self.rdf_graph = RDFGraph()
 
@@ -173,23 +186,56 @@ class OOLDGraphDetailTool(GraphDetailTool):
                                                      f"{type(self.entity_dict.get(node_id)).__name__}"))
 
         current_entity = self.entity_dict.get(node_id, None)
+        if current_entity is not None:
+            # Display the current entity's properties in a JSON editor for easy editing
+            self.current_node_oold_editor = pn.widgets.JSONEditor(
+                schema = type(current_entity).export_schema(),
+                value=current_entity.model_dump()
+            )
 
-        self.current_node_oold_editor = pn.widgets.JSONEditor(
-            value=current_entity.model_dump()
-        )
+            # Store current node ID for the callback
+            self._current_single_node_id = node_id
 
-        # Store current node ID for the callback
-        self._current_single_node_id = node_id
+            # Watch for changes in the JSON editor
+            self.current_node_oold_editor.param.watch(self.on_single_node_edit, "value")
 
-        # Watch for changes in the JSON editor
-        self.current_node_oold_editor.param.watch(self.on_single_node_edit, "value")
+            #self.current_node_oold_editor = OoldEditor(
+            #    oold_model = type(current_entity)
+            #)
+            self.oold_detail_col.append(self.current_node_oold_editor)
+            #time.sleep(2) ## this is weirdly necessary to make sure the editor accepts values
+            #self.current_node_oold_editor.value=current_entity.model_dump()
 
-        #self.current_node_oold_editor = OoldEditor(
-        #    oold_model = type(current_entity)
-        #)
-        self.oold_detail_col.append(self.current_node_oold_editor)
-        #time.sleep(2) ## this is weirdly necessary to make sure the editor accepts values
-        #self.current_node_oold_editor.value=current_entity.model_dump()
+        else:
+            # Show UI for creating a new entity
+            self.oold_detail_col.append(pn.pane.Markdown("### Create New Entity"))
+
+            if not self.entity_types:
+                self.oold_detail_col.append(pn.pane.Markdown("*No entity types available*"))
+            else:
+                # Dropdown to select entity type
+                self.new_entity_type_select = pn.widgets.Select(
+                    name="Entity Type",
+                    options=list(self.entity_types.keys()),
+                    value=list(self.entity_types.keys())[0],
+                    width=200
+                )
+
+                # Confirm button
+                self.new_entity_confirm_button = pn.widgets.Button(
+                    name="Create Entity",
+                    button_type="success",
+                    width=150
+                )
+                self.new_entity_confirm_button.on_click(self.on_create_entity_click)
+
+                # Store the node_id for later use
+                self._new_entity_node_id = node_id
+
+                # Add UI elements
+                self.oold_detail_col.append(
+                    pn.Row(self.new_entity_type_select, self.new_entity_confirm_button)
+                )
 
         self.detail_tabs.active = 2 # switch to the OO-LD details tab
 
@@ -712,6 +758,144 @@ class OOLDGraphDetailTool(GraphDetailTool):
             import traceback
             traceback.print_exc()
 
+    def on_create_entity_click(self, event: Any) -> None:
+        """Callback when the 'Create Entity' button is clicked.
+
+        Shows a JSON editor for creating a new entity of the selected type.
+
+        Args:
+            event: Button click event
+        """
+        try:
+            if not hasattr(self, 'new_entity_type_select') or not hasattr(self, '_new_entity_node_id'):
+                return
+
+            # Get selected entity type
+            entity_type_name = self.new_entity_type_select.value
+            entity_type = self.entity_types[entity_type_name]
+
+            # Clear the column and show editor
+            self.oold_detail_col.clear()
+            self.oold_detail_col.append(pn.pane.Markdown(f"### Create New {entity_type_name}"))
+
+            # Create a default instance with minimal required fields
+            # Start with just name for most entities
+            default_values = {}
+
+            # Check if 'name' field exists and add a default
+            if 'name' in entity_type.model_fields:
+                default_values['name'] = f"New{entity_type_name}"
+
+            # Create JSON editor with schema
+            self.new_entity_editor = pn.widgets.JSONEditor(
+                value=default_values,
+                schema=entity_type.export_schema(),
+                width=700,
+                height=500
+            )
+
+            # Save button
+            self.new_entity_save_button = pn.widgets.Button(
+                name="Save Entity",
+                button_type="primary",
+                width=150
+            )
+            self.new_entity_save_button.on_click(self.on_new_entity_save)
+
+            # Cancel button
+            self.new_entity_cancel_button = pn.widgets.Button(
+                name="Cancel",
+                button_type="default",
+                width=150
+            )
+            self.new_entity_cancel_button.on_click(self.on_new_entity_cancel)
+
+            # Store entity type for save handler
+            self._new_entity_type = entity_type
+
+            # Add UI elements
+            self.oold_detail_col.append(self.new_entity_editor)
+            self.oold_detail_col.append(
+                pn.Row(self.new_entity_save_button, self.new_entity_cancel_button)
+            )
+
+        except Exception as e:
+            print(f"Error creating entity editor: {e}")
+            import traceback
+            traceback.print_exc()
+            self.oold_detail_col.append(pn.pane.Markdown(f"*Error: {e}*"))
+
+    def on_new_entity_save(self, event: Any) -> None:
+        """Callback when the 'Save Entity' button is clicked.
+
+        Creates the new entity, adds it to all data structures, and updates the visualization.
+
+        Args:
+            event: Button click event
+        """
+        try:
+            if not hasattr(self, 'new_entity_editor') or not hasattr(self, '_new_entity_type'):
+                return
+
+            # Get the entity data from editor
+            entity_data = self.new_entity_editor.value
+            entity_type = self._new_entity_type
+
+            print(f"Creating new entity of type {entity_type.__name__}: {entity_data}")
+
+            # Create the entity instance
+            new_entity = entity_type(**entity_data)
+            entity_iri = str(new_entity.get_iri())
+
+            # Add to entity_list and entity_dict
+            self.entity_list.append(new_entity)
+            self.entity_dict[entity_iri] = new_entity
+
+            # Create visjs node for the new entity
+            node_label = entity_data.get('name', entity_iri)
+            new_visjs_node = {
+                "id": entity_iri,
+                "label": node_label,
+                "shape": "ellipse",
+            }
+            self.visjs_nodes.append(new_visjs_node)
+
+            print(f"Created new entity with IRI: {entity_iri}")
+
+            # Full sync to update RDF graph and edges
+            self._full_sync_after_edit()
+
+            # Clear the creation UI and show success message
+            self.oold_detail_col.clear()
+            self.oold_detail_col.append(
+                pn.pane.Markdown(f"### ✓ Entity Created Successfully\n\nIRI: `{entity_iri}`")
+            )
+            self.oold_detail_col.append(
+                pn.pane.Markdown(f"The new {entity_type.__name__} has been added to the graph.")
+            )
+
+        except Exception as e:
+            print(f"Error saving new entity: {e}")
+            import traceback
+            traceback.print_exc()
+            self.oold_detail_col.clear()
+            self.oold_detail_col.append(
+                pn.pane.Markdown(f"### Error Creating Entity\n\n```\n{str(e)}\n```")
+            )
+
+    def on_new_entity_cancel(self, event: Any) -> None:
+        """Callback when the 'Cancel' button is clicked during entity creation.
+
+        Clears the creation UI.
+
+        Args:
+            event: Button click event
+        """
+        self.oold_detail_col.clear()
+        self.oold_detail_col.append(
+            pn.pane.Markdown("### Entity creation cancelled")
+        )
+
 
 class Hobby(str, Enum):
     """Various hobbies as an enum."""
@@ -772,9 +956,6 @@ if __name__ == "__main__":
     from pydantic import Field, ConfigDict
 
 
-
-
-
     alice = Person(name="Alice", hobbies=[Hobby.SPORTS, Hobby.MUSIC])
     bob = Person(name="Bob", hobbies=[Hobby.ART], knows=[alice])
     charlie = Person(name="Charlie", hobbies=[Hobby.SPORTS], knows=[alice, bob])
@@ -786,6 +967,15 @@ if __name__ == "__main__":
             alice, bob, charlie, david, eve
     ]
 
+    # Define available entity types for creation
+    available_entity_types = {
+        "Person": Person,
+        "Entity": Entity,
+    }
+
     # build graph tool and show it
-    graph_detail_panel = OOLDGraphDetailTool(entity_list=example_oold_list)
+    graph_detail_panel = OOLDGraphDetailTool(
+        entity_list=example_oold_list,
+        entity_types=available_entity_types
+    )
     pn.serve(graph_detail_panel, threaded=True)

@@ -101,56 +101,73 @@ def main():
         action="store_true",
         help="Exit with error code if regressions detected",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress loading messages (for CI/CD)",
+    )
 
     args = parser.parse_args()
 
     # Load data
-    print(f"Loading baseline: {args.baseline}")
+    if not args.quiet:
+        print(f"Loading baseline: {args.baseline}", file=sys.stderr)
     baseline_data = load_benchmark_data(args.baseline)
     baseline_benchmarks = extract_benchmarks(baseline_data)
 
-    print(f"Loading current: {args.current}")
+    if not args.quiet:
+        print(f"Loading current: {args.current}", file=sys.stderr)
     current_data = load_benchmark_data(args.current)
     current_benchmarks = extract_benchmarks(current_data)
 
     # Compare
-    print(f"\n📊 Comparison (threshold: {args.threshold}x)\n")
+    print(f"📊 Benchmark Comparison (threshold: {args.threshold}x)")
+    print("=" * 60)
+    print()
+
     regressions, improvements, unchanged = compare_benchmarks(
         baseline_benchmarks, current_benchmarks, args.threshold
     )
 
     # Print results
     if regressions:
-        print("Performance Regressions:")
+        print("⚠️  Performance Regressions:")
         for msg in regressions:
             print(f"  {msg}")
         print()
 
     if improvements:
-        print("Performance Improvements:")
+        print("✅ Performance Improvements:")
         for msg in improvements:
             print(f"  {msg}")
         print()
 
     if unchanged:
-        print("Unchanged (within threshold):")
+        print("➖ Unchanged (within threshold):")
         for msg in unchanged:
             print(f"  {msg}")
         print()
 
     # Summary
+    print("=" * 60)
     print(
         f"Summary: {len(regressions)} regressions, "
         f"{len(improvements)} improvements, "
         f"{len(unchanged)} unchanged"
     )
+    print("=" * 60)
 
     # Exit with error if regressions found
     if args.fail_on_regression and regressions:
         print("\n❌ Performance regressions detected!")
         sys.exit(1)
     else:
-        print("\n✅ No significant performance regressions")
+        if regressions:
+            print(
+                "\n⚠️  Regressions detected but not failing build (informational only)"
+            )
+        else:
+            print("\n✅ No significant performance regressions")
         sys.exit(0)
 
 

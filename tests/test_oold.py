@@ -1,6 +1,5 @@
 """Tests for `oold` package."""
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -168,23 +167,18 @@ def _run(pydantic_version="v1"):
     assert f.b2[0].id == "ex:b1" and f.b2[0].prop1 == "test3"
     assert f.b2[1].id == "ex:b2" and f.b2[1].prop1 == "test4"
 
-    def export_json(obj):
-        if pydantic_version == "v1":
-            return obj.json(exclude_none=True)
-        return obj.model_dump_json(exclude_none=True)
-
-    assert json.loads(export_json(f)) == {
+    assert f.to_json() == {
         **graph[0],
         **{"b_default": "ex:b", "b_set_later": "ex:b"},
     }
-    assert json.loads(export_json(f.b)) == graph[1]
-    assert json.loads(export_json(f.b2[0])) == graph[2]
-    assert json.loads(export_json(f.b2[1])) == graph[3]
+    assert f.b.to_json() == graph[1]
+    assert f.b2[0].to_json() == graph[2]
+    assert f.b2[1].to_json() == graph[3]
 
     # unset property should be None
     f.b_set_later = None
     assert f.b_set_later is None
-    f_json = json.loads(export_json(f))
+    f_json = f.to_json()
     assert "b_set_later" not in f_json
 
     # Test nonexisting IRIs => properties should be initialized to None
@@ -199,9 +193,21 @@ def _run(pydantic_version="v1"):
 
     assert f.b_default is None
     assert f.b2[1] is None
-    f_json = json.loads(export_json(f))
+    f_json = f.to_json()
     assert f_json["b_default"] == "ex:doesNotExist"
     assert f_json["b2"][1] == "ex:doesNotExist"
+
+    # test importing from JSON
+    f2 = model.Foo.from_json(
+        {
+            "id": "ex:f",
+            "literal": "test1",
+            "b": "ex:b",
+            "b_default": "ex:doesNotExist",
+            "b2": ["ex:b1", "ex:doesNotExist"],
+        }
+    )
+    assert f2.b2[0].id == "ex:b1"
 
     # test if skipping of a required property throws an exception
     # assert that ValueError is raised, fail if non is raised

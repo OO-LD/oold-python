@@ -225,14 +225,28 @@ class GenericLinkedBaseModel:
             return yaml_doc
         return schema
 
+    @classmethod
     @abstractmethod
-    def from_jsonld(self, jsonld: Dict) -> "GenericLinkedBaseModel":
+    def from_jsonld(cls, jsonld: Dict) -> "GenericLinkedBaseModel":
         """Constructs a model instance from a JSON-LD representation."""
         pass
 
     @abstractmethod
     def to_jsonld(self) -> Dict:
-        """Returns the JSON-LD representation of the model instance."""
+        """Returns the JSON-LD representation of the model instance as a dictionary."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_json(cls, json_dict: Dict) -> "GenericLinkedBaseModel":
+        """Constructs a model instance from a JSON representation.
+        Note: the given JSON must contain a field to identify the model class,
+        default is 'type'."""
+        pass
+
+    @abstractmethod
+    def to_json(self) -> Dict:
+        """Return the JSON representation of the object as a dictionary."""
         pass
 
     @abstractmethod
@@ -240,10 +254,26 @@ class GenericLinkedBaseModel:
         """Store the model instance in a backend matching its IRI."""
         pass
 
+    @classmethod
+    @abstractmethod
+    def get_cls_iri(cls) -> Union[str, List[str], None]:
+        """Get the IRI of the model itself.
+        It will be used as key for a type registry and should be stored
+        in the type field of the JSON(-LD) representation.
+        May return both a expanded and a compacted IRI as list of strings."""
+        pass
+
+    @classmethod
+    def get_type_field(cls) -> str:
+        """Get the name of the field that stores the type information.
+        It is expected to be aliased or mapped to '@type' in JSON-LD.
+        Defaults to 'type'."""
+        return "type"
+
 
 def get_jsonld_context_loader(model_cls, model_type) -> Callable:
     """to overwrite the default jsonld document loader to load
-    relative context from the osl"""
+    relative context from the oold"""
 
     classes = [model_cls]
     i = 0
@@ -259,34 +289,15 @@ def get_jsonld_context_loader(model_cls, model_type) -> Callable:
 
     schemas = {}
     for base_class in classes:
-        schema = {}
-        if model_type == BaseModel:
-            if hasattr(base_class, "model_config"):
-                schema = base_class.model_config.get("json_schema_extra", {})
-        if model_type == BaseModel_v1:
-            if hasattr(base_class, "__config__"):
-                schema = base_class.__config__.schema_extra
-        iri = schema.get("iri", None)
-        title = schema.get("title", None)
-        if iri is None and title is None:
-            continue
-        if iri is None:
-            # to support OSW schemas
-            if title in [
-                "Entity",
-                "Category",
-                "Item",
-                "Property",
-                "AnnotationProperty",
-                "ObjectProperty",
-                "DataProperty",
-                "QuantityProperty",
-            ]:
-                iri = "Category:" + schema.get("title")
-            else:
-                iri = "Category:" + "OSW" + schema.get("uuid").replace("-", "")
-        # ToDo: use iri = base_class.get_class_iri()
-        schemas[iri] = schema
+        schema = get_model_schema(base_class)
+        if schema is not None and hasattr(base_class, "get_cls_iri"):
+            iri = base_class.get_cls_iri()
+            if iri is not None:
+                if isinstance(iri, list):
+                    for i in iri:
+                        schemas[i] = schema
+                else:
+                    schemas[iri] = schema
 
     def loader(url, options=None):
         if options is None:
@@ -334,6 +345,18 @@ def _interate_annotation_args(field_annotation_class):
     return annotation_class
 
 
+def get_model_schema(model_cls) -> Union[Dict, None]:
+    """Get the json schema annotation of a model class."""
+    if issubclass(model_cls, BaseModel):
+        if "json_schema_extra" in model_cls.model_config:
+            return model_cls.model_config["json_schema_extra"]
+    elif issubclass(model_cls, BaseModel_v1):
+        if hasattr(model_cls, "__config__"):
+            if hasattr(model_cls.__config__, "schema_extra"):
+                return model_cls.__config__.schema_extra
+    return None
+
+
 def build_context(model_cls, model_type, visited=None) -> Dict:
     """Takes the base context from the model_type.
     Iterate over the model_type fields.
@@ -344,13 +367,14 @@ def build_context(model_cls, model_type, visited=None) -> Dict:
     if model_cls in visited:
         return None
     visited.add(model_cls)
-    context = {}
+    schema = get_model_schema(model_cls)
+    if schema is None:
+        return None
+    context = schema.get("@context", {})
 
     if model_type == BaseModel:
         # get the context from self.ConfigDict.json_schema_extra["@context"]
-        context = model_cls.model_config.get("json_schema_extra", {}).get(
-            "@context", {}
-        )
+
         for field_name, field_value in model_cls.model_fields.items():
             annotation_class = _interate_annotation_args(field_value.annotation)
             if annotation_class is not None and issubclass(annotation_class, BaseModel):
@@ -380,12 +404,13 @@ def build_context(model_cls, model_type, visited=None) -> Dict:
                         }
 
     if model_type == BaseModel_v1:
-        context = model_cls.__config__.schema_extra.get("@context", {})
+        # not yet implemented for pydantic v1
+        pass  #
 
     return context
 
 
-def export_jsonld(model_instance, model_type) -> Dict:
+def export_jsonld(model_instance: GenericLinkedBaseModel, model_type) -> Dict:
     """Return the RDF representation of the object as JSON-LD."""
 
     # serialize the model to a dictionary
@@ -396,10 +421,10 @@ def export_jsonld(model_instance, model_type) -> Dict:
             "@context", {}
         )
         context = build_context(model_instance.__class__, model_type)
-        data = json.loads(model_instance.model_dump_json(exclude_none=True))
+        data = model_instance.to_json()
     if model_type == BaseModel_v1:
         context = model_instance.__class__.__config__.schema_extra.get("@context", {})
-        data = json.loads(model_instance.json(exclude_none=True))
+        data = model_instance.to_json()
 
     if "id" not in data and "@id" not in data:
         id = model_instance.get_iri()
@@ -415,26 +440,42 @@ def export_jsonld(model_instance, model_type) -> Dict:
     return jsonld_dict
 
 
-def import_jsonld(model_type, jsonld_dict: Dict, _types: Dict[str, type]):
+def import_jsonld(
+    model_type,
+    model_root_cls: GenericLinkedBaseModel,
+    model_cls: GenericLinkedBaseModel,
+    jsonld_dict: Dict,
+    _types: Dict[str, type],
+) -> GenericLinkedBaseModel:
     """Return the object instance from the JSON-LD representation."""
     # ToDo: apply jsonld frame with @id restriction
     # get the @type from the jsonld_dict
-    type_iri = jsonld_dict.get("@type", None)
+    type_field_name = model_root_cls.get_type_field()
+    type_iri = jsonld_dict.get("@type", jsonld_dict.get(type_field_name, None))
     # if type_iri is None, return None
     if type_iri is None:
-        return None
-    # if type_iri is a list, get the first element
-    if isinstance(type_iri, list):
-        type_iri = type_iri[0]
-    # get the class from the _types dict
-    # Todo: IRI normalization
-    if isinstance(type_iri, dict):
-        type_iri = type_iri.get("@id")
-    type_iri = type_iri.split("/")[-1]
-    model_cls = _types.get(type_iri, None)
-    # if model_type is None, return None
-    if model_cls is None:
-        return None
+        if model_root_cls != model_cls:
+            _logger.debug(
+                f"Fall back to {model_cls.__name__} "
+                f"- no type IRI found in JSON-LD dict: {jsonld_dict}"
+            )
+        else:
+            raise ValueError(
+                f"No specific subclass of {model_root_cls.__name__} given "
+                f"and no type IRI found in JSON-LD dict: {jsonld_dict}"
+            )
+    else:
+        # if type_iri is a list, get the first element
+        if isinstance(type_iri, list):
+            type_iri = type_iri[0]
+        # get the class from the _types dict
+        # Todo: IRI normalization
+        if isinstance(type_iri, dict):
+            type_iri = type_iri.get("@id")
+        model_cls = _types.get(type_iri, None)
+        # if model_type is None, return None
+        if model_cls is None:
+            raise ValueError(f"Unknown model type IRI: {type_iri}")
     if model_type == BaseModel:
         # get the context from self.ConfigDict.json_schema_extra["@context"]
         context = build_context(model_cls, model_type)
@@ -445,6 +486,40 @@ def import_jsonld(model_type, jsonld_dict: Dict, _types: Dict[str, type]):
     if "@context" in jsonld_dict:
         del jsonld_dict["@context"]
     return model_cls(**jsonld_dict)
+
+
+def import_json(
+    model_type,
+    model_root_cls: GenericLinkedBaseModel,
+    model_cls: GenericLinkedBaseModel,
+    json_dict: Dict,
+    _types: Dict[str, type],
+) -> GenericLinkedBaseModel:
+    """Return the object instance from the JSON representation."""
+    # get the type from the json_dict
+    type_field_name = model_root_cls.get_type_field()
+    type_iri = json_dict.get(type_field_name, None)
+    # if type_iri is None, return None
+    if type_iri is None:
+        if model_root_cls != model_cls:
+            _logger.debug(
+                f"Fall back to {model_cls.__name__} "
+                f"- no type IRI found in JSON dict: {json_dict}"
+            )
+        else:
+            raise ValueError(
+                f"No specific subclass of {model_root_cls.__name__} given "
+                f"and no type IRI found in JSON dict: {json_dict}"
+            )
+    else:
+        # if type_iri is a list, get the first element
+        if isinstance(type_iri, list):
+            type_iri = type_iri[0]
+        # get the class from the _types dict
+        model_cls = _types.get(type_iri, None)
+        if model_cls is None:
+            raise ValueError(f"Unknown model type IRI: {type_iri}")
+    return model_cls(**json_dict)
 
 
 def _get_schema(model_cls):

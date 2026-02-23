@@ -31,10 +31,10 @@ def _store_procedure(store: Backend, pydantic_version="v2"):
                         # literal property
                         "name": "ex:name",
                     },
-                    "iri": "Entity.json",  # the IRI of the schema
+                    "$id": "https://example.com/Entity",  # the IRI of the schema
                 }
 
-            type: Optional[str] = "ex:Entity.json"
+            type: Optional[str] = "ex:Entity"
             name: str
 
             def get_iri(self):
@@ -58,11 +58,11 @@ def _store_procedure(store: Backend, pydantic_version="v2"):
                         # literal property
                         "name": "schema:name",
                     },
-                    "iri": "Entity.json",  # the IRI of the schema
+                    "$id": "https://example.com/Entity",  # the IRI of the schema
                 }
             )
 
-            type: Optional[str] = "ex:Entity.json"
+            type: Optional[str] = "ex:Entity"
             name: str
 
             def get_iri(self):

@@ -118,42 +118,96 @@ jobs:
           tox -e benchmark --installpkg '${{ needs.prepare.outputs.wheel-distribution }}'
         continue-on-error: true
 
+      # Save current results before switching branches
+      - name: Save current benchmark results
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f benchmark_results.json ]; then
+            cp benchmark_results.json current_benchmark.json
+            echo "✓ Saved current benchmark results"
+          else
+            echo "⚠️  No benchmark_results.json found"
+            ls -la
+          fi
+
       # Try to get baseline from main branch
       - name: Get baseline benchmarks
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin main:main || true
           git checkout main || exit 0
+          # Install from source (no --installpkg) to match checked-out main branch code
+          # This prevents wheel/source mismatch where PR wheel is used with main branch tests
           pipx run --python '${{ steps.setup-python.outputs.python-path }}' \
-            tox -e benchmark --installpkg '${{ needs.prepare.outputs.wheel-distribution }}' || true
+            tox -e benchmark || true
           if [ -f benchmark_results.json ]; then
             mv benchmark_results.json baseline_benchmark.json
+            echo "✓ Saved baseline benchmark results"
+          else
+            echo "⚠️  No baseline benchmarks generated"
           fi
           git checkout ${{ github.head_ref }}
         continue-on-error: true
+
+      # Restore current results
+      - name: Restore current benchmark results
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f current_benchmark.json ]; then
+            mv current_benchmark.json benchmark_results.json
+            echo "✓ Restored current benchmark results"
+          fi
+          echo "Files available for comparison:"
+          ls -la *.json || echo "No JSON files found"
 
       # Compare benchmarks if baseline exists
       - name: Compare with baseline
         if: github.event_name == 'pull_request' && hashFiles('baseline_benchmark.json') != ''
         run: |
+          echo "Running benchmark comparison..."
+          echo "Checking files exist..."
+
+          if [ ! -f baseline_benchmark.json ]; then
+            echo "❌ baseline_benchmark.json not found!"
+            exit 1
+          fi
+
+          if [ ! -f benchmark_results.json ]; then
+            echo "❌ benchmark_results.json not found!"
+            exit 1
+          fi
+
+          echo "✓ Both files exist, running comparison..."
+
           python scripts/compare_benchmarks.py \
             baseline_benchmark.json \
             benchmark_results.json \
-            --threshold 1.3 > benchmark_comparison.txt || true
+            --threshold 1.3 \
+            --quiet > benchmark_comparison.txt
+
+          echo "Comparison output:"
+          cat benchmark_comparison.txt
         continue-on-error: true
 
       # Comment on PR with results
       - name: Post benchmark results to PR
-        if: github.event_name == 'pull_request' && hashFiles('benchmark_comparison.txt') != ''
+        if: github.event_name == 'pull_request' && hashFiles('baseline_benchmark.json') != ''
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            let comparison = '';
+            let comparison = 'No comparison data available';
+
             try {
-              comparison = fs.readFileSync('benchmark_comparison.txt', 'utf8');
+              if (fs.existsSync('benchmark_comparison.txt')) {
+                comparison = fs.readFileSync('benchmark_comparison.txt', 'utf8').trim();
+                if (!comparison) {
+                  comparison = 'Comparison file is empty - check workflow logs for details';
+                }
+              }
             } catch (e) {
-              comparison = 'Benchmark comparison not available';
+              comparison = `Error reading comparison: ${e.message}`;
+              console.error('Error:', e);
             }
 
             const body = `## 📊 Benchmark Results
@@ -167,7 +221,11 @@ jobs:
 
             </details>
 
+            **Threshold:** 1.3x (30% slower triggers a regression warning)
+
             **Note:** Benchmarks are informational only and won't fail the build.
+
+            <sub>💡 Tip: Download the \`benchmark-results\` artifact for detailed JSON data</sub>
             `;
 
             github.rest.issues.createComment({

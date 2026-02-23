@@ -377,6 +377,10 @@ def build_context(model_cls, model_type, visited=None) -> Dict:
 
         for field_name, field_value in model_cls.model_fields.items():
             annotation_class = _interate_annotation_args(field_value.annotation)
+            json_schema_annotation = field_value.json_schema_extra
+            if json_schema_annotation is not None:
+                if "range" in json_schema_annotation:
+                    continue  # skip fields of type IRI
             if annotation_class is not None and issubclass(annotation_class, BaseModel):
                 nested_context = build_context(annotation_class, model_type, visited)
                 target_context = context
@@ -438,6 +442,28 @@ def export_jsonld(model_instance: GenericLinkedBaseModel, model_type) -> Dict:
     if isinstance(jsonld_dict, list):
         jsonld_dict = jsonld_dict[0]
     return jsonld_dict
+
+
+def normalize_iri(iri: str, model_cls, expand: bool) -> str:
+    """Normalize the IRI using JSON-LD expansion or compaction.
+    Example (ex: prefix for https://example.com/):
+        "ex:Entity" -> "https://example.com/Entity" (expansion)
+        "https://example.com/Entity" -> "ex:Entity" (compaction)
+    """
+    schema = get_model_schema(model_cls)
+    context = schema.get("@context", {})
+    jsonld.set_document_loader(get_jsonld_context_loader(model_cls, BaseModel))
+    if expand:
+        expanded = jsonld.expand({"@context": context, "id": iri})
+        if isinstance(expanded, list) and len(expanded) > 0:
+            expanded_iri = expanded[0].get("@id", iri)
+        else:
+            expanded_iri = iri
+        return expanded_iri
+    else:
+        compacted = jsonld.compact({"@context": context, "id": iri}, context)
+        compacted_iri = compacted.get("id", iri)
+        return compacted_iri
 
 
 def import_jsonld(

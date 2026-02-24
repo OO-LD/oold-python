@@ -1,14 +1,30 @@
 import json
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    overload,
+)
 
 import pydantic
 from pydantic.v1 import BaseModel, PrivateAttr
-from typing_extensions import Self
+from typing_extensions import Self, get_args
 
+from oold.backend import interface
 from oold.backend.interface import (
+    Condition,
     GetBackendParam,
     GetResolverParam,
+    Query,
+    QueryParam,
     ResolveParam,
+    Resolver,
     StoreParam,
     get_backend,
     get_resolver,
@@ -23,15 +39,51 @@ from oold.static import (
 if TYPE_CHECKING:
     from pydantic.v1.typing import AbstractSetIntStr, MappingIntStrAny
 
+# monkey patching pydantic v1 FieldInfo
+import pydantic.v1.fields
+from pydantic.v1.fields import FieldInfo
+
+
+class OOFieldInfo(FieldInfo):
+    """Extension of pydantic v1 FieldInfo to support query
+    construction via operators like ==, <, >, etc."""
+
+    __slots__ = ("name", "parent")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = None
+        self.parent = None
+
+    def __eq__(self, other):
+        return Condition(field=self.name, operator="eq", value=other)
+
+
+pydantic.v1.fields.FieldInfo = OOFieldInfo
+
 
 # pydantic v1
 _types: Dict[str, pydantic.v1.main.ModelMetaclass] = {}
 
 
+M = TypeVar("M", bound="LinkedBaseModel")
+
+
 # pydantic v1
 class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
+    _constructing: bool = False
+    """Guards against __getattribute__ intercepting field access during class
+    construction. Pydantic checks ``getattr(base, field_name, None)`` in its
+    metaclass __new__ to detect shadowed BaseModel attributes. Without this
+    flag our __getattribute__ override would return a truthy FieldInfo instead
+    of the default None, causing false-positive field-name collision errors."""
+
     def __new__(mcs, name, bases, namespace):
-        cls = super().__new__(mcs, name, bases, namespace)
+        mcs._constructing = True
+        try:
+            cls = super().__new__(mcs, name, bases, namespace)
+        finally:
+            mcs._constructing = False
 
         if hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
@@ -45,20 +97,175 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
 
     # override operators, see https://docs.python.org/3/library/operator.html
 
+    if not TYPE_CHECKING:
+
+        def __getattribute__(self, name):
+            if type(self)._constructing:
+                return super().__getattribute__(name)
+            if name not in ["__bases__", "__fields__", "__dict__"]:
+                if (
+                    name not in self.__dict__
+                    and hasattr(self, "__fields__")
+                    and name in self.__fields__
+                ):
+                    field_info = self.__fields__[name].field_info
+                    field_info.name = name
+                    field_info.parent = self
+                    return field_info
+                else:
+                    return super().__getattribute__(name)
+            return super().__getattribute__(name)
+
     @overload
-    def __getitem__(cls: "LinkedBaseModel", item: str) -> Self:
+    def __getitem__(cls: type[M], item: str) -> M:
+        """Get a class instance by its IRI."""
         ...
 
     @overload
-    def __getitem__(cls: "LinkedBaseModel", item: List[str]) -> List[Self]:
+    def __getitem__(
+        cls: type[M], item: List[str]
+    ) -> Union[M, "LinkedBaseModelList[M]"]:
+        """Get multiple class instances by their IRIs."""
+        ...
+
+    @overload
+    def __getitem__(
+        cls: type[M], item: Union[Query, Condition, bool]
+    ) -> Union[M, "LinkedBaseModelList[M]"]:
+        """Get class instances matching a query."""
         ...
 
     def __getitem__(
-        cls: "LinkedBaseModel", item: Union[str, List[str]]
-    ) -> Union[Self, List[Self]]:
-        """Allow access to the class by its IRI."""
-        result = cls._resolve(item if isinstance(item, list) else [item])
-        return result[item] if isinstance(item, str) else [result[i] for i in item]
+        cls: type[M], item: Union[str, List[str], Query, Condition, bool]
+    ) -> Union[M, "LinkedBaseModelList[M]", Optional["LinkedBaseModelList[M]"]]:
+        """Select instances of the class by IRI or by query."""
+        return cls.query(item)
+
+    def __setitem__(cls: type[M], key, value: type[M]):
+        value._store()
+
+
+T = TypeVar("T")
+
+
+class LinkedBaseModelList(Generic[T], List[Optional[T]]):
+    """Extension of list that tracks changes to the list
+    by syncing every modification with the __iri__ field of the parent model."""
+
+    def __init__(
+        self, *args: Optional[T], _synced_iri_list: Optional[List[str]] = None
+    ):
+        super().__init__(*args)
+        self._synced_iri_list = _synced_iri_list
+        if self._synced_iri_list is not None:
+            self._synced_list = args[0]
+            self._synced_iri_list.extend(
+                item.get_iri()
+                for item in self
+                if item is not None and item.get_iri() not in self._synced_iri_list
+            )
+
+    def append(self, item: Optional[T]) -> None:
+        if self._synced_iri_list is not None:
+            self._synced_iri_list.append(item.get_iri())
+            self._synced_list.append(item)
+        super().append(item)
+
+    def remove(self, item: Optional[T]) -> None:
+        if self._synced_iri_list is not None:
+            self._synced_iri_list.remove(item.get_iri())
+            self._synced_list.remove(item)
+        super().remove(item)
+
+    def extend(self, iterable):
+        if self._synced_iri_list is not None:
+            self._synced_iri_list.extend(
+                item.get_iri() for item in iterable if item is not None
+            )
+            self._synced_list.extend(iterable)
+        return super().extend(iterable)
+
+    def get_item_type(self):
+        if hasattr(self, "__orig_class__"):
+            return get_args(self.__orig_class__)[0]
+        return None
+
+    # override [] operator to also support string indices
+
+    @overload
+    def __getitem__(self, index: str) -> Optional[Union[T, "LinkedBaseModelList[T]"]]:
+        ...
+
+    @overload
+    def __getitem__(self, index: bool) -> Optional[Union[T, "LinkedBaseModelList[T]"]]:
+        ...
+
+    @overload
+    def __getitem__(self, index: int) -> Optional[T]:
+        ...
+
+    # allow pandas-style queries, e.g. l[Entity.name=='John']
+    @overload
+    def __getitem__(
+        self, index: Union[Query, Condition, bool]
+    ) -> Optional[Union[T, "LinkedBaseModelList[T]"]]:
+        ...
+
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            if index.startswith("@"):
+                # query, e.g. "@name=='John'"
+                key = index[1:].split("==")[0].strip()
+                value = index.split("==")[1].strip("'\"")
+                return LinkedBaseModelList[self.get_item_type()](
+                    [
+                        item
+                        for item in self
+                        if item and getattr(item, key, None) == value
+                    ],
+                    _synced_iri_list=self._synced_iri_list,
+                )
+            else:
+                # IRI lookup
+                for item in self:
+                    if item and item.get_iri() == index:
+                        return item
+                raise KeyError(f"No item with IRI {index} found")
+        elif isinstance(index, Condition):
+            key = index.field
+            operator = index.operator
+            value = index.value
+            if operator == "eq":
+                return LinkedBaseModelList[self.get_item_type()](
+                    [
+                        item
+                        for item in self
+                        if item and getattr(item, key, None) == value
+                    ],
+                    _synced_iri_list=self._synced_iri_list,
+                )
+            else:
+                raise NotImplementedError(f"Operator {operator} not implemented")
+        elif isinstance(index, Query):
+            raise NotImplementedError("Query-based indexing not implemented yet")
+        else:
+            return super().__getitem__(index)
+
+    def __getattribute__(self, name):
+        if not name == "__orig_class__":
+            if self is not None and hasattr(self, "__orig_class__"):
+                _type = get_args(self.__orig_class__)[0]
+                if name in _type.__fields__.keys():
+                    result_list = LinkedBaseModelList[_type]([], _synced_iri_list=None)
+                    for item in self:
+                        if item is not None and hasattr(item, name):
+                            value = getattr(item, name)
+                            if isinstance(value, list):
+                                result_list.extend(value)
+                            else:
+                                result_list.append(value)
+                    return result_list
+        return super().__getattribute__(name)
 
 
 # the following switch ensures that autocomplete works in IDEs like VSCode
@@ -315,7 +522,12 @@ class LinkedBaseModel(_LinkedBaseModel):
                             if node:
                                 self.__setattr__(name, node, True)
 
-        return BaseModel.__getattribute__(self, name)
+        result = BaseModel.__getattribute__(self, name)
+        if isinstance(result, list) and name in self.__iris__:
+            result = LinkedBaseModelList[type(self)](
+                result, _synced_iri_list=self.__iris__[name]
+            )
+        return result
 
     @staticmethod
     def _resolve(iris):
@@ -332,6 +544,65 @@ class LinkedBaseModel(_LinkedBaseModel):
     def store_jsonld(self):
         """Store the model instance in a backend matching its IRI."""
         self._store()
+
+    @classmethod
+    def _query(
+        cls, query: Union[str, List[str], Query, Condition]
+    ) -> "LinkedBaseModelList[Self]":
+        # get all resolvers
+        resolvers: List[Resolver] = interface._resolvers.values()
+        node_list = []
+        for r in resolvers:
+            try:
+                if isinstance(query, (str, list)):
+                    _node_list = r.resolve(
+                        ResolveParam(
+                            iris=[query] if isinstance(query, str) else query,
+                            model_cls=cls,
+                        )
+                    ).nodes.values()
+                else:
+                    _node_list = r.query(
+                        QueryParam(query=query, model_cls=cls)
+                    ).nodes.values()
+                node_list.extend(_node_list)
+            except NotImplementedError:
+                continue
+
+        if isinstance(query, str):
+            return node_list[0] if len(node_list) > 0 else None
+        else:
+            return (
+                LinkedBaseModelList[Self](node_list, _synced_iri_list=None)
+                if len(node_list) > 0
+                else None
+            )
+
+    @overload
+    @classmethod
+    def query(cls, item: str) -> Self:
+        ...
+
+    @overload
+    @classmethod
+    def query(cls, item: List[str]) -> "LinkedBaseModelList[Self]":
+        ...
+
+    @overload
+    @classmethod
+    def query(
+        cls, item: Union[Query, Condition, bool]
+    ) -> Optional["LinkedBaseModelList[Self]"]:
+        ...
+
+    @classmethod
+    def query(
+        cls, item: Union[str, List[str], Query, bool]
+    ) -> Union[
+        Self, "LinkedBaseModelList[Self]", Optional["LinkedBaseModelList[Self]"]
+    ]:
+        """Allow access to the class by its IRI."""
+        return cls._query(item)
 
     # pydantic v1
     def json(

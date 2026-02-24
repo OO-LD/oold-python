@@ -7,7 +7,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Self,
     TypeVar,
     Union,
     overload,
@@ -20,7 +19,7 @@ import pydantic.fields
 from pydantic import BaseModel, GetCoreSchemaHandler
 from pydantic.fields import FieldInfo
 from pydantic_core import core_schema
-from typing_extensions import get_args
+from typing_extensions import Self, get_args
 
 from oold.backend import interface
 from oold.backend.interface import (

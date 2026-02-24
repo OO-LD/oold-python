@@ -581,6 +581,9 @@ class LinkedBaseModel(
         if name in ["__dict__", "__pydantic_private__", "__iris__"]:
             return BaseModel.__getattribute__(self, name)  # prevent loop
 
+        if name == "model_fields":
+            return type(self).model_fields
+
         else:
             if hasattr(self, "__iris__"):
                 if name in self.__iris__ and len(self.__iris__[name]) > 0:

@@ -4,7 +4,13 @@ from typing import List, Optional
 import pytest
 
 from oold.backend.document_store import SimpleDictDocumentStore
-from oold.backend.interface import Query, SetBackendParam, set_backend
+from oold.backend.interface import (
+    ComparisonOperator,
+    Condition,
+    Query,
+    SetBackendParam,
+    set_backend,
+)
 
 
 def _define_entity(pydantic_version):
@@ -179,6 +185,67 @@ def _run_linked_base_model_list(pydantic_version):
     assert res[0].id == "ex:e1"
 
 
+def _run_operators(pydantic_version):
+    Entity, LinkedBaseModelList = _define_entity(pydantic_version)
+
+    el = LinkedBaseModelList[Entity](
+        [
+            Entity(id="ex:a", name="A"),
+            Entity(id="ex:b", name="B"),
+            Entity(id="ex:c", name="C"),
+            Entity(id="ex:d", name="D"),
+        ]
+    )
+
+    # test that OOFieldInfo dunder methods produce correct Condition objects
+    cond = Entity.name == "B"
+    assert isinstance(cond, Condition) and cond.operator == ComparisonOperator.EQ
+
+    cond = Entity.name != "B"
+    assert isinstance(cond, Condition) and cond.operator == ComparisonOperator.NE
+
+    cond = Entity.name < "B"
+    assert isinstance(cond, Condition) and cond.operator == ComparisonOperator.LT
+
+    cond = Entity.name <= "B"
+    assert isinstance(cond, Condition) and cond.operator == ComparisonOperator.LE
+
+    cond = Entity.name > "B"
+    assert isinstance(cond, Condition) and cond.operator == ComparisonOperator.GT
+
+    cond = Entity.name >= "B"
+    assert isinstance(cond, Condition) and cond.operator == ComparisonOperator.GE
+
+    # test eq: names equal to "B"
+    r = el[Entity.name == "B"]
+    assert len(r) == 1 and r[0].id == "ex:b"
+
+    # test ne: names not equal to "B"
+    r = el[Entity.name != "B"]
+    assert len(r) == 3
+    assert {e.id for e in r} == {"ex:a", "ex:c", "ex:d"}
+
+    # test lt: names less than "C" (lexicographic: A, B)
+    r = el[Entity.name < "C"]
+    assert len(r) == 2
+    assert {e.id for e in r} == {"ex:a", "ex:b"}
+
+    # test le: names less than or equal to "B"
+    r = el[Entity.name <= "B"]
+    assert len(r) == 2
+    assert {e.id for e in r} == {"ex:a", "ex:b"}
+
+    # test gt: names greater than "B"
+    r = el[Entity.name > "B"]
+    assert len(r) == 2
+    assert {e.id for e in r} == {"ex:c", "ex:d"}
+
+    # test ge: names greater than or equal to "C"
+    r = el[Entity.name >= "C"]
+    assert len(r) == 2
+    assert {e.id for e in r} == {"ex:c", "ex:d"}
+
+
 def _run_performance(pydantic_version):
     Entity, LinkedBaseModelList = _define_entity(pydantic_version)
 
@@ -234,6 +301,11 @@ def test_linked_base_model_list(pydantic_version):
 
 
 @pytest.mark.parametrize("pydantic_version", ["v1", "v2"])
+def test_operators(pydantic_version):
+    _run_operators(pydantic_version)
+
+
+@pytest.mark.parametrize("pydantic_version", ["v1", "v2"])
 def test_performance_large_linked_structure(pydantic_version):
     _run_performance(pydantic_version)
 
@@ -243,5 +315,7 @@ if __name__ == "__main__":
     _run_queries("v2")
     _run_linked_base_model_list("v1")
     _run_linked_base_model_list("v2")
+    _run_operators("v1")
+    _run_operators("v2")
     _run_performance("v1")
     _run_performance("v2")

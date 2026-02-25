@@ -1,3 +1,4 @@
+import operator as _op
 from abc import abstractmethod
 from enum import Enum
 from typing import Dict, List, Optional, Type, Union
@@ -5,6 +6,29 @@ from typing import Dict, List, Optional, Type, Union
 from pydantic import BaseModel
 
 from oold.static import GenericLinkedBaseModel
+
+
+class ComparisonOperator(str, Enum):
+    EQ = "eq"
+    NE = "ne"
+    LT = "lt"
+    LE = "le"
+    GT = "gt"
+    GE = "ge"
+
+
+_COMPARISON_FNS = {
+    ComparisonOperator.EQ: _op.eq,
+    ComparisonOperator.NE: _op.ne,
+    ComparisonOperator.LT: _op.lt,
+    ComparisonOperator.LE: _op.le,
+    ComparisonOperator.GT: _op.gt,
+    ComparisonOperator.GE: _op.ge,
+}
+
+
+def apply_operator(operator: ComparisonOperator, a, b) -> bool:
+    return _COMPARISON_FNS[operator](a, b)
 
 
 class SetResolverParam(BaseModel):
@@ -44,7 +68,7 @@ class Query(BaseModel):
 
 class Condition(BaseModel):
     field: str
-    operator: Optional[str] = None
+    operator: Optional[ComparisonOperator] = None
     value: Optional[Union[str, int, float]] = None
 
     # override the == operator

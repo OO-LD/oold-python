@@ -31,6 +31,7 @@ from oold.backend.interface import (
     ResolveParam,
     Resolver,
     StoreParam,
+    apply_operator,
     get_backend,
     get_resolver,
 )
@@ -54,8 +55,22 @@ class OOFieldInfo(FieldInfo):
         super().__init__(*args, **kwargs)
 
     def __eq__(self, other):
-        # print("OOFieldInfo __eq__")
         return Condition(field=self.name, operator="eq", value=other)
+
+    def __ne__(self, other):
+        return Condition(field=self.name, operator="ne", value=other)
+
+    def __lt__(self, other):
+        return Condition(field=self.name, operator="lt", value=other)
+
+    def __le__(self, other):
+        return Condition(field=self.name, operator="le", value=other)
+
+    def __gt__(self, other):
+        return Condition(field=self.name, operator="gt", value=other)
+
+    def __ge__(self, other):
+        return Condition(field=self.name, operator="ge", value=other)
 
 
 pydantic.fields.FieldInfo = OOFieldInfo
@@ -281,19 +296,16 @@ class LinkedBaseModelList(Generic[T], List[Optional[T]]):
                 raise KeyError(f"No item with IRI {index} found")
         elif isinstance(index, Condition):
             key = index.field
-            operator = index.operator
+            op = index.operator
             value = index.value
-            if operator == "eq":
-                return LinkedBaseModelList[self.get_item_type()](
-                    [
-                        item
-                        for item in self
-                        if item and getattr(item, key, None) == value
-                    ],
-                    _synced_iri_list=self._synced_iri_list,
-                )
-            else:
-                raise NotImplementedError(f"Operator {operator} not implemented")
+            return LinkedBaseModelList[self.get_item_type()](
+                [
+                    item
+                    for item in self
+                    if item and apply_operator(op, getattr(item, key, None), value)
+                ],
+                _synced_iri_list=self._synced_iri_list,
+            )
         elif isinstance(index, Query):
             raise NotImplementedError("Query-based indexing not implemented yet")
         else:

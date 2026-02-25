@@ -12,6 +12,7 @@ from oold.backend.interface import (
     ResolveParam,
     ResolveResult,
     StoreResult,
+    apply_operator,
 )
 
 
@@ -51,7 +52,7 @@ class SimpleDictDocumentStore(Backend):
         matched_entities = set()
         for iri, jsonld_dict in data.items():
             if key in jsonld_dict:
-                if operator == "eq" and jsonld_dict[key] == value:
+                if apply_operator(operator, jsonld_dict[key], value):
                     matched_entities.add(iri)
         return matched_entities
 

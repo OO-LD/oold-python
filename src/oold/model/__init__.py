@@ -92,11 +92,11 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
     of the default None, causing false-positive field-name collision errors."""
 
     def __new__(mcs, name, bases, namespace):
-        mcs._constructing = True
+        LinkedBaseModelMetaClass._constructing = True
         try:
             cls = super().__new__(mcs, name, bases, namespace)
         finally:
-            mcs._constructing = False
+            LinkedBaseModelMetaClass._constructing = False
 
         if hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
@@ -171,7 +171,7 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
         cls: type[M], item: Union[str, List[str], Query, Condition, bool]
     ) -> Union[M, "LinkedBaseModelList[M]", Optional["LinkedBaseModelList[M]"]]:
         """Select instances of the class by IRI or by query."""
-        return cls.query(item)
+        return cls.oold_query(item)
 
     def __setitem__(cls: type[M], key, value: type[M]):
         value._store()
@@ -655,7 +655,7 @@ class LinkedBaseModel(
         self._store()
 
     @classmethod
-    def _query(
+    def _oold_query(
         cls, query: Union[str, List[str], Query, Condition]
     ) -> "LinkedBaseModelList[Self]":
         # get all resolvers
@@ -691,34 +691,34 @@ class LinkedBaseModel(
 
     @overload
     @classmethod
-    def query(cls, item: str) -> Self:
+    def oold_query(cls, item: str) -> Self:
         ...
 
     @overload
     @classmethod
-    def query(cls, item: List[str]) -> "LinkedBaseModelList[Self]":
+    def oold_query(cls, item: List[str]) -> "LinkedBaseModelList[Self]":
         ...
 
     # note: (Entity.name == "test") is interpreted as bool
     @overload
     @classmethod
-    def query(
+    def oold_query(
         cls, item: Union[Query, Condition, bool]
     ) -> Optional["LinkedBaseModelList[Self]"]:
         ...
 
     @classmethod
-    def query(
+    def oold_query(
         cls, item: Union[str, List[str], Query, bool]
     ) -> Union[
         Self, "LinkedBaseModelList[Self]", Optional["LinkedBaseModelList[Self]"]
     ]:
         """Allow access to the class by its IRI."""
-        return cls._query(item)
+        return cls._oold_query(item)
         # if isinstance(item, Query):
         #     # resolve all instances of this class
         #     #print(f"Select all {cls.__name__} that match {index}")
-        #     #return cls._query(item)
+        #     #return cls._oold_query(item)
         #     return cls(id="ex:test", name="test")
         # else:
         #     result = cls._resolve(item if isinstance(item, list) else [item])

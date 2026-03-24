@@ -1,9 +1,34 @@
+import operator as _op
 from abc import abstractmethod
+from enum import Enum
 from typing import Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
 
 from oold.static import GenericLinkedBaseModel
+
+
+class ComparisonOperator(str, Enum):
+    EQ = "eq"
+    NE = "ne"
+    LT = "lt"
+    LE = "le"
+    GT = "gt"
+    GE = "ge"
+
+
+_COMPARISON_FNS = {
+    ComparisonOperator.EQ: _op.eq,
+    ComparisonOperator.NE: _op.ne,
+    ComparisonOperator.LT: _op.lt,
+    ComparisonOperator.LE: _op.le,
+    ComparisonOperator.GT: _op.gt,
+    ComparisonOperator.GE: _op.ge,
+}
+
+
+def apply_operator(operator: ComparisonOperator, a, b) -> bool:
+    return _COMPARISON_FNS[operator](a, b)
 
 
 class SetResolverParam(BaseModel):
@@ -31,8 +56,45 @@ class ResolveResult(BaseModel):
     nodes: Dict[str, Union[None, GenericLinkedBaseModel]]
 
 
+class Query(BaseModel):
+    op1: Union["Query", "Condition"]
+    operator: str
+    op2: Union["Query", "Condition"]
+
+    # override the & operator
+    def __and__(self, other):
+        return Query(op1=self, operator="and", op2=other)
+
+
+class Condition(BaseModel):
+    field: str
+    operator: Optional[ComparisonOperator] = None
+    value: Optional[Union[str, int, float]] = None
+
+    # override the == operator
+    def __eq__(self, other):
+        self.operator = "eq"
+        self.value = other
+        return self
+
+    # override the & operator
+    def __and__(self, other):
+        return Query(op1=self, operator="and", op2=other)
+
+
+class QueryParam(BaseModel):
+    query: Union[Query, Condition]
+    model_cls: Optional[Type[GenericLinkedBaseModel]] = None
+
+
+class LinkedDataFormat(str, Enum):
+    JSON_LD = "JSON-LD"
+    JSON = "JSON"
+
+
 class Resolver(BaseModel):
     model_cls: Optional[Type[GenericLinkedBaseModel]] = None
+    format: Optional[LinkedDataFormat] = LinkedDataFormat.JSON_LD
 
     @abstractmethod
     def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
@@ -53,10 +115,19 @@ class Resolver(BaseModel):
             if jsonld_dict is None:
                 nodes[iri] = None
             else:
-                node = model_cls.from_jsonld(jsonld_dict)
+                if self.format == LinkedDataFormat.JSON_LD:
+                    node = model_cls.from_jsonld(jsonld_dict)
+                elif self.format == LinkedDataFormat.JSON:
+                    node = model_cls.from_json(jsonld_dict)
+                else:
+                    raise ValueError(f"Unsupported format {self.format}")
                 nodes[iri] = node
 
         return ResolveResult(nodes=nodes)
+
+    def query(self, param: QueryParam) -> ResolveResult:
+        """Query the backend and return a ResolveResult."""
+        raise NotImplementedError("Query method not implemented in Resolver subclass")
 
 
 global _resolvers
@@ -100,10 +171,6 @@ class StoreResult(BaseModel):
     success: bool
 
 
-class Query(BaseModel):
-    pass
-
-
 class Backend(Resolver):
     def store(self, param: StoreParam) -> StoreResult:
         jsonld_dicts = {}
@@ -111,17 +178,26 @@ class Backend(Resolver):
             if node is None:
                 jsonld_dicts[iri] = None
             else:
-                jsonld_dicts[iri] = node.to_jsonld()
-        return self.store_jsonld_dicts(jsonld_dicts)
+                if self.format == LinkedDataFormat.JSON_LD:
+                    jsonld_dicts[iri] = node.to_jsonld()
+                elif self.format == LinkedDataFormat.JSON:
+                    jsonld_dicts[iri] = node.to_json()
+                else:
+                    raise ValueError(f"Unsupported format {self.format}")
+        if self.format == LinkedDataFormat.JSON:
+            return self.store_json_dicts(jsonld_dicts)
+        else:
+            return self.store_jsonld_dicts(jsonld_dicts)
 
-    @abstractmethod
     def store_jsonld_dicts(self, jsonld_dicts: Dict[str, Dict]) -> StoreResult:
-        pass
+        raise NotImplementedError(
+            "store_jsonld_dicts method not implemented in Backend subclass"
+        )
 
-    @abstractmethod
-    def query(self, query: Query) -> ResolveResult:
-        """Query the backend and return a ResolveResult."""
-        pass
+    def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
+        raise NotImplementedError(
+            "store_json_dicts method not implemented in Backend subclass"
+        )
 
 
 global _backends
@@ -129,6 +205,7 @@ _backends = {}
 
 
 def set_backend(param: SetBackendParam) -> None:
+    _resolvers[param.iri] = param.backend
     _backends[param.iri] = param.backend
 
 

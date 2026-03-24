@@ -1,15 +1,27 @@
 import json
 import sqlite3
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
-from oold.backend.interface import Backend, StoreResult
+from oold.backend.interface import (
+    Backend,
+    Condition,
+    LinkedDataFormat,
+    Query,
+    QueryParam,
+    ResolveParam,
+    ResolveResult,
+    StoreResult,
+    apply_operator,
+)
 
 
 class SimpleDictDocumentStore(Backend):
     _store: Optional[Dict[str, dict]] = None
+    format: LinkedDataFormat = LinkedDataFormat.JSON
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self._store = {}
 
     def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
@@ -18,13 +30,65 @@ class SimpleDictDocumentStore(Backend):
             jsonld_dicts[iri] = self._store.get(iri, None)
         return jsonld_dicts
 
-    def store_jsonld_dicts(self, jsonld_dicts: Dict[str, Dict]) -> StoreResult:
-        for iri, jsonld_dict in jsonld_dicts.items():
-            self._store[iri] = jsonld_dict
+    def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
+        for iri, json_dict in json_dicts.items():
+            self._store[iri] = json_dict
         return StoreResult(success=True)
 
-    def query():
-        pass
+    def _filter(
+        self,
+        key: str,
+        operator: str,
+        value: Any,
+        context: Optional[Dict[str, Dict]] = None,
+        data: Optional[Dict[str, Dict]] = None,
+    ) -> Set[str]:
+        if data is None:
+            data = self._store
+        # retrieve property mapping from context
+        # ToDo: use a jsonld expand here
+        # if context is not None and key in context:
+        #    key = context[key]
+        matched_entities = set()
+        for iri, jsonld_dict in data.items():
+            if key in jsonld_dict:
+                if apply_operator(operator, jsonld_dict[key], value):
+                    matched_entities.add(iri)
+        return matched_entities
+
+    def _query(
+        self,
+        query: Union[Query, Condition],
+        context: Dict = None,
+        data: Optional[Dict[str, Dict]] = None,
+    ) -> Set[str]:
+        print("QUERY", query)
+        if data is None:
+            data = self._store
+        if isinstance(query, Condition):
+            return self._filter(query.field, query.operator, query.value, context, data)
+        elif isinstance(query, Query):
+            c1_res = self._query(query.op1, context, data)
+            c2_res = self._query(query.op2, context, data)
+            if query.operator == "and":
+                # intersect the results
+                return c1_res & c2_res
+            elif query.operator == "or":
+                # union the results
+                return c1_res | c2_res
+            else:
+                raise NotImplementedError(f"Operator {query.operator} not implemented")
+        else:
+            raise ValueError("Invalid query type")
+
+    def query(self, param: QueryParam) -> ResolveResult:
+        context = None
+        # if param.model_cls is not None:
+        #     context = _get_schema(param.model_cls).get("@context", None)
+        # elif self.model_cls is not None:
+        #     context = _get_schema(self.model_cls).get("@context", None)
+        iris = self._query(param.query, context)
+        return self.resolve(ResolveParam(iris=list(iris), model_cls=param.model_cls))
 
 
 class SqliteDocumentStore(Backend):

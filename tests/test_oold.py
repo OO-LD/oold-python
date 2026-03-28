@@ -238,6 +238,42 @@ def test_core(pydantic_version, benchmark):
     benchmark(_run, pydantic_version)
 
 
+@pytest.mark.parametrize("pydantic_version", ["v1", "v2"])
+def test_nested_iri_serialization(pydantic_version):
+    """Test that IRIs in nested model objects are preserved during serialization."""
+    if pydantic_version == "v1":
+        from data.test_core.model_v1_nested import Container, NestedItem
+    else:
+        from data.test_core.model_v2_nested import Container, NestedItem
+
+    c = Container(
+        id="ex:c",
+        items=[
+            NestedItem(ref="ex:existing", value=1),
+            NestedItem(ref="ex:doesNotExist", value=2),
+        ],
+    )
+    c_json = c.to_json()
+    assert "items" in c_json
+    assert len(c_json["items"]) == 2
+    assert c_json["items"][0]["ref"] == "ex:existing"
+    assert c_json["items"][1]["ref"] == "ex:doesNotExist"
+    assert c_json["items"][0]["value"] == 1
+    assert c_json["items"][1]["value"] == 2
+
+    # Test get_iri_ref helper
+    item0 = c.__dict__["items"][0]
+    assert item0.get_iri_ref("ref") == "ex:existing"
+    item1 = c.__dict__["items"][1]
+    assert item1.get_iri_ref("ref") == "ex:doesNotExist"
+    assert item0.get_iri_ref("value") is None  # not an IRI field
+
+    # Test get_raw helper
+    assert item0.get_raw("ref") is None  # unresolved IRI → None internally
+    assert item0.get_raw("value") == 1  # plain value preserved
+    assert item0.get_raw("nonexistent") is None  # missing field
+
+
 if __name__ == "__main__":
     _run("v1")
     _run("v2")

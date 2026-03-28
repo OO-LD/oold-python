@@ -91,10 +91,10 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
     flag our __getattribute__ override would return a truthy FieldInfo instead
     of the default None, causing false-positive field-name collision errors."""
 
-    def __new__(mcs, name, bases, namespace):
+    def __new__(mcs, name, bases, namespace, **kwargs):
         LinkedBaseModelMetaClass._constructing = True
         try:
-            cls = super().__new__(mcs, name, bases, namespace)
+            cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
@@ -633,10 +633,69 @@ class LinkedBaseModel(
         d = super().model_dump(**kwargs)
         # pprint(d)
         self._object_to_iri(d)
+        self._recursive_object_to_iri(d, self)
         if remove_none:
             d = self.remove_none(d)
         # pprint(d)
         return d
+
+    @staticmethod
+    def _recursive_object_to_iri(d: dict, model_obj):
+        """Recursively apply __iris__ replacement for nested model objects."""
+        for name, value in list(d.items()):
+            if name not in model_obj.model_fields:
+                continue
+            # Access raw value without triggering IRI resolution
+            model_value = model_obj.__dict__.get(name)
+            if isinstance(value, list) and isinstance(model_value, list):
+                for item, model_item in zip(value, model_value):
+                    if isinstance(item, dict) and hasattr(model_item, "__iris__"):
+                        model_item._object_to_iri(item)
+                        LinkedBaseModel._recursive_object_to_iri(item, model_item)
+            elif isinstance(value, dict) and hasattr(model_value, "__iris__"):
+                model_value._object_to_iri(value)
+                LinkedBaseModel._recursive_object_to_iri(value, model_value)
+
+    def get_iri_ref(self, field_name: str):
+        """Return the stored IRI reference string(s) for a field without
+        triggering resolution.
+
+        Parameters
+        ----------
+        field_name
+            The name of the field to retrieve the IRI reference for.
+
+        Returns
+        -------
+            A string IRI, a list of string IRIs, or ``None`` if no IRI is
+            stored for the given field.
+        """
+        iris = self.__iris__.get(field_name)
+        if iris is None:
+            return None
+        if isinstance(iris, list):
+            return iris if iris else None
+        return iris
+
+    def get_raw(self, field_name: str):
+        """Return the raw value of a field without triggering IRI resolution.
+
+        Unlike normal attribute access which may trigger network calls to
+        resolve IRI references, this returns the Python object as stored
+        internally (``None`` for unresolved IRIs, the model instance if
+        already resolved, or a plain value for non-IRI fields).
+
+        Parameters
+        ----------
+        field_name
+            The name of the field to retrieve.
+
+        Returns
+        -------
+            The raw field value, or ``None`` if the field is unresolved or
+            does not exist.
+        """
+        return self.__dict__.get(field_name)
 
     @staticmethod
     def _resolve(iris):
@@ -792,6 +851,7 @@ class LinkedBaseModel(
         # this may replace some None values with IRIs in case they were never resolved
         # thats why we handle exclude_none there
         self._object_to_iri(d)
+        self._recursive_object_to_iri(d, self)
         if exclude_none:
             d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)

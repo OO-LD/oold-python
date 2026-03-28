@@ -91,10 +91,10 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
     flag our __getattribute__ override would return a truthy FieldInfo instead
     of the default None, causing false-positive field-name collision errors."""
 
-    def __new__(mcs, name, bases, namespace):
+    def __new__(mcs, name, bases, namespace, **kwargs):
         LinkedBaseModelMetaClass._constructing = True
         try:
-            cls = super().__new__(mcs, name, bases, namespace)
+            cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
             LinkedBaseModelMetaClass._constructing = False
 

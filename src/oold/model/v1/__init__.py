@@ -74,6 +74,9 @@ class OOFieldInfo(FieldInfo):
     def __ge__(self, other):
         return Condition(field=self.name, operator="ge", value=other)
 
+    def __hash__(self):
+        return id(self)
+
 
 pydantic.v1.fields.FieldInfo = OOFieldInfo
 

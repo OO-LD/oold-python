@@ -82,10 +82,8 @@ def jsonld_to_jsonld(graph: dict, transformation_context: dict) -> dict:
             temp1["_" + temp1_value["@id"].replace(":", "_")] = temp1_value
             temp2["_" + temp1_value["@id"].replace(":", "_")] = temp2_value
 
-            # asume type mapping if key starts with capital letter
-            if key[0].isupper():
-                temp1[key] = None
-                # temp3[org_key] = None
+            temp1[key] = None
+            # temp3[org_key] = None
 
     print("temp1", temp1)
     print("temp2", temp2)

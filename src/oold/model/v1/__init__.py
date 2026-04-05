@@ -46,33 +46,10 @@ from pydantic.v1.fields import FieldInfo
 
 
 class OOFieldInfo(FieldInfo):
-    """Extension of pydantic v1 FieldInfo to support query
-    construction via operators like ==, <, >, etc."""
-
-    __slots__ = ("name", "parent")
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = None
-        self.parent = None
-
-    def __eq__(self, other):
-        return Condition(field=self.name, operator="eq", value=other)
-
-    def __ne__(self, other):
-        return Condition(field=self.name, operator="ne", value=other)
-
-    def __lt__(self, other):
-        return Condition(field=self.name, operator="lt", value=other)
-
-    def __le__(self, other):
-        return Condition(field=self.name, operator="le", value=other)
-
-    def __gt__(self, other):
-        return Condition(field=self.name, operator="gt", value=other)
-
-    def __ge__(self, other):
-        return Condition(field=self.name, operator="ge", value=other)
+    """Extension of pydantic v1 FieldInfo that restores hashability.
+    Pydantic v1's FieldInfo is hashable via object.__hash__, but subclassing
+    with custom __eq__ would break that. We keep __hash__ = id(self) to
+    prevent TypeError in typing.Union / Annotated metadata processing."""
 
     def __hash__(self):
         return id(self)

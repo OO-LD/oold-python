@@ -44,33 +44,10 @@ from oold.static import (
 
 
 class OOFieldInfo(FieldInfo):
-    """Extension of pydantic FieldInfo to support query
-    construction via operators like ==, <, >, etc."""
-
-    name: Optional[str] = None
-    parent: Optional["LinkedBaseModel"] = None
-
-    def __init__(self, *args, **kwargs):
-        # print("OOFieldInfo init")
-        super().__init__(*args, **kwargs)
-
-    def __eq__(self, other):
-        return Condition(field=self.name, operator="eq", value=other)
-
-    def __ne__(self, other):
-        return Condition(field=self.name, operator="ne", value=other)
-
-    def __lt__(self, other):
-        return Condition(field=self.name, operator="lt", value=other)
-
-    def __le__(self, other):
-        return Condition(field=self.name, operator="le", value=other)
-
-    def __gt__(self, other):
-        return Condition(field=self.name, operator="gt", value=other)
-
-    def __ge__(self, other):
-        return Condition(field=self.name, operator="ge", value=other)
+    """Extension of pydantic FieldInfo that restores hashability.
+    Pydantic's FieldInfo is hashable via object.__hash__, but subclassing
+    with custom __eq__ would break that. We keep __hash__ = id(self) to
+    prevent TypeError in typing.Union / Annotated metadata processing."""
 
     def __hash__(self):
         return id(self)

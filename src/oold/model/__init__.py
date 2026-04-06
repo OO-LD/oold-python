@@ -18,7 +18,7 @@ import pydantic
 import pydantic.fields
 from pydantic import BaseModel, GetCoreSchemaHandler
 from pydantic.fields import FieldInfo
-from pydantic_core import core_schema
+from pydantic_core import PydanticUndefined, core_schema
 from typing_extensions import Self, get_args
 
 from oold.backend import interface
@@ -77,6 +77,55 @@ class OOFieldInfo(FieldInfo):
 
 
 pydantic.fields.FieldInfo = OOFieldInfo
+
+
+class FieldProxy:
+    """Returned by metaclass __getattribute__ for class-level field access.
+    Supports comparison operators for query syntax (Entity.name == "test")
+    and forwards attribute access / truthiness to the field's default value."""
+
+    __slots__ = ("_default", "name", "parent")
+
+    def __init__(self, default, name, parent):
+        object.__setattr__(self, "_default", default)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "parent", parent)
+
+    def __eq__(self, other):
+        return Condition(field=self.name, operator="eq", value=other)
+
+    def __ne__(self, other):
+        return Condition(field=self.name, operator="ne", value=other)
+
+    def __lt__(self, other):
+        return Condition(field=self.name, operator="lt", value=other)
+
+    def __le__(self, other):
+        return Condition(field=self.name, operator="le", value=other)
+
+    def __gt__(self, other):
+        return Condition(field=self.name, operator="gt", value=other)
+
+    def __ge__(self, other):
+        return Condition(field=self.name, operator="ge", value=other)
+
+    def __hash__(self):
+        return id(self)
+
+    def __bool__(self):
+        d = object.__getattribute__(self, "_default")
+        if d is None or d is PydanticUndefined:
+            return False
+        return bool(d)
+
+    def __getattr__(self, name):
+        d = object.__getattribute__(self, "_default")
+        if d is not None and d is not PydanticUndefined:
+            return getattr(d, name)
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
+
 
 # pydantic v2
 _types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
@@ -139,9 +188,7 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
                     # ToDo: lookup the fields property if available
                     # return Condition(field=name)
                     field_info = self.model_fields[name]
-                    field_info.name = name
-                    field_info.parent = self
-                    return field_info
+                    return FieldProxy(field_info.default, name, self)
                     # f = super().__getattribute__(name)
                     # return f
                 else:

@@ -5,7 +5,7 @@ from pydantic import ConfigDict
 from rdflib import Graph
 from SPARQLWrapper import JSONLD, SPARQLWrapper
 
-from oold.backend.auth import GetCredentialParam, UserPwdCredential, get_credential
+from oold.backend.auth import UserPwdCredential, get_credential
 from oold.backend.interface import Backend, Resolver, StoreResult
 
 
@@ -29,6 +29,7 @@ class LocalSparqlResolver(Resolver):
             # check if the iri is a full IRI or a prefix
             if iri.startswith("http"):
                 iri_filter = f"FILTER (?s = <{iri}>)"
+            # todo: build full iri / prefix mapping from model context
             qres = self.graph.query(
                 """
                 PREFIX ex: <https://example.com/>
@@ -92,7 +93,10 @@ class SparqlResolver(Resolver):
         jsonld_dicts = {}
 
         # lookup  credential for the endpoint
-        cred = get_credential(GetCredentialParam(iri=self.endpoint))
+        try:
+            cred = get_credential(self.endpoint)
+        except ValueError:
+            cred = None
         if cred is not None:
             if isinstance(cred, UserPwdCredential):
                 self._sparql.setCredentials(

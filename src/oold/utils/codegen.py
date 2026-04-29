@@ -12,6 +12,8 @@ from datamodel_code_generator.parser.jsonschema import (
     get_special_path,
 )
 
+from oold.utils.json_tools import merge_deep
+
 logger = logging.getLogger(__name__)
 
 # https://docs.pydantic.dev/1.10/usage/schema/#schema-customization
@@ -34,6 +36,11 @@ class OOLDJsonSchemaParser(JsonSchemaParser):
     You can use this class directly or monkey-patch the datamodel_code_generator module:
     `datamodel_code_generator.parser.jsonschema.JsonSchemaParser = OOLDJsonSchemaParser`
     """
+
+    def _deep_merge(self, dict1: dict, dict2: dict) -> dict:
+        """Override to deduplicate list values during merge.
+        Uses json_tools.merge_deep which calls unique_array on lists."""
+        return merge_deep(dict1, dict2)
 
     def set_additional_properties(self, name: str, obj: JsonSchemaObject) -> None:
         schema_extras = repr(obj.extras)  # keeps 'False' and 'True' boolean literals

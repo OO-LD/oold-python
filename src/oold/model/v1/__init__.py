@@ -756,9 +756,22 @@ class LinkedBaseModel(_LinkedBaseModel):
         """Constructs a model instance from a JSON-LD representation."""
         return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _types)
 
-    def to_json(self) -> Dict:
-        """Return the JSON representation of the object as dict."""
-        return json.loads(self.json(exclude_none=True))
+    def to_json(self, exclude_defaults: bool = False) -> Dict:
+        """Return the JSON representation of the object as dict.
+
+        Parameters
+        ----------
+        exclude_defaults
+            If True, fields with default values are excluded from the
+            output. Useful for compact storage where defaults can be
+            re-populated on deserialization via from_json().
+        """
+        return json.loads(
+            self.json(
+                exclude_none=True,
+                exclude_defaults=exclude_defaults,
+            )
+        )
 
     @classmethod
     def from_json(cls, json_dict: Dict) -> "LinkedBaseModel":

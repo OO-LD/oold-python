@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -109,6 +110,8 @@ _types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
 
 
 M = TypeVar("M", bound="LinkedBaseModel")
+
+_logger = logging.getLogger(__name__)
 
 
 # pydantic v2
@@ -900,13 +903,23 @@ class LinkedBaseModel(
             d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)
 
-    def cast(self, cls, remove_extra=False, silent=True, **kwargs):
+    def cast(
+        self,
+        cls,
+        none_to_default=False,
+        remove_extra=False,
+        silent=True,
+        **kwargs,
+    ):
         """Cast this instance to a different model class.
 
         Parameters
         ----------
         cls
             Target class to cast to.
+        none_to_default
+            If True, attributes that are None or empty lists are
+            removed so the target class uses its defaults.
         remove_extra
             If True, drop fields not defined on the target class.
         silent
@@ -915,6 +928,20 @@ class LinkedBaseModel(
             Additional fields to set on the new instance.
         """
         data = {**self.model_dump(), **kwargs}
+        none_args = []
+        if none_to_default:
+            reduced = {}
+            for k, v in data.items():
+                if v is None:
+                    none_args.append(k)
+                elif isinstance(v, list) and (
+                    len(v) == 0 or all(item is None for item in v)
+                ):
+                    none_args.append(k)
+                else:
+                    reduced[k] = v
+            data = reduced
+        extra_args = []
         if remove_extra:
             target_fields = set()
             if hasattr(cls, "model_fields"):
@@ -922,9 +949,14 @@ class LinkedBaseModel(
             elif hasattr(cls, "__fields__"):
                 target_fields = set(cls.__fields__.keys())
             if target_fields:
-                extra = [k for k in data if k not in target_fields]
-                for k in extra:
+                extra_args = [k for k in data if k not in target_fields]
+                for k in extra_args:
                     del data[k]
+        if not silent:
+            if none_to_default and none_args:
+                _logger.warning("Removed None/empty attributes: %s", none_args)
+            if remove_extra and extra_args:
+                _logger.warning("Removed extra attributes: %s", extra_args)
         if "type" in data:
             del data["type"]
         # Carry over __iris__ (range field references)
@@ -933,8 +965,11 @@ class LinkedBaseModel(
             if "__iris__" in data:
                 iris.update(data["__iris__"])
             data["__iris__"] = iris
-        result = cls(**data)
-        return result
+        return cls(**data)
+
+    def cast_none_to_default(self, cls, **kwargs):
+        """Cast to target class, dropping None/empty list attributes."""
+        return self.cast(cls, none_to_default=True, **kwargs)
 
     def to_jsonld(self) -> Dict:
         """Return the RDF representation of the object as JSON-LD."""

@@ -141,6 +141,84 @@ The extended dataclass notation includes semantic annotations as JSON-LD context
 
 More details see [example code](./tests/test_rdf.py)
 
+### BaseController
+
+Base mixin for controllers that extend `LinkedBaseModel` data classes. Controllers add runtime behavior (connections, archiving, state) without polluting the data model.
+
+```python
+from oold.model import BaseController, LinkedBaseModel
+
+class Robot(LinkedBaseModel):
+    name: str
+    joint_count: int = 6
+    connection_url: str = ""
+
+class RobotController(BaseController, Robot):
+    _connected: bool = False
+
+    def connect(self):
+        self._connected = True
+        print(f"Connected to {self.connection_url}")
+
+    def move(self, joint: int, angle: float):
+        if not self._connected:
+            raise RuntimeError("Not connected")
+        print(f"Moving joint {joint} to {angle} deg")
+
+ctrl = RobotController(name="arm-1", connection_url="tcp://192.168.1.10:5000")
+ctrl.connect()
+ctrl.move(1, 45.0)
+
+# Serialization includes model fields, strips controller state
+ctrl.to_json()  # {"name": "arm-1", "joint_count": 6, "connection_url": "tcp://..."}
+```
+
+Key features:
+- **Auto-detects the pure data model** from MRO - no manual configuration needed
+- **Serialization strips controller fields** - `to_json()` / `to_jsonld()` only include data model fields
+- **Type registry exclusion** - controllers don't replace their data model in the `_types` lookup, so backend resolution always returns the pure model class
+- **Multi-model support** - `Controller(ModelA, ModelB)` merges type arrays from both models
+
+### cast()
+
+Convert between model classes, preserving `__iris__` references:
+
+```python
+target = source.cast(TargetClass, remove_extra=True, none_to_default=True)
+
+# Or construct directly from another model instance:
+target = TargetClass(source, extra_field="value")
+```
+
+Parameters:
+- `none_to_default` - drop None/empty list attributes so the target uses its defaults
+- `remove_extra` - drop fields not defined on the target class
+- `silent` - suppress warnings about dropped fields (default: True)
+
+### Backends
+
+Built-in backends for entity persistence and resolution:
+
+| Backend | Storage | Query support |
+|---------|---------|---------------|
+| **SimpleDictDocumentStore** | In-memory dict, optional JSON file (`file_path`) | Filter by field |
+| **SqliteDocumentStore** | SQLite database (default `format=JSON`) | - |
+| **LocalSparqlBackend** | In-memory RDF graph (rdflib) | SPARQL |
+
+```python
+from oold.backend.document_store import SimpleDictDocumentStore
+from oold.backend.interface import StoreParam, SetResolverParam, set_resolver
+
+store = SimpleDictDocumentStore(file_path="./entities.json")
+set_resolver(SetResolverParam(iri="ex", resolver=store))
+
+# Store and resolve entities
+store.store(StoreParam(nodes={"ex:foo": foo}))
+loaded = MyModel["ex:foo"]  # resolves via registered backend
+```
+
+Custom backends implement the `Backend` interface (`resolve_iris`, `store_json_dicts`).
+
 ## Dev
 ```
 git clone https://github.com/OpenSemanticWorld/oold-python

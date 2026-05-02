@@ -17,12 +17,31 @@ from oold.backend.interface import (
 
 
 class SimpleDictDocumentStore(Backend):
+    """In-memory document store backed by a Python dict.
+
+    Optionally persists to a JSON file if ``file_path`` is set.
+    On init, loads existing data from the file (if it exists).
+    On every store, writes the full dict back to disk.
+    """
+
     _store: Optional[Dict[str, dict]] = None
+    file_path: Optional[Union[Path, str]] = None
     format: LinkedDataFormat = LinkedDataFormat.JSON
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._store = {}
+        if self.file_path is not None:
+            p = Path(self.file_path)
+            if p.exists():
+                with open(p) as f:
+                    self._store = json.load(f)
+
+    def _persist(self):
+        """Write store to file if file_path is set."""
+        if self.file_path is not None:
+            with open(self.file_path, "w") as f:
+                json.dump(self._store, f, indent=2)
 
     def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
         jsonld_dicts = {}
@@ -33,6 +52,7 @@ class SimpleDictDocumentStore(Backend):
     def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
         for iri, json_dict in json_dicts.items():
             self._store[iri] = json_dict
+        self._persist()
         return StoreResult(success=True)
 
     def _filter(
@@ -93,6 +113,7 @@ class SimpleDictDocumentStore(Backend):
 
 class SqliteDocumentStore(Backend):
     db_path: Union[Path, str]
+    format: LinkedDataFormat = LinkedDataFormat.JSON
     persist_connection: bool = False
     _conn: Optional[sqlite3.Connection] = None
 
@@ -143,22 +164,22 @@ class SqliteDocumentStore(Backend):
             conn.close()
         return jsonld_dicts
 
-    def store_jsonld_dicts(self, jsonld_dicts: Dict[str, Dict]) -> StoreResult:
+    def _store_dicts(self, dicts: Dict[str, Dict]) -> StoreResult:
         conn = self._conn if self.persist_connection else sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.executemany(
             """
             INSERT OR REPLACE INTO entities (id, data) VALUES (?, ?)
             """,
-            [
-                (iri, json.dumps(jsonld_dict))
-                for iri, jsonld_dict in jsonld_dicts.items()
-            ],
+            [(iri, json.dumps(d)) for iri, d in dicts.items()],
         )
         conn.commit()
         if not self.persist_connection:
             conn.close()
         return StoreResult(success=True)
+
+    def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
+        return self._store_dicts(json_dicts)
 
     def query():
         raise NotImplementedError()

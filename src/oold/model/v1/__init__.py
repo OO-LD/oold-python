@@ -129,7 +129,14 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
-        if hasattr(cls, "get_cls_iri"):
+        # Register type IRI mapping, but skip controller classes
+        _is_ctrl = any(
+            b.__module__ == "oold.model" and b.__name__ == "BaseController"
+            for b in cls.__mro__
+        )
+        if _is_ctrl:
+            pass
+        elif hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
                 if isinstance(iri, list):
@@ -382,6 +389,14 @@ class LinkedBaseModel(_LinkedBaseModel):
             return super().parse_obj(obj)
 
     def __init__(self, *a, **kw):
+        # Accept a model instance as first positional arg:
+        # TargetModel(source_model, extra_field=value)
+        if a and isinstance(a[0], BaseModel):
+            result = a[0].cast(type(self), **kw)
+            kw = result.dict()
+            kw["__iris__"] = getattr(result, "__iris__", {})
+            a = ()
+
         if "__iris__" not in kw:
             kw["__iris__"] = {}
 
@@ -747,6 +762,26 @@ class LinkedBaseModel(_LinkedBaseModel):
             d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)
 
+    def cast(self, cls, remove_extra=False, silent=True, **kwargs):
+        """Cast this instance to a different model class."""
+        data = {**self.dict(), **kwargs}
+        if remove_extra:
+            target_fields = set()
+            if hasattr(cls, "__fields__"):
+                target_fields = set(cls.__fields__.keys())
+            if target_fields:
+                extra = [k for k in data if k not in target_fields]
+                for k in extra:
+                    del data[k]
+        if "type" in data:
+            del data["type"]
+        if hasattr(self, "__iris__"):
+            iris = dict(self.__iris__)
+            if "__iris__" in data:
+                iris.update(data["__iris__"])
+            data["__iris__"] = iris
+        return cls(**data)
+
     def to_jsonld(self) -> Dict:
         """Return the RDF representation of the object as JSON-LD."""
         return export_jsonld(self, BaseModel)
@@ -777,3 +812,7 @@ class LinkedBaseModel(_LinkedBaseModel):
     def from_json(cls, json_dict: Dict) -> "LinkedBaseModel":
         """Constructs a model instance from a JSON representation."""
         return import_json(BaseModel, LinkedBaseModel, cls, json_dict, _types)
+
+
+# Re-export BaseController from v2 module (it's a plain class, no Pydantic dep)
+from oold.model import BaseController  # noqa: E402, F401

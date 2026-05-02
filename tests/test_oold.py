@@ -274,6 +274,60 @@ def test_nested_iri_serialization(pydantic_version):
     assert item0.get_raw("nonexistent") is None  # missing field
 
 
+def _run_cast_tests(pydantic_version="v2"):
+    if pydantic_version == "v1":
+        from oold.model.v1 import LinkedBaseModel
+    else:
+        from oold.model import LinkedBaseModel
+
+    class ModelA(LinkedBaseModel):
+        value: float
+        name: str = "default"
+
+    class ModelB(LinkedBaseModel):
+        value: float
+        extra: str = "ext"
+
+    class Narrow(LinkedBaseModel):
+        value: float
+
+    # cast to same class
+    a = ModelA(value=42.0, name="hello")
+    a2 = a.cast(ModelA)
+    assert a2.value == 42.0
+    assert a2.name == "hello"
+
+    # cast to different class with kwargs
+    b = ModelA(value=10.0).cast(ModelB, extra="custom")
+    assert b.value == 10.0
+    assert b.extra == "custom"
+
+    # cast with remove_extra
+    wide = ModelA(value=1.0, name="test")
+    n = wide.cast(Narrow, remove_extra=True)
+    assert n.value == 1.0
+
+    # constructor from model instance: ModelB(model_a, extra="x")
+    a3 = ModelA(value=5.0, name="src")
+    b2 = ModelB(a3, extra="ctor")
+    assert b2.value == 5.0
+    assert b2.extra == "ctor"
+
+    # constructor override: kwargs take precedence
+    a4 = ModelA(value=5.0, name="src")
+    a5 = ModelA(a4, name="overridden")
+    assert a5.name == "overridden"
+    assert a5.value == 5.0
+
+
+def test_cast_v1():
+    _run_cast_tests("v1")
+
+
+def test_cast_v2():
+    _run_cast_tests("v2")
+
+
 if __name__ == "__main__":
     _run("v1")
     _run("v2")

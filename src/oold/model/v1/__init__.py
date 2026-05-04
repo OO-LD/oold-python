@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -112,6 +113,8 @@ _types: Dict[str, pydantic.v1.main.ModelMetaclass] = {}
 
 M = TypeVar("M", bound="LinkedBaseModel")
 
+_logger = logging.getLogger(__name__)
+
 
 # pydantic v1
 class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
@@ -129,7 +132,14 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
-        if hasattr(cls, "get_cls_iri"):
+        # Register type IRI mapping, but skip controller classes
+        _is_ctrl = any(
+            b.__module__ == "oold.model" and b.__name__ == "BaseController"
+            for b in cls.__mro__
+        )
+        if _is_ctrl:
+            pass
+        elif hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
                 if isinstance(iri, list):
@@ -382,6 +392,14 @@ class LinkedBaseModel(_LinkedBaseModel):
             return super().parse_obj(obj)
 
     def __init__(self, *a, **kw):
+        # Accept a model instance as first positional arg:
+        # TargetModel(source_model, extra_field=value)
+        if a and isinstance(a[0], BaseModel):
+            result = a[0].cast(type(self), **kw)
+            kw = result.dict()
+            kw["__iris__"] = getattr(result, "__iris__", {})
+            a = ()
+
         if "__iris__" not in kw:
             kw["__iris__"] = {}
 
@@ -520,11 +538,8 @@ class LinkedBaseModel(_LinkedBaseModel):
 
     def __setattr__(self, name, value, internal=False):
         # print("__setattr__", name, value)
-        if not internal and name not in [
-            "__dict__",
-            "__pydantic_private__",
-            "__iris__",
-        ]:
+        # Only apply range handling for declared model fields
+        if not internal and name in self.__fields__:
             value = self._handle_value(name, value)
 
         return super().__setattr__(name, value)
@@ -747,6 +762,71 @@ class LinkedBaseModel(_LinkedBaseModel):
             d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)
 
+    def cast(
+        self,
+        cls,
+        none_to_default=False,
+        remove_extra=False,
+        silent=True,
+        **kwargs,
+    ):
+        """Cast this instance to a different model class.
+
+        Parameters
+        ----------
+        cls
+            Target class to cast to.
+        none_to_default
+            If True, attributes that are None or empty lists are
+            removed so the target class uses its defaults.
+        remove_extra
+            If True, drop fields not defined on the target class.
+        silent
+            If True, suppress warnings about dropped fields.
+        kwargs
+            Additional fields to set on the new instance.
+        """
+        data = {**self.dict(), **kwargs}
+        none_args = []
+        if none_to_default:
+            reduced = {}
+            for k, v in data.items():
+                if v is None:
+                    none_args.append(k)
+                elif isinstance(v, list) and (
+                    len(v) == 0 or all(item is None for item in v)
+                ):
+                    none_args.append(k)
+                else:
+                    reduced[k] = v
+            data = reduced
+        extra_args = []
+        if remove_extra:
+            target_fields = set()
+            if hasattr(cls, "__fields__"):
+                target_fields = set(cls.__fields__.keys())
+            if target_fields:
+                extra_args = [k for k in data if k not in target_fields]
+                for k in extra_args:
+                    del data[k]
+        if not silent:
+            if none_to_default and none_args:
+                _logger.warning("Removed None/empty attributes: %s", none_args)
+            if remove_extra and extra_args:
+                _logger.warning("Removed extra attributes: %s", extra_args)
+        if "type" in data:
+            del data["type"]
+        if hasattr(self, "__iris__"):
+            iris = dict(self.__iris__)
+            if "__iris__" in data:
+                iris.update(data["__iris__"])
+            data["__iris__"] = iris
+        return cls(**data)
+
+    def cast_none_to_default(self, cls, **kwargs):
+        """Cast to target class, dropping None/empty list attributes."""
+        return self.cast(cls, none_to_default=True, **kwargs)
+
     def to_jsonld(self) -> Dict:
         """Return the RDF representation of the object as JSON-LD."""
         return export_jsonld(self, BaseModel)
@@ -756,11 +836,28 @@ class LinkedBaseModel(_LinkedBaseModel):
         """Constructs a model instance from a JSON-LD representation."""
         return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _types)
 
-    def to_json(self) -> Dict:
-        """Return the JSON representation of the object as dict."""
-        return json.loads(self.json(exclude_none=True))
+    def to_json(self, exclude_defaults: bool = False) -> Dict:
+        """Return the JSON representation of the object as dict.
+
+        Parameters
+        ----------
+        exclude_defaults
+            If True, fields with default values are excluded from the
+            output. Useful for compact storage where defaults can be
+            re-populated on deserialization via from_json().
+        """
+        return json.loads(
+            self.json(
+                exclude_none=True,
+                exclude_defaults=exclude_defaults,
+            )
+        )
 
     @classmethod
     def from_json(cls, json_dict: Dict) -> "LinkedBaseModel":
         """Constructs a model instance from a JSON representation."""
         return import_json(BaseModel, LinkedBaseModel, cls, json_dict, _types)
+
+
+# Re-export BaseController from v2 module (it's a plain class, no Pydantic dep)
+from oold.model import BaseController  # noqa: E402, F401

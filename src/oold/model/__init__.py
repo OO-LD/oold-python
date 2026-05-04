@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -110,6 +111,8 @@ _types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
 
 M = TypeVar("M", bound="LinkedBaseModel")
 
+_logger = logging.getLogger(__name__)
+
 
 # pydantic v2
 class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass):
@@ -127,7 +130,16 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
-        if hasattr(cls, "get_cls_iri"):
+        # Register type IRI mapping, but skip controller classes
+        # (they extend data models but should not replace them in
+        # the type lookup table).
+        _is_ctrl = any(
+            b.__module__ == "oold.model" and b.__name__ == "BaseController"
+            for b in cls.__mro__
+        )
+        if _is_ctrl:
+            pass
+        elif hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
                 if isinstance(iri, list):
@@ -459,6 +471,14 @@ class LinkedBaseModel(
             )
 
     def __init__(self, *a, **kw):
+        # Accept a model instance as first positional arg:
+        # TargetModel(source_model, extra_field=value)
+        if a and isinstance(a[0], BaseModel):
+            result = a[0].cast(type(self), **kw)
+            kw = result.model_dump()
+            kw["__iris__"] = getattr(result, "__iris__", {})
+            a = ()
+
         if "__iris__" not in kw:
             kw["__iris__"] = {}
 
@@ -602,11 +622,8 @@ class LinkedBaseModel(
 
     def __setattr__(self, name, value, internal=False):
         # print("__setattr__", name, value)
-        if not internal and name not in [
-            "__dict__",
-            "__pydantic_private__",
-            "__iris__",
-        ]:
+        # Only apply range handling for declared model fields
+        if not internal and name in self.model_fields:
             value = self._handle_value(name, value)
 
         return super().__setattr__(name, value)
@@ -883,6 +900,74 @@ class LinkedBaseModel(
             d = self.remove_none(d)
         return json.dumps(d, **dumps_kwargs)
 
+    def cast(
+        self,
+        cls,
+        none_to_default=False,
+        remove_extra=False,
+        silent=True,
+        **kwargs,
+    ):
+        """Cast this instance to a different model class.
+
+        Parameters
+        ----------
+        cls
+            Target class to cast to.
+        none_to_default
+            If True, attributes that are None or empty lists are
+            removed so the target class uses its defaults.
+        remove_extra
+            If True, drop fields not defined on the target class.
+        silent
+            If True, suppress warnings about dropped fields.
+        kwargs
+            Additional fields to set on the new instance.
+        """
+        data = {**self.model_dump(), **kwargs}
+        none_args = []
+        if none_to_default:
+            reduced = {}
+            for k, v in data.items():
+                if v is None:
+                    none_args.append(k)
+                elif isinstance(v, list) and (
+                    len(v) == 0 or all(item is None for item in v)
+                ):
+                    none_args.append(k)
+                else:
+                    reduced[k] = v
+            data = reduced
+        extra_args = []
+        if remove_extra:
+            target_fields = set()
+            if hasattr(cls, "model_fields"):
+                target_fields = set(cls.model_fields.keys())
+            elif hasattr(cls, "__fields__"):
+                target_fields = set(cls.__fields__.keys())
+            if target_fields:
+                extra_args = [k for k in data if k not in target_fields]
+                for k in extra_args:
+                    del data[k]
+        if not silent:
+            if none_to_default and none_args:
+                _logger.warning("Removed None/empty attributes: %s", none_args)
+            if remove_extra and extra_args:
+                _logger.warning("Removed extra attributes: %s", extra_args)
+        if "type" in data:
+            del data["type"]
+        # Carry over __iris__ (range field references)
+        if hasattr(self, "__iris__"):
+            iris = dict(self.__iris__)
+            if "__iris__" in data:
+                iris.update(data["__iris__"])
+            data["__iris__"] = iris
+        return cls(**data)
+
+    def cast_none_to_default(self, cls, **kwargs):
+        """Cast to target class, dropping None/empty list attributes."""
+        return self.cast(cls, none_to_default=True, **kwargs)
+
     def to_jsonld(self) -> Dict:
         """Return the RDF representation of the object as JSON-LD."""
         return export_jsonld(self, BaseModel)
@@ -892,9 +977,22 @@ class LinkedBaseModel(
         """Constructs a model instance from a JSON-LD representation."""
         return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _types)
 
-    def to_json(self) -> Dict:
-        """Return the JSON representation of the object."""
-        return json.loads(self.model_dump_json(exclude_none=True))
+    def to_json(self, exclude_defaults: bool = False) -> Dict:
+        """Return the JSON representation of the object.
+
+        Parameters
+        ----------
+        exclude_defaults
+            If True, fields with default values are excluded from the
+            output. Useful for compact storage where defaults can be
+            re-populated on deserialization via from_json().
+        """
+        return json.loads(
+            self.model_dump_json(
+                exclude_none=True,
+                exclude_defaults=exclude_defaults,
+            )
+        )
 
     @classmethod
     def from_json(cls, data: Dict) -> "LinkedBaseModel":
@@ -910,3 +1008,114 @@ class LinkedBaseModel(
     #     #     by_alias, ref_template, schema_generator, mode
     #     # )
     #     return cls.export_schema(cls)
+
+
+class BaseController:
+    """Base mixin for controllers that extend LinkedBaseModel data classes.
+
+    Overrides to_json() and to_jsonld() to serialize only the pure data
+    model fields, stripping controller-only fields (e.g. archive_database,
+    auto_archive, connection state).
+
+    The data model class is auto-detected from the MRO: the first
+    LinkedBaseModel subclass that is not also a BaseController subclass.
+
+    Controllers are excluded from oold's type IRI registry (_types) so
+    they don't replace their pure data model counterparts during
+    backend resolution.
+    """
+
+    def _get_data_model_cls(self):
+        """Auto-detect the pure data model class from the MRO.
+
+        Finds all direct LinkedBaseModel bases that are not controllers.
+        If there are multiple, creates a dynamic union class combining
+        them (e.g. Controller(ModelA, ModelB) -> _ModelA_ModelB).
+        """
+
+        def _is_data_model(cls):
+            return (
+                cls is not type(self)
+                and cls.__name__
+                not in (
+                    "LinkedBaseModel",
+                    "_LinkedBaseModel",
+                    "BaseController",
+                    "GenericLinkedBaseModel",
+                    "BaseModel",
+                    "Representation",
+                )
+                and hasattr(cls, "to_json")
+                and hasattr(cls, "from_json")
+                and not issubclass(cls, BaseController)
+            )
+
+        model_bases = []
+        for cls in type(self).__mro__:
+            if _is_data_model(cls):
+                if not any(issubclass(m, cls) for m in model_bases):
+                    model_bases.append(cls)
+        if len(model_bases) == 0:
+            return None
+        if len(model_bases) == 1:
+            return model_bases[0]
+        name = "_".join(b.__name__ for b in model_bases)
+        union_cls = type(name, tuple(model_bases), {})
+        union_cls._union_bases = model_bases
+        return union_cls
+
+    def _get_model_bases(self):
+        """Return the list of pure data model base classes."""
+        model_cls = self._get_data_model_cls()
+        if model_cls is None:
+            return []
+        if hasattr(model_cls, "_union_bases"):
+            return model_cls._union_bases
+        return [model_cls]
+
+    def _collect_type_array(self):
+        """Collect merged type array from all pure data model bases."""
+        bases = self._get_model_bases()
+        if len(bases) <= 1:
+            return None
+        merged = []
+        for base in bases:
+            field = None
+            if hasattr(base, "model_fields"):
+                field = base.model_fields.get("type")
+            elif hasattr(base, "__fields__"):
+                field = base.__fields__.get("type")
+            default = getattr(field, "default", None) if field else None
+            if isinstance(default, list):
+                for t in default:
+                    if t not in merged:
+                        merged.append(t)
+            elif isinstance(default, str) and default not in merged:
+                merged.append(default)
+        return merged if merged else None
+
+    def _cast_to_pure(self, model_cls):
+        """Cast self to the pure model class."""
+        return self.cast(model_cls, remove_extra=True)
+
+    def to_json(self, **kwargs):
+        model_cls = self._get_data_model_cls()
+        if model_cls is not None:
+            merged_types = self._collect_type_array()
+            pure = self._cast_to_pure(model_cls)
+            data = pure.to_json(**kwargs)
+            if merged_types:
+                data["type"] = merged_types
+            return data
+        return super().to_json(**kwargs)
+
+    def to_jsonld(self):
+        model_cls = self._get_data_model_cls()
+        if model_cls is not None:
+            merged_types = self._collect_type_array()
+            pure = self._cast_to_pure(model_cls)
+            data = pure.to_jsonld()
+            if merged_types:
+                data["type"] = merged_types
+            return data
+        return super().to_jsonld()

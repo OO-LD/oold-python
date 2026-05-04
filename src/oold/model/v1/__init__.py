@@ -538,11 +538,8 @@ class LinkedBaseModel(_LinkedBaseModel):
 
     def __setattr__(self, name, value, internal=False):
         # print("__setattr__", name, value)
-        if not internal and name not in [
-            "__dict__",
-            "__pydantic_private__",
-            "__iris__",
-        ]:
+        # Only apply range handling for declared model fields
+        if not internal and name in self.__fields__:
             value = self._handle_value(name, value)
 
         return super().__setattr__(name, value)

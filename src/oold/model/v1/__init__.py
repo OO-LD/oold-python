@@ -882,7 +882,10 @@ class LinkedBaseModel(_LinkedBaseModel):
         # because their model value is None (the IRI lives in __iris__)
         if hasattr(self, "__iris__"):
             for field_name, iri in self.__iris__.items():
-                if field_name not in result and iri is not None:
+                if iri is None:
+                    continue
+                existing = result.get(field_name)
+                if existing is None or existing == [] or existing == {}:
                     result[field_name] = iri
         return result
 

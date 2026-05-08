@@ -1004,7 +1004,10 @@ class LinkedBaseModel(
         # because their model value is None (the IRI lives in __iris__)
         if hasattr(self, "__iris__"):
             for field_name, iri in self.__iris__.items():
-                if field_name not in result and iri is not None:
+                if iri is None:
+                    continue
+                existing = result.get(field_name)
+                if existing is None or existing == [] or existing == {}:
                     result[field_name] = iri
         return result
 
@@ -1113,15 +1116,24 @@ class BaseController:
         return self.cast(model_cls, remove_extra=True)
 
     def to_json(self, **kwargs):
+        # Serialize with LinkedBaseModel.to_json (includes __iris__),
+        # then strip controller-only fields
+        data = super().to_json(**kwargs)
         model_cls = self._get_data_model_cls()
         if model_cls is not None:
             merged_types = self._collect_type_array()
-            pure = self._cast_to_pure(model_cls)
-            data = pure.to_json(**kwargs)
             if merged_types:
                 data["type"] = merged_types
-            return data
-        return super().to_json(**kwargs)
+            # Remove fields not in the pure data model
+            model_fields = set(
+                model_cls.model_fields.keys()
+                if hasattr(model_cls, "model_fields")
+                else getattr(model_cls, "__fields__", {}).keys()
+            )
+            for key in list(data.keys()):
+                if key not in model_fields and key not in ("type", "@context"):
+                    del data[key]
+        return data
 
     def to_jsonld(self):
         model_cls = self._get_data_model_cls()

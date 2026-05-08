@@ -924,7 +924,12 @@ class LinkedBaseModel(
         kwargs
             Additional fields to set on the new instance.
         """
-        data = {**self.model_dump(), **kwargs}
+        # Use raw Pydantic model_dump (without _object_to_iri which replaces
+        # inline objects with IRIs). Only inject __iris__ for nested objects
+        # so their range-field IRIs survive reconstruction.
+        raw = super().model_dump()
+        self._recursive_object_to_iri(raw, self)
+        data = {**raw, **kwargs}
         none_args = []
         if none_to_default:
             reduced = {}
@@ -987,12 +992,19 @@ class LinkedBaseModel(
             output. Useful for compact storage where defaults can be
             re-populated on deserialization via from_json().
         """
-        return json.loads(
+        result = json.loads(
             self.model_dump_json(
                 exclude_none=True,
                 exclude_defaults=exclude_defaults,
             )
         )
+        # Re-inject IRI-only fields from __iris__ that were excluded
+        # because their model value is None (the IRI lives in __iris__)
+        if hasattr(self, "__iris__"):
+            for field_name, iri in self.__iris__.items():
+                if field_name not in result and iri is not None:
+                    result[field_name] = iri
+        return result
 
     @classmethod
     def from_json(cls, data: Dict) -> "LinkedBaseModel":

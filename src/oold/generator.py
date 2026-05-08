@@ -155,6 +155,18 @@ class Generator:
                         r"(from pydantic import)", "from pydantic.v1 import", content
                     )
 
+                # fix unserializable defaults from datamodel-code-generator
+                # when allOf merges a property override (e.g. hidden:true) with
+                # a parent field typed as a complex model, the default becomes
+                # an unserializable sentinel: lambda :Foo.parse_obj(<object ...>)
+                content = re.sub(
+                    r"default_factory=lambda\s*:.*<object object at 0x[0-9a-fA-F]+>\)",
+                    "default=None)",
+                    content,
+                )
+                # fix lambda formatting (space before colon breaks black)
+                content = content.replace("lambda :", "lambda:")
+
                 # write the content to the file
                 with open(output, "w", encoding="utf-8") as f:
                     f.write(content)

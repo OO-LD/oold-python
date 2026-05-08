@@ -395,8 +395,14 @@ class LinkedBaseModel(_LinkedBaseModel):
         # Accept a model instance as first positional arg:
         # TargetModel(source_model, extra_field=value)
         if a and isinstance(a[0], BaseModel):
-            result = a[0].cast(type(self), **kw)
-            kw = result.dict()
+            source = a[0]
+            result = source.cast(type(self), **kw)
+            # Use raw Pydantic dict to preserve inline objects
+            # (our dict() override replaces them with IRIs).
+            # Inject nested IRIs from the SOURCE (not result, which
+            # may have lost nested __iris__ during cast reconstruction).
+            kw = super(LinkedBaseModel, result).dict()
+            LinkedBaseModel._recursive_object_to_iri(kw, source)
             kw["__iris__"] = getattr(result, "__iris__", {})
             a = ()
 
@@ -716,6 +722,21 @@ class LinkedBaseModel(_LinkedBaseModel):
                 model_value._object_to_iri(value)
                 LinkedBaseModel._recursive_object_to_iri(value, model_value)
 
+    def dict(self, **kwargs):
+        """Override Pydantic v1 dict() to include __iris__ values.
+
+        Ensures IRI-only fields (value=None, IRI in __iris__) are included
+        in the output, including for nested model objects.
+        """
+        exclude_none = kwargs.pop("exclude_none", False)
+        kwargs["exclude_none"] = False
+        d = super().dict(**kwargs)
+        self._object_to_iri(d)
+        self._recursive_object_to_iri(d, self)
+        if exclude_none:
+            d = self.remove_none(d)
+        return d
+
     # pydantic v1
     def json(
         self,
@@ -786,7 +807,12 @@ class LinkedBaseModel(_LinkedBaseModel):
         kwargs
             Additional fields to set on the new instance.
         """
-        data = {**self.dict(), **kwargs}
+        # Use raw Pydantic dict (without _object_to_iri which replaces
+        # inline objects with IRIs). Only inject __iris__ for nested objects
+        # so their range-field IRIs survive reconstruction.
+        raw = super().dict()
+        self._recursive_object_to_iri(raw, self)
+        data = {**raw, **kwargs}
         none_args = []
         if none_to_default:
             reduced = {}
@@ -846,12 +872,22 @@ class LinkedBaseModel(_LinkedBaseModel):
             output. Useful for compact storage where defaults can be
             re-populated on deserialization via from_json().
         """
-        return json.loads(
+        result = json.loads(
             self.json(
                 exclude_none=True,
                 exclude_defaults=exclude_defaults,
             )
         )
+        # Re-inject IRI-only fields from __iris__ that were excluded
+        # because their model value is None (the IRI lives in __iris__)
+        if hasattr(self, "__iris__"):
+            for field_name, iri in self.__iris__.items():
+                if iri is None:
+                    continue
+                existing = result.get(field_name)
+                if existing is None or existing == [] or existing == {}:
+                    result[field_name] = iri
+        return result
 
     @classmethod
     def from_json(cls, json_dict: Dict) -> "LinkedBaseModel":

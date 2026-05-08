@@ -328,6 +328,104 @@ def test_cast_v2():
     _run_cast_tests("v2")
 
 
+def _run_nested_iris_cast_tests(pydantic_version="v2"):
+    """Test that __iris__ on nested objects survives cast() and constructor."""
+    from typing import Optional
+
+    if pydantic_version == "v1":
+        from pydantic.v1 import Field as PydField
+
+        from oold.model.v1 import LinkedBaseModel
+    else:
+        from oold.model import LinkedBaseModel
+        from pydantic import Field as PydField
+
+    from pydantic import ConfigDict
+
+    if pydantic_version == "v1":
+
+        class Child(LinkedBaseModel):
+            class Config:
+                schema_extra = {
+                    "@context": [{"ref": {"@id": "Property:HasRef", "@type": "@id"}}],
+                    "title": "Child",
+                }
+
+            value: int = 0
+            ref: Optional[str] = PydField(None, range="Category:Target")
+
+        class Parent(LinkedBaseModel):
+            name: str = "parent"
+            children: Optional[List[Child]] = None
+
+        class ParentController(LinkedBaseModel):
+            name: str = "parent"
+            children: Optional[List[Child]] = None
+            extra: str = "ctrl"
+
+    else:
+
+        class Child(LinkedBaseModel):
+            model_config = ConfigDict(
+                json_schema_extra={
+                    "@context": [{"ref": {"@id": "Property:HasRef", "@type": "@id"}}],
+                    "title": "Child",
+                },
+            )
+            value: int = 0
+            ref: Optional[str] = PydField(
+                None, json_schema_extra={"range": "Category:Target"}
+            )
+
+        class Parent(LinkedBaseModel):
+            name: str = "parent"
+            children: Optional[List[Child]] = None
+
+        class ParentController(LinkedBaseModel):
+            name: str = "parent"
+            children: Optional[List[Child]] = None
+            extra: str = "ctrl"
+
+    # Create parent with children that have IRI refs
+    p = Parent(
+        name="p1",
+        children=[
+            Child(value=1, ref="ex:target1"),
+            Child(value=2, ref="ex:target2"),
+        ],
+    )
+
+    # Verify __iris__ on children
+    assert p.__dict__["children"][0].__iris__.get("ref") == "ex:target1"
+    assert p.__dict__["children"][1].__iris__.get("ref") == "ex:target2"
+
+    # dict() should include IRI refs for nested objects
+    d = p.dict()
+    assert d["children"][0]["ref"] == "ex:target1"
+    assert d["children"][1]["ref"] == "ex:target2"
+    assert d["children"][0]["value"] == 1
+
+    # cast() should preserve __iris__ on nested objects
+    pc = p.cast(ParentController, extra="casted")
+    assert pc.extra == "casted"
+    assert pc.__dict__["children"][0].__iris__.get("ref") == "ex:target1"
+    assert pc.__dict__["children"][1].__iris__.get("ref") == "ex:target2"
+
+    # Constructor Model(model_instance) should also preserve
+    pc2 = ParentController(p, extra="ctor")
+    assert pc2.extra == "ctor"
+    assert pc2.__dict__["children"][0].__iris__.get("ref") == "ex:target1"
+    assert pc2.__dict__["children"][1].__iris__.get("ref") == "ex:target2"
+
+
+def test_nested_iris_cast_v1():
+    _run_nested_iris_cast_tests("v1")
+
+
+def test_nested_iris_cast_v2():
+    _run_nested_iris_cast_tests("v2")
+
+
 if __name__ == "__main__":
     _run("v1")
     _run("v2")

@@ -474,8 +474,10 @@ class LinkedBaseModel(
         # Accept a model instance as first positional arg:
         # TargetModel(source_model, extra_field=value)
         if a and isinstance(a[0], BaseModel):
-            result = a[0].cast(type(self), **kw)
-            kw = result.model_dump()
+            source = a[0]
+            result = source.cast(type(self), **kw)
+            kw = super(LinkedBaseModel, result).model_dump()
+            LinkedBaseModel._recursive_object_to_iri(kw, source)
             kw["__iris__"] = getattr(result, "__iris__", {})
             a = ()
 

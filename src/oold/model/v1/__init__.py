@@ -395,11 +395,14 @@ class LinkedBaseModel(_LinkedBaseModel):
         # Accept a model instance as first positional arg:
         # TargetModel(source_model, extra_field=value)
         if a and isinstance(a[0], BaseModel):
-            result = a[0].cast(type(self), **kw)
+            source = a[0]
+            result = source.cast(type(self), **kw)
             # Use raw Pydantic dict to preserve inline objects
-            # (our dict() override replaces them with IRIs)
+            # (our dict() override replaces them with IRIs).
+            # Inject nested IRIs from the SOURCE (not result, which
+            # may have lost nested __iris__ during cast reconstruction).
             kw = super(LinkedBaseModel, result).dict()
-            result._recursive_object_to_iri(kw, result)
+            LinkedBaseModel._recursive_object_to_iri(kw, source)
             kw["__iris__"] = getattr(result, "__iris__", {})
             a = ()
 

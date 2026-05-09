@@ -182,3 +182,59 @@ def test_controller_from_model_preserves_iris():
     ch = ctrl.__dict__["children"][0]
     assert ch.__iris__.get("ref") == "ex:nested_ref"
     assert ctrl.ctrl_field == "custom"
+
+
+# -- Controller auto-resolution --
+
+
+def test_controller_registered_in_controller_types():
+    """Controller classes are registered in _controller_types."""
+    from oold.model import _controller_types
+
+    iri = "Category:OSWParent"
+    ctrls = _controller_types.get(iri, [])
+    assert ParentController in ctrls
+
+
+def test_resolve_type_prefers_controller():
+    """resolve_type returns controller when exactly one is registered."""
+    from oold.model import _types
+    from oold.static import resolve_type
+
+    cls = resolve_type("Category:OSWParent", _types)
+    assert cls is ParentController
+
+
+def test_resolve_type_falls_back_to_model():
+    """resolve_type returns pure model when prefer_controller=False."""
+    from oold.model import _types
+    from oold.static import resolve_type
+
+    cls = resolve_type("Category:OSWParent", _types, prefer_controller=False)
+    assert cls is Parent
+
+
+def test_from_json_returns_controller():
+    """from_json auto-resolves to controller class."""
+    parent = Parent(
+        name="test",
+        label=[],
+        ref="ex:ref1",
+    )
+    j = parent.to_json()
+    restored = LinkedBaseModel.from_json(j)
+    assert type(restored).__name__ == "ParentController"
+    assert hasattr(restored, "ctrl_field")
+
+
+def test_from_json_controller_failure_falls_back():
+    """If controller construction fails, fall back to pure model."""
+
+    class StrictController(BaseController, ModelA):
+        mandatory: str  # no default - construction from JSON will fail
+
+    j = ModelA(name="test", label=[]).to_json()
+    # Should fall back to ModelA with a warning
+    restored = LinkedBaseModel.from_json(j)
+    # StrictController failed, so we get ModelA or another controller
+    assert hasattr(restored, "field_a")

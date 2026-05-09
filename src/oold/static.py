@@ -466,6 +466,47 @@ def normalize_iri(iri: str, model_cls, expand: bool) -> str:
         return compacted_iri
 
 
+def resolve_type(
+    type_iri,
+    _types: Dict[str, type],
+    prefer_controller: bool = True,
+):
+    """Resolve a type IRI to a class.
+
+    If prefer_controller is True and exactly one controller is registered
+    for the type IRI, returns the controller class. Otherwise returns the
+    pure data model class.
+
+    Returns the resolved class or None.
+    """
+    if isinstance(type_iri, list):
+        type_iri = type_iri[0]
+    if isinstance(type_iri, dict):
+        type_iri = type_iri.get("@id")
+    if type_iri is None:
+        return None
+    # Prefer controller if exactly one is registered
+    if prefer_controller:
+        try:
+            from oold.model import _controller_types
+
+            ctrls = _controller_types.get(type_iri, [])
+            if len(ctrls) == 1:
+                return ctrls[0]
+            elif len(ctrls) > 1:
+                names = [c.__module__ + "." + c.__name__ for c in ctrls]
+                _logger.info(
+                    "Multiple controllers for %s: %s. "
+                    "Falling back to pure model. To use a specific "
+                    "controller: ctrl = ControllerClass(model_instance)",
+                    type_iri,
+                    names,
+                )
+        except ImportError:
+            pass
+    return _types.get(type_iri, None)
+
+
 def import_jsonld(
     model_type,
     model_root_cls: GenericLinkedBaseModel,
@@ -491,15 +532,7 @@ def import_jsonld(
                 f"and no type IRI found in JSON-LD dict: {jsonld_dict}"
             )
     else:
-        # if type_iri is a list, get the first element
-        if isinstance(type_iri, list):
-            type_iri = type_iri[0]
-        # get the class from the _types dict
-        # Todo: IRI normalization
-        if isinstance(type_iri, dict):
-            type_iri = type_iri.get("@id")
-        model_cls = _types.get(type_iri, None)
-        # if model_type is None, return None
+        model_cls = resolve_type(type_iri, _types)
         if model_cls is None:
             raise ValueError(f"Unknown model type IRI: {type_iri}")
     if model_type == BaseModel:
@@ -511,7 +544,24 @@ def import_jsonld(
     jsonld_dict = jsonld.compact(jsonld_dict, context)
     if "@context" in jsonld_dict:
         del jsonld_dict["@context"]
-    return model_cls(**jsonld_dict)
+    try:
+        return model_cls(**jsonld_dict)
+    except Exception:
+        iri = type_iri[0] if isinstance(type_iri, list) else type_iri
+        pure_cls = _types.get(iri) if iri else None
+        if pure_cls is not None and pure_cls is not model_cls:
+            _logger.warning(
+                "Controller %s construction failed "
+                "(e.g. missing mandatory fields), "
+                "falling back to %s. "
+                "You can cast manually: "
+                "%s(model_instance, field=value)",
+                model_cls.__name__,
+                pure_cls.__name__,
+                model_cls.__name__,
+            )
+            return pure_cls(**jsonld_dict)
+        raise
 
 
 def import_json(
@@ -538,14 +588,27 @@ def import_json(
                 f"and no type IRI found in JSON dict: {json_dict}"
             )
     else:
-        # if type_iri is a list, get the first element
-        if isinstance(type_iri, list):
-            type_iri = type_iri[0]
-        # get the class from the _types dict
-        model_cls = _types.get(type_iri, None)
+        model_cls = resolve_type(type_iri, _types)
         if model_cls is None:
             raise ValueError(f"Unknown model type IRI: {type_iri}")
-    return model_cls(**json_dict)
+    try:
+        return model_cls(**json_dict)
+    except Exception:
+        # If controller construction fails, fall back to pure model
+        pure_cls = _types.get(type_iri[0] if isinstance(type_iri, list) else type_iri)
+        if pure_cls is not None and pure_cls is not model_cls:
+            _logger.warning(
+                "Controller %s construction failed "
+                "(e.g. missing mandatory fields), "
+                "falling back to %s. "
+                "You can cast manually: "
+                "%s(model_instance, field=value)",
+                model_cls.__name__,
+                pure_cls.__name__,
+                model_cls.__name__,
+            )
+            return pure_cls(**json_dict)
+        raise
 
 
 def _get_schema(model_cls):

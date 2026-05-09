@@ -109,6 +109,7 @@ class FieldProxy:
 
 # pydantic v1
 _types: Dict[str, pydantic.v1.main.ModelMetaclass] = {}
+_controller_types: Dict[str, List] = {}
 
 
 M = TypeVar("M", bound="LinkedBaseModel")
@@ -132,21 +133,21 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
-        # Register type IRI mapping, but skip controller classes
+        # Register type IRI mapping. Controllers go to _controller_types.
         _is_ctrl = any(
             b.__module__ == "oold.model" and b.__name__ == "BaseController"
             for b in cls.__mro__
         )
-        if _is_ctrl:
-            pass
-        elif hasattr(cls, "get_cls_iri"):
+        if hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
-                if isinstance(iri, list):
-                    for i in iri:
-                        _types[i] = cls
-                else:
-                    _types[iri] = cls
+                iris = iri if isinstance(iri, list) else [iri]
+                registry = _controller_types if _is_ctrl else _types
+                for i in iris:
+                    if _is_ctrl:
+                        registry.setdefault(i, []).append(cls)
+                    else:
+                        registry[i] = cls
         return cls
 
     # override operators, see https://docs.python.org/3/library/operator.html

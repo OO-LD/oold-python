@@ -1043,6 +1043,14 @@ class BaseController:
     backend resolution.
     """
 
+    def __setattr__(self, name, value, internal=False):
+        """Route private attrs through object.__setattr__ to bypass
+        Pydantic's field validation for controller state fields."""
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+        else:
+            super().__setattr__(name, value, internal=internal)
+
     def _get_data_model_cls(self):
         """Auto-detect the pure data model class from the MRO.
 

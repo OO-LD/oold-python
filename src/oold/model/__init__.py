@@ -1090,7 +1090,17 @@ class BaseController:
         if name.startswith("_"):
             object.__setattr__(self, name, value)
         else:
-            super().__setattr__(name, value, internal=internal)
+            try:
+                super().__setattr__(name, value, internal=internal)
+            except (ValueError, AttributeError):
+                _logger.warning(
+                    "Setting '%s' on %s bypassed Pydantic. "
+                    "Declare it as a Pydantic field or use a "
+                    "_private name.",
+                    name,
+                    type(self).__name__,
+                )
+                object.__setattr__(self, name, value)
 
     def _get_data_model_cls(self):
         """Auto-detect the pure data model class from the MRO.

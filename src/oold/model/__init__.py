@@ -107,6 +107,7 @@ class FieldProxy:
 
 # pydantic v2
 _types: Dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
+_controller_types: Dict[str, List] = {}
 
 
 M = TypeVar("M", bound="LinkedBaseModel")
@@ -130,23 +131,23 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
-        # Register type IRI mapping, but skip controller classes
+        # Register type IRI mapping. Controllers go to _controller_types
         # (they extend data models but should not replace them in
         # the type lookup table).
         _is_ctrl = any(
             b.__module__ == "oold.model" and b.__name__ == "BaseController"
             for b in cls.__mro__
         )
-        if _is_ctrl:
-            pass
-        elif hasattr(cls, "get_cls_iri"):
+        if hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
-                if isinstance(iri, list):
-                    for i in iri:
-                        _types[i] = cls
-                else:
-                    _types[iri] = cls
+                iris = iri if isinstance(iri, list) else [iri]
+                registry = _controller_types if _is_ctrl else _types
+                for i in iris:
+                    if _is_ctrl:
+                        registry.setdefault(i, []).append(cls)
+                    else:
+                        registry[i] = cls
         return cls
 
     # override operators, see https://docs.python.org/3/library/operator.html
@@ -476,8 +477,7 @@ class LinkedBaseModel(
         if a and isinstance(a[0], BaseModel):
             source = a[0]
             result = source.cast(type(self), **kw)
-            kw = super(LinkedBaseModel, result).model_dump()
-            LinkedBaseModel._recursive_object_to_iri(kw, source)
+            kw = result._raw_dict()
             kw["__iris__"] = getattr(result, "__iris__", {})
             a = ()
 
@@ -672,6 +672,46 @@ class LinkedBaseModel(
             )
         return result
 
+    def _raw_dict(self):
+        """Serialize to dict without _object_to_iri at any level.
+
+        Used by cast() to preserve inline objects through reconstruction.
+        IRI-only fields (value=None, IRI in __iris__) are included as
+        IRI strings. Inline objects are recursively serialized as dicts.
+        """
+        d = {}
+        fields = (
+            self.model_fields
+            if hasattr(self, "model_fields")
+            else getattr(self, "__fields__", {})
+        )
+        for name in fields:
+            val = self.__dict__.get(name)
+            if val is None:
+                iri = self.__iris__.get(name) if hasattr(self, "__iris__") else None
+                d[name] = iri if iri else None
+            elif isinstance(val, list):
+                items = []
+                for item in val:
+                    if hasattr(item, "_raw_dict"):
+                        items.append(item._raw_dict())
+                    elif hasattr(item, "model_dump"):
+                        items.append(item.model_dump())
+                    elif hasattr(item, "dict"):
+                        items.append(item.dict())
+                    else:
+                        items.append(item)
+                d[name] = items
+            elif hasattr(val, "_raw_dict"):
+                d[name] = val._raw_dict()
+            elif hasattr(val, "model_dump"):
+                d[name] = val.model_dump()
+            elif hasattr(val, "dict"):
+                d[name] = val.dict()
+            else:
+                d[name] = val
+        return d
+
     def model_dump(self, **kwargs):  # extent BaseClass export function
         # print("dict")
         remove_none = kwargs.get("exclude_none", False)
@@ -686,12 +726,17 @@ class LinkedBaseModel(
         return d
 
     @staticmethod
+    @staticmethod
     def _recursive_object_to_iri(d: dict, model_obj):
         """Recursively apply __iris__ replacement for nested model objects."""
+        fields = (
+            model_obj.model_fields
+            if hasattr(model_obj, "model_fields")
+            else getattr(model_obj, "__fields__", {})
+        )
         for name, value in list(d.items()):
-            if name not in model_obj.model_fields:
+            if name not in fields:
                 continue
-            # Access raw value without triggering IRI resolution
             model_value = model_obj.__dict__.get(name)
             if isinstance(value, list) and isinstance(model_value, list):
                 for item, model_item in zip(value, model_value):
@@ -926,11 +971,8 @@ class LinkedBaseModel(
         kwargs
             Additional fields to set on the new instance.
         """
-        # Use raw Pydantic model_dump (without _object_to_iri which replaces
-        # inline objects with IRIs). Only inject __iris__ for nested objects
-        # so their range-field IRIs survive reconstruction.
-        raw = super().model_dump()
-        self._recursive_object_to_iri(raw, self)
+        # Use _raw_dict to preserve inline objects at all depths.
+        raw = self._raw_dict()
         data = {**raw, **kwargs}
         none_args = []
         if none_to_default:
@@ -1042,6 +1084,24 @@ class BaseController:
     backend resolution.
     """
 
+    def __setattr__(self, name, value, internal=False):
+        """Route private attrs through object.__setattr__ to bypass
+        Pydantic's field validation for controller state fields."""
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+        else:
+            try:
+                super().__setattr__(name, value, internal=internal)
+            except (ValueError, AttributeError):
+                _logger.warning(
+                    "Setting '%s' on %s bypassed Pydantic. "
+                    "Declare it as a Pydantic field or use a "
+                    "_private name.",
+                    name,
+                    type(self).__name__,
+                )
+                object.__setattr__(self, name, value)
+
     def _get_data_model_cls(self):
         """Auto-detect the pure data model class from the MRO.
 
@@ -1111,10 +1171,6 @@ class BaseController:
                 merged.append(default)
         return merged if merged else None
 
-    def _cast_to_pure(self, model_cls):
-        """Cast self to the pure model class."""
-        return self.cast(model_cls, remove_extra=True)
-
     def to_json(self, **kwargs):
         # Serialize with LinkedBaseModel.to_json (includes __iris__),
         # then strip controller-only fields
@@ -1136,12 +1192,24 @@ class BaseController:
         return data
 
     def to_jsonld(self):
+        data = super().to_jsonld()
         model_cls = self._get_data_model_cls()
         if model_cls is not None:
             merged_types = self._collect_type_array()
-            pure = self._cast_to_pure(model_cls)
-            data = pure.to_jsonld()
             if merged_types:
                 data["type"] = merged_types
-            return data
-        return super().to_jsonld()
+            model_fields = set(
+                model_cls.model_fields.keys()
+                if hasattr(model_cls, "model_fields")
+                else getattr(model_cls, "__fields__", {}).keys()
+            )
+            for key in list(data.keys()):
+                if key not in model_fields and key not in (
+                    "type",
+                    "@type",
+                    "@context",
+                    "@id",
+                    "id",
+                ):
+                    del data[key]
+        return data

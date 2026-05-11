@@ -109,6 +109,7 @@ class FieldProxy:
 
 # pydantic v1
 _types: Dict[str, pydantic.v1.main.ModelMetaclass] = {}
+_controller_types: Dict[str, List] = {}
 
 
 M = TypeVar("M", bound="LinkedBaseModel")
@@ -132,21 +133,21 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
         finally:
             LinkedBaseModelMetaClass._constructing = False
 
-        # Register type IRI mapping, but skip controller classes
+        # Register type IRI mapping. Controllers go to _controller_types.
         _is_ctrl = any(
             b.__module__ == "oold.model" and b.__name__ == "BaseController"
             for b in cls.__mro__
         )
-        if _is_ctrl:
-            pass
-        elif hasattr(cls, "get_cls_iri"):
+        if hasattr(cls, "get_cls_iri"):
             iri = cls.get_cls_iri()
             if iri is not None:
-                if isinstance(iri, list):
-                    for i in iri:
-                        _types[i] = cls
-                else:
-                    _types[iri] = cls
+                iris = iri if isinstance(iri, list) else [iri]
+                registry = _controller_types if _is_ctrl else _types
+                for i in iris:
+                    if _is_ctrl:
+                        registry.setdefault(i, []).append(cls)
+                    else:
+                        registry[i] = cls
         return cls
 
     # override operators, see https://docs.python.org/3/library/operator.html
@@ -397,12 +398,7 @@ class LinkedBaseModel(_LinkedBaseModel):
         if a and isinstance(a[0], BaseModel):
             source = a[0]
             result = source.cast(type(self), **kw)
-            # Use raw Pydantic dict to preserve inline objects
-            # (our dict() override replaces them with IRIs).
-            # Inject nested IRIs from the SOURCE (not result, which
-            # may have lost nested __iris__ during cast reconstruction).
-            kw = super(LinkedBaseModel, result).dict()
-            LinkedBaseModel._recursive_object_to_iri(kw, source)
+            kw = result._raw_dict()
             kw["__iris__"] = getattr(result, "__iris__", {})
             a = ()
 
@@ -706,21 +702,53 @@ class LinkedBaseModel(_LinkedBaseModel):
         return cls._oold_query(item)
 
     @staticmethod
+    @staticmethod
     def _recursive_object_to_iri(d: dict, model_obj):
         """Recursively apply __iris__ replacement for nested model objects."""
         for name, value in list(d.items()):
             if name not in model_obj.__fields__:
                 continue
-            # Access raw value without triggering IRI resolution
             model_value = model_obj.__dict__.get(name)
             if isinstance(value, list) and isinstance(model_value, list):
-                for i, (item, model_item) in enumerate(zip(value, model_value)):
+                for item, model_item in zip(value, model_value):
                     if isinstance(item, dict) and hasattr(model_item, "__iris__"):
                         model_item._object_to_iri(item)
                         LinkedBaseModel._recursive_object_to_iri(item, model_item)
             elif isinstance(value, dict) and hasattr(model_value, "__iris__"):
                 model_value._object_to_iri(value)
                 LinkedBaseModel._recursive_object_to_iri(value, model_value)
+
+    def _raw_dict(self):
+        """Serialize to dict without _object_to_iri at any level.
+
+        Used by cast() to preserve inline objects through reconstruction.
+        IRI-only fields (value=None, IRI in __iris__) are included as
+        IRI strings. Inline objects are recursively serialized as dicts.
+        """
+        d = {}
+        fields = getattr(self, "__fields__", {})
+        for name in fields:
+            val = self.__dict__.get(name)
+            if val is None:
+                iri = self.__iris__.get(name) if hasattr(self, "__iris__") else None
+                d[name] = iri if iri else None
+            elif isinstance(val, list):
+                items = []
+                for item in val:
+                    if hasattr(item, "_raw_dict"):
+                        items.append(item._raw_dict())
+                    elif hasattr(item, "dict"):
+                        items.append(item.dict())
+                    else:
+                        items.append(item)
+                d[name] = items
+            elif hasattr(val, "_raw_dict"):
+                d[name] = val._raw_dict()
+            elif hasattr(val, "dict"):
+                d[name] = val.dict()
+            else:
+                d[name] = val
+        return d
 
     def dict(self, **kwargs):
         """Override Pydantic v1 dict() to include __iris__ values.
@@ -807,11 +835,10 @@ class LinkedBaseModel(_LinkedBaseModel):
         kwargs
             Additional fields to set on the new instance.
         """
-        # Use raw Pydantic dict (without _object_to_iri which replaces
-        # inline objects with IRIs). Only inject __iris__ for nested objects
-        # so their range-field IRIs survive reconstruction.
-        raw = super().dict()
-        self._recursive_object_to_iri(raw, self)
+        # Use _raw_dict to preserve inline objects at all depths.
+        # Unlike dict()/_object_to_iri, this keeps nested models as
+        # dicts instead of replacing them with IRIs.
+        raw = self._raw_dict()
         data = {**raw, **kwargs}
         none_args = []
         if none_to_default:

@@ -1174,13 +1174,13 @@ class BaseController:
     def to_json(self, **kwargs):
         # Serialize with LinkedBaseModel.to_json (includes __iris__),
         # then strip controller-only fields
-        data = super().to_json(**kwargs)
         model_cls = self._get_data_model_cls()
         if model_cls is not None:
-            merged_types = self._collect_type_array()
-            if merged_types:
-                data["type"] = merged_types
-            # Remove fields not in the pure data model
+            # Use _raw_dict to avoid serialization errors from
+            # non-serializable controller fields (e.g. _driver).
+            # This bypasses BaseModel.json() which would fail on
+            # controller-added fields before we can strip them.
+            data = self._raw_dict()
             model_fields = set(
                 model_cls.model_fields.keys()
                 if hasattr(model_cls, "model_fields")
@@ -1189,7 +1189,13 @@ class BaseController:
             for key in list(data.keys()):
                 if key not in model_fields and key not in ("type", "@context"):
                     del data[key]
-        return data
+            merged_types = self._collect_type_array()
+            if merged_types:
+                data["type"] = merged_types
+            # Remove None values (match exclude_none behavior)
+            data = {k: v for k, v in data.items() if v is not None}
+            return data
+        return super().to_json(**kwargs)
 
     def to_jsonld(self):
         data = super().to_jsonld()

@@ -83,8 +83,6 @@ jobs:
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
-        with:
-          enable-cache: 'false'
 
       # Run current benchmarks
       - name: Run benchmark tests
@@ -94,46 +92,26 @@ jobs:
           --benchmark-json=benchmark_results.json
         continue-on-error: true
 
-      # Save current results before switching branches
-      - name: Save current benchmark results
-        if: github.event_name == 'pull_request'
-        run: |
-          if [ -f benchmark_results.json ]; then
-            cp benchmark_results.json current_benchmark.json
-            echo "✓ Saved current benchmark results"
-          else
-            echo "⚠️  No benchmark_results.json found"
-            ls -la
-          fi
-
-      # Try to get baseline from main branch
+      # Try to get baseline from main branch via worktree (avoids switching branches
+      # in the main workspace, which would delete action files not yet on main)
       - name: Get baseline benchmarks
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin main:main || true
-          git checkout main || exit 0
+          git worktree add /tmp/baseline main 2>/dev/null || {
+            echo "⚠️  Could not create worktree for main, skipping baseline"
+            exit 0
+          }
+          cd /tmp/baseline
           uv run python -m pytest -c pytest.benchmark.ini \
             --benchmark-only --benchmark-autosave \
-            --benchmark-json=benchmark_results.json || true
-          if [ -f benchmark_results.json ]; then
-            mv benchmark_results.json baseline_benchmark.json
+            --benchmark-json="$GITHUB_WORKSPACE/baseline_benchmark.json" || true
+          if [ -f "$GITHUB_WORKSPACE/baseline_benchmark.json" ]; then
             echo "✓ Saved baseline benchmark results"
           else
             echo "⚠️  No baseline benchmarks generated"
           fi
-          git checkout ${{ github.head_ref }}
+          git -C "$GITHUB_WORKSPACE" worktree remove /tmp/baseline --force || true
         continue-on-error: true
-
-      # Restore current results
-      - name: Restore current benchmark results
-        if: github.event_name == 'pull_request'
-        run: |
-          if [ -f current_benchmark.json ]; then
-            mv current_benchmark.json benchmark_results.json
-            echo "✓ Restored current benchmark results"
-          fi
-          echo "Files available for comparison:"
-          ls -la *.json || echo "No JSON files found"
 
       # Compare benchmarks if baseline exists
       - name: Compare with baseline

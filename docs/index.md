@@ -1,18 +1,31 @@
-# Object Oriented Linked Data
+---
+title: Object Oriented Linked Data
+---
 
 <p align="center" markdown>
-  ![OO-LD logo](https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg){ width="220" }
+  ![OO-LD logo](https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg){ width="240" }
 </p>
 
-[![DOI](https://zenodo.org/badge/691355012.svg)](https://zenodo.org/doi/10.5281/zenodo.8374237)
-[![PyPI](https://img.shields.io/pypi/v/oold.svg)](https://pypi.org/project/oold/)
-[![Build](https://img.shields.io/github/actions/workflow/status/OO-LD/oold-python/main.yml?branch=main)](https://github.com/OO-LD/oold-python/actions/workflows/main.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/OO-LD/oold-python/branch/main/graph/badge.svg)](https://codecov.io/gh/OO-LD/oold-python)
-[![License](https://img.shields.io/github/license/OO-LD/oold-python)](https://github.com/OO-LD/oold-python/blob/main/LICENSE)
+<h1 align="center" style="margin-top: 0;">Object Oriented Linked Data</h1>
 
-**oold-python** brings the semantic web into your Python type system. Define schemas once, generate fully typed Pydantic models, resolve objects across knowledge graphs by IRI, and serialize back to JSON-LD - all without leaving familiar Python patterns.
+<p align="center"><em>The semantic web, in your Python type system.</em></p>
+
+<p align="center">
+<a href="https://zenodo.org/doi/10.5281/zenodo.8374237"><img alt="DOI" src="https://zenodo.org/badge/691355012.svg"></a>
+<a href="https://pypi.org/project/oold/"><img alt="PyPI" src="https://img.shields.io/pypi/v/oold.svg"></a>
+<a href="https://github.com/OO-LD/oold-python/actions/workflows/main.yml?query=branch%3Amain"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/OO-LD/oold-python/main.yml?branch=main"></a>
+<a href="https://codecov.io/gh/OO-LD/oold-python"><img alt="Coverage" src="https://codecov.io/gh/OO-LD/oold-python/branch/main/graph/badge.svg"></a>
+<a href="https://github.com/OO-LD/oold-python/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/OO-LD/oold-python"></a>
+</p>
+
+<p align="center" markdown>
+[:material-rocket-launch: Get Started](get-started.md){ .md-button .md-button--primary }
+[:material-book-open-variant: How to Use](how-to/index.md){ .md-button }
+</p>
 
 ---
+
+Define schemas once, generate fully typed Pydantic models, resolve objects across knowledge graphs by IRI, and serialize back to JSON-LD - all without leaving familiar Python patterns.
 
 ## Why oold-python?
 

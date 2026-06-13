@@ -83,6 +83,8 @@ jobs:
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
+        with:
+          enable-cache: 'false'
 
       # Run current benchmarks
       - name: Run benchmark tests

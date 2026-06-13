@@ -271,9 +271,12 @@ def test_nested_iri_serialization(pydantic_version):
 
 def _run_cast_tests(pydantic_version="v2"):
     if pydantic_version == "v1":
-        from oold.model.v1 import LinkedBaseModel
+        from oold.model.v1 import LinkedBaseModel as _LinkedBaseModel
     else:
-        from oold.model import LinkedBaseModel
+        from oold.model import LinkedBaseModel as _LinkedBaseModel
+    # The v1/v2 classes differ; bind through an Any-typed alias so the dynamic
+    # base class is accepted regardless of the selected pydantic version.
+    LinkedBaseModel: Any = _LinkedBaseModel
 
     class ModelA(LinkedBaseModel):
         value: float
@@ -329,11 +332,15 @@ def _run_nested_iris_cast_tests(pydantic_version="v2"):
     if pydantic_version == "v1":
         from pydantic.v1 import Field as PydField
 
-        from oold.model.v1 import LinkedBaseModel
+        from oold.model.v1 import LinkedBaseModel as _LinkedBaseModel
     else:
         from pydantic import Field as PydField
 
-        from oold.model import LinkedBaseModel
+        from oold.model import LinkedBaseModel as _LinkedBaseModel
+
+    # Bind through an Any-typed alias so the dynamic base class is accepted
+    # regardless of the selected pydantic version.
+    LinkedBaseModel: Any = _LinkedBaseModel
 
     from pydantic import ConfigDict
 

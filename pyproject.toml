@@ -151,6 +151,13 @@ extend_exclude = ["src/oold/ui/anywidget/.*\\.ipynb"]
 [tool.deptry.package_module_name_map]
 # The `ipython` distribution is imported as `IPython`.
 ipython = "IPython"
+# Optional UI extras are not installed in the lint/type environment, so declare
+# their import-module names explicitly instead of letting deptry guess.
+jupyter_bokeh = "jupyter_bokeh"
+anywidget = "anywidget"
+ipykernel = "ipykernel"
+traitlets = "traitlets"
+nicegui = "nicegui"
 
 [tool.deptry.per_rule_ignores]
 # Declared in UI extras and required at runtime by the panel/jupyter

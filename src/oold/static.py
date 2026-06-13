@@ -12,6 +12,7 @@ from typing import Any, Literal, TypeVar, Union
 import jsondiff
 import pydantic_core.core_schema as core_schema
 import pyld
+import pyld.documentloader.requests
 import yaml
 from pydantic import BaseModel, create_model
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue

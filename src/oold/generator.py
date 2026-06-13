@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import datamodel_code_generator
+import datamodel_code_generator.parser.jsonschema
 from datamodel_code_generator import DataModelType, InputFileType, generate
 from pydantic import BaseModel
 

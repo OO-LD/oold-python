@@ -81,9 +81,9 @@ class Generator:
                     exist_ok=True,
                 )
                 with open(Path(temporary_directory / (name + ".json")), "w", encoding="utf-8") as f:
-                    schema_str = json.dumps(schema, ensure_ascii=False, indent=4).replace("dollarref", "$ref")
+                    schema_str = json.dumps(schema, ensure_ascii=False, indent=2).replace("dollarref", "$ref")
                     # print(schema_str)
-                    f.write(schema_str)
+                    f.write(schema_str + "\n")
 
             if params.output_model_type == DataModelType.PydanticV2BaseModel:
                 base_class = "oold.model.LinkedBaseModel"

@@ -1,7 +1,7 @@
 import operator as _op
 from abc import abstractmethod
 from enum import Enum
-from typing import Dict, List, Optional, Type, Union
+from typing import Union
 
 from pydantic import BaseModel
 
@@ -45,15 +45,15 @@ class GetResolverResult(BaseModel):
 
 
 class ResolveParam(BaseModel):
-    iris: List[str]
-    model_cls: Optional[Type[GenericLinkedBaseModel]] = None
+    iris: list[str]
+    model_cls: type[GenericLinkedBaseModel] | None = None
 
 
 class ResolveResult(BaseModel):
     model_config = {
         "arbitrary_types_allowed": True,
     }
-    nodes: Dict[str, Union[None, GenericLinkedBaseModel]]
+    nodes: dict[str, None | GenericLinkedBaseModel]
 
 
 class Query(BaseModel):
@@ -68,8 +68,8 @@ class Query(BaseModel):
 
 class Condition(BaseModel):
     field: str
-    operator: Optional[ComparisonOperator] = None
-    value: Optional[Union[str, int, float]] = None
+    operator: ComparisonOperator | None = None
+    value: str | int | float | None = None
 
     # override the == operator
     def __eq__(self, other):
@@ -83,8 +83,8 @@ class Condition(BaseModel):
 
 
 class QueryParam(BaseModel):
-    query: Union[Query, Condition]
-    model_cls: Optional[Type[GenericLinkedBaseModel]] = None
+    query: Query | Condition
+    model_cls: type[GenericLinkedBaseModel] | None = None
 
 
 class LinkedDataFormat(str, Enum):
@@ -93,11 +93,11 @@ class LinkedDataFormat(str, Enum):
 
 
 class Resolver(BaseModel):
-    model_cls: Optional[Type[GenericLinkedBaseModel]] = None
-    format: Optional[LinkedDataFormat] = LinkedDataFormat.JSON_LD
+    model_cls: type[GenericLinkedBaseModel] | None = None
+    format: LinkedDataFormat | None = LinkedDataFormat.JSON_LD
 
     @abstractmethod
-    def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+    def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         pass
 
     def resolve(self, request: ResolveParam):
@@ -164,7 +164,7 @@ class StoreParam(BaseModel):
     model_config = {
         "arbitrary_types_allowed": True,
     }
-    nodes: Dict[str, Union[None, GenericLinkedBaseModel]]
+    nodes: dict[str, None | GenericLinkedBaseModel]
 
 
 class StoreResult(BaseModel):
@@ -189,15 +189,11 @@ class Backend(Resolver):
         else:
             return self.store_jsonld_dicts(jsonld_dicts)
 
-    def store_jsonld_dicts(self, jsonld_dicts: Dict[str, Dict]) -> StoreResult:
-        raise NotImplementedError(
-            "store_jsonld_dicts method not implemented in Backend subclass"
-        )
+    def store_jsonld_dicts(self, jsonld_dicts: dict[str, dict]) -> StoreResult:
+        raise NotImplementedError("store_jsonld_dicts method not implemented in Backend subclass")
 
-    def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
-        raise NotImplementedError(
-            "store_json_dicts method not implemented in Backend subclass"
-        )
+    def store_json_dicts(self, json_dicts: dict[str, dict]) -> StoreResult:
+        raise NotImplementedError("store_json_dicts method not implemented in Backend subclass")
 
 
 global _backends

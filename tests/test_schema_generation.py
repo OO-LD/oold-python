@@ -1,5 +1,4 @@
 import json
-from typing import Optional
 
 import jsondiff
 import pytest
@@ -37,7 +36,7 @@ def _run(pydantic_version="v1"):
             """
             A simple test
             """
-            my_property: Optional[str] = Field(
+            my_property: str | None = Field(
                 "default value",
                 title="My property",
                 title_={"de": "Mein Attribut"},
@@ -78,7 +77,7 @@ def _run(pydantic_version="v1"):
             """
             A simple test
             """
-            my_property: Optional[str] = Field(
+            my_property: str | None = Field(
                 "default value",
                 title="My property",
                 title_={"de": "Mein Attribut"},

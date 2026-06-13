@@ -1,6 +1,5 @@
 import json
 from pprint import pprint
-from typing import Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field
 class LinkedBaseModel(BaseModel):
     type: str
     id: str
-    _iris: Optional[Dict[str, str]] = {}
+    _iris: dict[str, str] | None = {}
 
     def __init__(self, *a, **kw):
         # print("Init")
@@ -75,23 +74,21 @@ class LinkedBaseModel(BaseModel):
 
     def model_dump_json(self, **kwargs):
         # print("json")
-        d = json.loads(
-            BaseModel.model_dump_json(self, **kwargs)
-        )  # ToDo directly use dict?
+        d = json.loads(BaseModel.model_dump_json(self, **kwargs))  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **kwargs)
 
 
 class Bar(LinkedBaseModel):
-    type: Optional[str] = "Bar"
+    type: str | None = "Bar"
     prop1: str
 
 
 class Foo(LinkedBaseModel):
-    type: Optional[str] = "Foo"
+    type: str | None = "Foo"
     literal: str
     b_iri: str
-    b: Optional[Bar] = Field(None, range="ex:test")
+    b: Bar | None = Field(None, range="ex:test")
 
 
 graph = [
@@ -119,7 +116,7 @@ graph = [
 ]
 
 
-def get(iri) -> Union[None, LinkedBaseModel]:
+def get(iri) -> None | LinkedBaseModel:
     for node in graph:
         if node["id"] == iri:
             cls = node["type"]

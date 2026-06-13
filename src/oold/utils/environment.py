@@ -3,7 +3,7 @@
 import ast
 import inspect
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 
 def is_running_in_ipython() -> bool:
@@ -24,7 +24,7 @@ def is_running_in_pyodide() -> bool:
 
 def get_ipython_source() -> str:
     """Get the source code of the running notebook."""
-    from IPython import get_ipython
+    from IPython import get_ipython  # ty: ignore[unresolved-import]  # optional, only present in IPython/Jupyter
 
     shell = get_ipython()
     if shell is None:
@@ -52,20 +52,15 @@ def get_object_source_from_ipython_source(obj: Callable) -> str:
     segment = None
     for node in ast.walk(tree):
         # Check for function or class definitions, depending on the type of obj
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == obj_name
+        if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == obj_name) or (
+            isinstance(node, ast.ClassDef) and node.name == obj_name
         ):
-            segment = ast.get_source_segment(notebook_source, node)
-        elif isinstance(node, ast.ClassDef) and node.name == obj_name:
             segment = ast.get_source_segment(notebook_source, node)
 
     if segment is not None:
         return segment
 
-    raise ValueError(
-        f"Object '{obj_name}' definition not found in the ipython session source code"
-    )
+    raise ValueError(f"Object '{obj_name}' definition not found in the ipython session source code")
 
 
 def get_object_source(obj: Callable) -> str:

@@ -1,20 +1,54 @@
-# Setup
-1. create a virtual environment
+# Development
+
+This project uses [uv](https://docs.astral.sh/uv/) for environment/dependency
+management and `make` as the developer entrypoint.
+
+## Setup
+
+Install the virtual environment and the pre-commit hooks:
+
 ```bash
-python -m venv .venv
+make install
 ```
 
-1. install requirements + extras
+(equivalent to `uv sync` + `uv run pre-commit install`)
+
+## Code quality
+
+Run the linters, formatter, type checker and dependency check:
+
 ```bash
-pip install -e .[dev,testing]
+make check
 ```
 
+(`pre-commit` / ruff, `ty check`, `deptry`)
 
-# Testing
+## Testing
 
-1. Create new test (file name test_*.py) under /tests
+1. Create a new test (file name `test_*.py`) under `/tests`.
+2. Run the test suite:
 
-1. Run pytest in the project root dir
 ```bash
-tox -e test
+make test
+```
+
+To run the suite across all supported Python versions:
+
+```bash
+uv run tox
+```
+
+## Benchmarks
+
+```bash
+make benchmark
+```
+
+## Documentation
+
+Build and serve the docs locally with [zensical](https://github.com/squidfunk/zensical):
+
+```bash
+make docs        # serve with live reload
+make docs-test   # strict build (fails on warnings)
 ```

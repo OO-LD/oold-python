@@ -1,7 +1,8 @@
 [![DOI](https://zenodo.org/badge/691355012.svg)](https://zenodo.org/doi/10.5281/zenodo.8374237)
 [![PyPI-Server](https://img.shields.io/pypi/v/oold.svg)](https://pypi.org/project/oold/)
-[![Coveralls](https://img.shields.io/coveralls/github/OpenSemanticWorld/oold-python/main.svg)](https://coveralls.io/r/<USER>/oold)
-[![Project generated with PyScaffold](https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold)](https://pyscaffold.org/)
+[![Build status](https://img.shields.io/github/actions/workflow/status/OO-LD/oold-python/main.yml?branch=main)](https://github.com/OO-LD/oold-python/actions/workflows/main.yml?query=branch%3Amain)
+[![codecov](https://codecov.io/gh/OO-LD/oold-python/branch/main/graph/badge.svg)](https://codecov.io/gh/OO-LD/oold-python)
+[![License](https://img.shields.io/github/license/OO-LD/oold-python)](https://github.com/OO-LD/oold-python/blob/main/LICENSE)
 
 
 # oold-python
@@ -12,6 +13,18 @@ Linked data class python package for object oriented linked data ([OO-LD](https:
 ```
 pip install oold
 ```
+
+## Development
+
+This project uses [uv](https://docs.astral.sh/uv/) and `make`:
+
+```bash
+make install   # create the venv and install pre-commit hooks
+make check     # ruff (lint+format), ty (types), deptry (deps)
+make test      # run the test suite with coverage
+```
+
+See [docs/dev.md](docs/dev.md) for details.
 
 ## Objectives
 - lossless transpilation between [OO-LD](https://github.com/OO-LD/schema) schemas and extended pydantic data classes

@@ -1,22 +1,22 @@
 {
-    "id": "./bar2/Bar2",
-    "title": "Bar2",
-    "type": "object",
-    "properties": {
-        "id": {
-            "type": "string"
-        },
-        "type": {
-            "type": "array",
-            "items": {
-                "type": "string"
-            },
-            "default": [
-                "Bar2"
-            ]
-        },
-        "prop1": {
-            "type": "string"
-        }
+  "id": "./bar2/Bar2",
+  "title": "Bar2",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "Bar2"
+      ]
+    },
+    "prop1": {
+      "type": "string"
     }
+  }
 }

@@ -1,7 +1,5 @@
 """Tests for BaseController serialization and model detection."""
 
-from typing import List, Optional
-
 from pydantic import ConfigDict, Field
 
 from oold.model import BaseController, LinkedBaseModel
@@ -11,13 +9,13 @@ from oold.model import BaseController, LinkedBaseModel
 
 class ModelA(LinkedBaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "ModelA"})
-    type: Optional[List[str]] = ["Category:OSWModelA"]
+    type: list[str] | None = ["Category:OSWModelA"]
     field_a: str = "default_a"
 
 
 class ModelB(LinkedBaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "ModelB"})
-    type: Optional[List[str]] = ["Category:OSWModelB"]
+    type: list[str] | None = ["Category:OSWModelB"]
     field_b: str = "default_b"
 
 
@@ -108,9 +106,9 @@ class Parent(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={"title": "Parent"},
     )
-    type: Optional[List[str]] = ["Category:OSWParent"]
-    children: Optional[List["Child"]] = None
-    ref: Optional[str] = Field(None, json_schema_extra={"range": "Category:Target"})
+    type: list[str] | None = ["Category:OSWParent"]
+    children: list["Child"] | None = None
+    ref: str | None = Field(None, json_schema_extra={"range": "Category:Target"})
 
 
 class Child(LinkedBaseModel):
@@ -118,9 +116,7 @@ class Child(LinkedBaseModel):
         json_schema_extra={"title": "Child"},
     )
     value: int = 0
-    ref: Optional[str] = Field(
-        None, json_schema_extra={"range": "Category:ChildTarget"}
-    )
+    ref: str | None = Field(None, json_schema_extra={"range": "Category:ChildTarget"})
 
 
 class ParentController(BaseController, Parent):

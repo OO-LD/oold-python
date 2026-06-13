@@ -1,0 +1,82 @@
+[project]
+site_name = "Object Oriented Linked Data (OOLD)"
+repo_url = "https://github.com/OO-LD/oold-python"
+site_url = "https://OO-LD.github.io/oold-python/"
+site_description = "Linked data class python package"
+site_author = "OO-LD Contributors"
+edit_uri = "edit/main/docs/"
+repo_name = "OO-LD/oold-python"
+copyright = 'Maintained by <a href="https://github.com/OO-LD">OO-LD</a>.'
+
+nav = [
+    { "Home" = "index.md" },
+    { "oold" = "oold.md" },
+    { "Development" = "dev.md" },
+]
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src/oold"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "numpy"
+
+[project.theme]
+language = "en"
+features = [
+    "announce.dismiss",
+    "content.code.annotate",
+    "content.action.edit",
+    "content.action.view",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "content.tooltips",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.prune",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+]
+
+
+[project.theme.icon]
+previous = "fontawesome/solid/angle-left"
+next = "fontawesome/solid/angle-right"
+repo = "fontawesome/brands/github"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "white"
+accent = "deep orange"
+toggle.icon =  "material/brightness-7"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "black"
+accent = "deep orange"
+toggle.icon =  "material/brightness-4"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/OO-LD/oold-python"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/python"
+link = "https://pypi.org/project/oold"
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.toc]
+permalink = true

@@ -1,5 +1,4 @@
 import time
-from typing import List, Optional
 
 import pytest
 
@@ -43,9 +42,9 @@ def _define_entity(pydantic_version):
             """The IRI of the entity."""
             name: str
             """The name of the entity."""
-            type: Optional[str] = "ex:Entity"
+            type: str | None = "ex:Entity"
             """The type of the entity."""
-            links: Optional[List["Entity"]] = Field(
+            links: list["Entity"] | None = Field(
                 None,
                 range="ex:Entity",
             )
@@ -80,9 +79,9 @@ def _define_entity(pydantic_version):
             """The IRI of the entity."""
             name: str
             """The name of the entity."""
-            type: Optional[str] = "ex:Entity"
+            type: str | None = "ex:Entity"
             """The type of the entity."""
-            links: Optional[List["Entity"]] = Field(
+            links: list["Entity"] | None = Field(
                 None,
                 json_schema_extra={
                     "range": "ex:Entity",
@@ -94,7 +93,7 @@ def _define_entity(pydantic_version):
 
 
 def _run_queries(pydantic_version):
-    Entity, LinkedBaseModelList = _define_entity(pydantic_version)
+    Entity, _LinkedBaseModelList = _define_entity(pydantic_version)
 
     backend = SimpleDictDocumentStore()
     set_backend(SetBackendParam(iri="ex", backend=backend))
@@ -133,9 +132,7 @@ def _run_linked_base_model_list(pydantic_version):
     assert synced_iri_list == ["ex:e1", "ex:e2", "ex:e3"]
     el.remove(Entity(id="ex:e2", name="Entity 2"))
     assert synced_iri_list == ["ex:e1", "ex:e3"]
-    el.extend(
-        [Entity(id="ex:e4", name="Entity 4"), Entity(id="ex:e5", name="Entity 5")]
-    )
+    el.extend([Entity(id="ex:e4", name="Entity 4"), Entity(id="ex:e5", name="Entity 5")])
     assert synced_iri_list == ["ex:e1", "ex:e3", "ex:e4", "ex:e5"]
 
     assert el[0].id == "ex:e1"
@@ -167,19 +164,13 @@ def _run_linked_base_model_list(pydantic_version):
     assert e3.links[(Entity.name == "Entity 1")] is not None
     assert e3.links[Entity.name == "Entity 1"][0].id == "ex:e1"
 
-    assert [e for e in e3.links if e.name == "Entity 1"][0].id == "ex:e1"
+    assert next(e for e in e3.links if e.name == "Entity 1").id == "ex:e1"
 
     # test multi chain
-    assert (
-        e3.links[Entity.name == "Entity 2"][0].links[Entity.name == "Entity 1"][0].id
-        == "ex:e1"
-    )
-    assert (
-        e3.links[Entity.name == "Entity 2"].links[Entity.name == "Entity 1"][0].id
-        == "ex:e1"
-    )
+    assert e3.links[Entity.name == "Entity 2"][0].links[Entity.name == "Entity 1"][0].id == "ex:e1"
+    assert e3.links[Entity.name == "Entity 2"].links[Entity.name == "Entity 1"][0].id == "ex:e1"
 
-    e3.links[Entity.name == "Entity 2"].links[Entity.name == "Entity 1"].name
+    _ = e3.links[Entity.name == "Entity 2"].links[Entity.name == "Entity 1"].name
 
     res = e3.links[Entity.name == "Entity 2"].links[Entity.name == "Entity 1"]
     assert res[0].id == "ex:e1"
@@ -188,14 +179,12 @@ def _run_linked_base_model_list(pydantic_version):
 def _run_operators(pydantic_version):
     Entity, LinkedBaseModelList = _define_entity(pydantic_version)
 
-    el = LinkedBaseModelList[Entity](
-        [
-            Entity(id="ex:a", name="A"),
-            Entity(id="ex:b", name="B"),
-            Entity(id="ex:c", name="C"),
-            Entity(id="ex:d", name="D"),
-        ]
-    )
+    el = LinkedBaseModelList[Entity]([
+        Entity(id="ex:a", name="A"),
+        Entity(id="ex:b", name="B"),
+        Entity(id="ex:c", name="C"),
+        Entity(id="ex:d", name="D"),
+    ])
 
     # test that OOFieldInfo dunder methods produce correct Condition objects
     cond = Entity.name == "B"
@@ -266,9 +255,7 @@ def _run_performance(pydantic_version):
             for parent in all_entities[layer - 1]:
                 parent.links = layer_entities
     end_time = time.time()
-    total_links = sum(
-        len(e.links) if e.links else 0 for layer in all_entities for e in layer
-    )
+    total_links = sum(len(e.links) if e.links else 0 for layer in all_entities for e in layer)
     print(
         f"[{pydantic_version}] Created"
         f" {layers * entities_per_layer} entities with"
@@ -279,15 +266,11 @@ def _run_performance(pydantic_version):
     layer1 = LinkedBaseModelList[Entity](all_entities[0])
 
     start_time = time.time()
-    res = (
-        layer1[Entity.name == "Entity 0-50"]
-        .links[Entity.name == "Entity 1-50"]
-        .links[Entity.name == "Entity 2-50"]
-    )
+    res = layer1[Entity.name == "Entity 0-50"].links[Entity.name == "Entity 1-50"].links[Entity.name == "Entity 2-50"]
     end_time = time.time()
     assert res[0].name == "Entity 2-50"
     elapsed = end_time - start_time
-    print(f"[{pydantic_version}] Accessed a specific link" f" in {elapsed:.6f} seconds")
+    print(f"[{pydantic_version}] Accessed a specific link in {elapsed:.6f} seconds")
 
 
 @pytest.mark.parametrize("pydantic_version", ["v1", "v2"])

@@ -99,9 +99,7 @@ def jsonld_to_jsonld(graph: dict, transformation_context: dict) -> dict:
     return graph
 
 
-def json_to_json(
-    document: dict, transformation_context: dict, document_context: dict = None
-) -> dict:
+def json_to_json(document: dict, transformation_context: dict, document_context: dict | None = None) -> dict:
     """Applies OO-LD alias notation to transform JSON documents
 
     Parameters

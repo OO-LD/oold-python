@@ -9,16 +9,15 @@ Usage:
 
 import json
 import sys
-from typing import Dict, List, Tuple
 
 
-def load_benchmark_data(filepath: str) -> Dict:
+def load_benchmark_data(filepath: str) -> dict:
     """Load benchmark JSON data."""
     with open(filepath) as f:
         return json.load(f)
 
 
-def extract_benchmarks(data: Dict) -> Dict[str, Dict]:
+def extract_benchmarks(data: dict) -> dict[str, dict]:
     """Extract benchmark results by test name."""
     benchmarks = {}
     for bench in data.get("benchmarks", []):
@@ -35,8 +34,8 @@ def extract_benchmarks(data: Dict) -> Dict[str, Dict]:
 
 
 def compare_benchmarks(
-    baseline: Dict[str, Dict], current: Dict[str, Dict], threshold: float = 1.5
-) -> Tuple[List[str], List[str], List[str]]:
+    baseline: dict[str, dict], current: dict[str, dict], threshold: float = 1.5
+) -> tuple[list[str], list[str], list[str]]:
     """
     Compare benchmark results.
 
@@ -47,7 +46,7 @@ def compare_benchmarks(
     improvements = []
     unchanged = []
 
-    for name in current.keys():
+    for name in current:
         if name not in baseline:
             print(f"⚠️  New benchmark: {name}")
             continue
@@ -60,22 +59,17 @@ def compare_benchmarks(
 
         if ratio > threshold:
             regressions.append(
-                f"❌ {name}: {baseline_mean:.4f}s → {current_mean:.4f}s "
-                f"({change_pct:+.1f}%, ratio: {ratio:.2f}x)"
+                f"❌ {name}: {baseline_mean:.4f}s → {current_mean:.4f}s ({change_pct:+.1f}%, ratio: {ratio:.2f}x)"
             )
         elif ratio < (1.0 / threshold):
             improvements.append(
-                f"✅ {name}: {baseline_mean:.4f}s → {current_mean:.4f}s "
-                f"({change_pct:+.1f}%, ratio: {ratio:.2f}x)"
+                f"✅ {name}: {baseline_mean:.4f}s → {current_mean:.4f}s ({change_pct:+.1f}%, ratio: {ratio:.2f}x)"
             )
         else:
-            unchanged.append(
-                f"➖ {name}: {baseline_mean:.4f}s → {current_mean:.4f}s "
-                f"({change_pct:+.1f}%)"
-            )
+            unchanged.append(f"➖ {name}: {baseline_mean:.4f}s → {current_mean:.4f}s ({change_pct:+.1f}%)")  # noqa: RUF001
 
     # Check for removed benchmarks
-    for name in baseline.keys():
+    for name in baseline:
         if name not in current:
             print(f"⚠️  Removed benchmark: {name}")
 
@@ -86,9 +80,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Compare pytest-benchmark results")
-    parser.add_argument(
-        "baseline", type=str, help="Baseline benchmark results JSON file"
-    )
+    parser.add_argument("baseline", type=str, help="Baseline benchmark results JSON file")
     parser.add_argument("current", type=str, help="Current benchmark results JSON file")
     parser.add_argument(
         "--threshold",
@@ -125,9 +117,7 @@ def main():
     print("=" * 60)
     print()
 
-    regressions, improvements, unchanged = compare_benchmarks(
-        baseline_benchmarks, current_benchmarks, args.threshold
-    )
+    regressions, improvements, unchanged = compare_benchmarks(baseline_benchmarks, current_benchmarks, args.threshold)
 
     # Print results
     if regressions:
@@ -143,18 +133,14 @@ def main():
         print()
 
     if unchanged:
-        print("➖ Unchanged (within threshold):")
+        print("➖ Unchanged (within threshold):")  # noqa: RUF001
         for msg in unchanged:
             print(f"  {msg}")
         print()
 
     # Summary
     print("=" * 60)
-    print(
-        f"Summary: {len(regressions)} regressions, "
-        f"{len(improvements)} improvements, "
-        f"{len(unchanged)} unchanged"
-    )
+    print(f"Summary: {len(regressions)} regressions, {len(improvements)} improvements, {len(unchanged)} unchanged")
     print("=" * 60)
 
     # Exit with error if regressions found
@@ -163,9 +149,7 @@ def main():
         sys.exit(1)
     else:
         if regressions:
-            print(
-                "\n⚠️  Regressions detected but not failing build (informational only)"
-            )
+            print("\n⚠️  Regressions detected but not failing build (informational only)")
         else:
             print("\n✅ No significant performance regressions")
         sys.exit(0)

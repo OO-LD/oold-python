@@ -1,9 +1,242 @@
-[build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
-build-backend = "setuptools.build_meta"
+[project]
+name = "oold"
+description = "Linked data class python package"
+authors = [{ name = "OpenSemanticWorld", email = "team@opensemantic.world" }]
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ['python', 'linked-data', 'json-ld', 'pydantic', 'oo-ld']
+requires-python = ">=3.10,<4.0"
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "pydantic>=2.0.0",
+    "datamodel-code-generator>=0.51.0,<0.55.0",
+    "typing_extensions",
+    "pyld",
+    "rdflib",
+    "sparqlwrapper",
+    "jsondiff",
+    "pyyaml",
+]
 
-[tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
-version_scheme = "no-guess-dev"
+[project.urls]
+Homepage = "https://OO-LD.github.io/oold-python/"
+Documentation = "https://OO-LD.github.io/oold-python/"
+Repository = "https://github.com/OO-LD/oold-python"
+Download = "https://pypi.org/project/oold/#files"
+
+[project.optional-dependencies]
+UI-panel = [
+    "panel",
+    "jupyter_bokeh",
+    "param",
+]
+UI-jupyter = [
+    "anywidget",
+    "ipykernel",
+    "traitlets",
+    "ipython",
+]
+UI-nicegui = [
+    "nicegui",
+]
+UI = [
+    "panel",
+    "jupyter_bokeh",
+    "param",
+    "anywidget",
+    "ipykernel",
+    "traitlets",
+    "ipython",
+    "nicegui",
+]
+all = [
+    "panel",
+    "jupyter_bokeh",
+    "param",
+    "anywidget",
+    "ipykernel",
+    "traitlets",
+    "ipython",
+    "nicegui",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov>=7.0.0",
+    "pytest-benchmark",
+    "pytest-playwright",
+    "jsondiff",
+    "panel",
+    "pre-commit>=4.5.1",
+    "tox-uv>=1.33.4",
+    "deptry>=0.25.1",
+    "ty>=0.0.24",
+    "ruff>=0.15.7",
+    "zensical>=0.0.26",
+    "mkdocstrings-python>=1.0.3",
+]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oold"]
+
+[tool.ty.environment]
+python = "./.venv"
+python-version = "3.10"
+
+[tool.ty.src]
+# Excluded from type checking:
+#  - tests/data: generated (datamodel-code-generator) pydantic models
+#  - src/oold/drafts: draft/experimental code (also excluded from ruff)
+#  - src/oold/ui: optional UI integrations that import optional, un-installed
+#    packages (panel, anywidget, nicegui, traitlets, ...)
+#  - examples: illustrative scripts, not part of the distributed package
+exclude = [
+    "tests/data",
+    "src/oold/drafts",
+    "src/oold/ui",
+    "examples",
+]
+
+[tool.ty.rules]
+# oold builds pydantic models dynamically (create_model), exposes runtime-only
+# attributes (e.g. __iris__) and offers a dynamic subscript/query API
+# (Model["iri"], obj.links[Field == ...]). The following checks fire on these
+# intentional, runtime-valid metaprogramming patterns rather than real bugs, so
+# they are downgraded to keep `ty check` meaningful without mass inline ignores.
+unresolved-attribute = "ignore"
+not-subscriptable = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+unknown-argument = "ignore"
+invalid-return-type = "ignore"
+unsupported-operator = "ignore"
+no-matching-overload = "ignore"
+invalid-method-override = "ignore"
+not-iterable = "ignore"
+invalid-type-form = "ignore"
+missing-argument = "ignore"
+call-non-callable = "ignore"
+too-many-positional-arguments = "ignore"
+subclass-of-final-class = "ignore"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.deptry]
+# The anywidget notebook only runs in the browser (pyodide) and imports
+# `micropip`, which is not a project dependency.
+extend_exclude = ["src/oold/ui/anywidget/.*\\.ipynb"]
+
+[tool.deptry.package_module_name_map]
+# The `ipython` distribution is imported as `IPython`.
+ipython = "IPython"
+
+[tool.deptry.per_rule_ignores]
+# Declared in UI extras and required at runtime by the panel/jupyter
+# integrations, but not imported directly from `src`.
+DEP002 = ["jupyter_bokeh", "ipykernel"]
+# pydantic_core ships with (and is pinned by) pydantic; importing it directly
+# is intentional and does not warrant a separate top-level dependency.
+DEP003 = ["pydantic_core"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+fix = true
+# Generated (datamodel-code-generator output) and draft/experimental code are
+# excluded from linting, mirroring the project's previous flake8 configuration.
+extend-exclude = [
+    "tests/data",
+    "src/oold/drafts",
+]
+
+[tool.ruff.lint]
+select = [
+    # flake8-2020
+    "YTT",
+    # flake8-bandit
+    "S",
+    # flake8-bugbear
+    "B",
+    # flake8-builtins
+    "A",
+    # flake8-comprehensions
+    "C4",
+    # flake8-debugger
+    "T10",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+    # mccabe
+    "C90",
+    # pycodestyle
+    "E", "W",
+    # pyflakes
+    "F",
+    # pygrep-hooks
+    "PGH",
+    # pyupgrade
+    "UP",
+    # ruff
+    "RUF",
+    # tryceratops
+    "TRY",
+]
+ignore = [
+    # LineTooLong
+    "E501",
+    # DoNotAssignLambda
+    "E731",
+    # Mutable default value for class attribute: false positive on pydantic /
+    # param model fields, where ClassVar-annotating would change model semantics.
+    "RUF012",
+    # Avoid specifying long messages outside the exception class: the "fix" is a
+    # large custom-exception-class refactor that would change the public API.
+    "TRY003",
+    # `<function>` is too complex (mccabe): the schema/model transformation code
+    # is inherently branchy; refactoring purely for the metric risks regressions.
+    "C901",
+    # Variable/argument shadows a Python builtin: `property`, `id`, `input` are
+    # used as domain-meaningful local names (JSON-Schema property, JSON-LD id);
+    # renaming them reduces readability for no functional benefit.
+    "A001",
+    "A002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and examples use literal credentials/tokens and broad exception asserts
+# on purpose; the bandit/bugbear security rules are noise there.
+"tests/*" = ["S101", "S105", "S106", "B017"]
+"examples/*" = ["S105", "S106"]
+
+[tool.ruff.format]
+preview = true
+
+[tool.coverage.report]
+skip_empty = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]

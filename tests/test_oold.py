@@ -1,7 +1,7 @@
 """Tests for `oold` package."""
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import datamodel_code_generator
 import pytest
@@ -97,10 +97,7 @@ def _run(pydantic_version="v1"):
             json_schemas=schemas,
             main_schema="Foo.json",
             output_model_type=output_model_type,
-            output_model_path=Path(__file__).parent
-            / "data"
-            / "test_core"
-            / ("model_" + pydantic_version + ".py"),
+            output_model_path=Path(__file__).parent / "data" / "test_core" / ("model_" + pydantic_version + ".py"),
             working_dir_path=Path(__file__).parent / "data" / "test_core" / "src",
         )
     )
@@ -111,9 +108,9 @@ def _run(pydantic_version="v1"):
         from data.test_core import model_v2 as model
 
     class MyResolver(Resolver):
-        graph: (Any)
+        graph: Any
 
-        def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+        def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
             jsonld_dicts = {}
             for iri in iris:
                 jsonld_dicts[iri] = None
@@ -198,15 +195,13 @@ def _run(pydantic_version="v1"):
     assert f_json["b2"][1] == "ex:doesNotExist"
 
     # test importing from JSON
-    f2 = model.Foo.from_json(
-        {
-            "id": "ex:f",
-            "literal": "test1",
-            "b": "ex:b",
-            "b_default": "ex:doesNotExist",
-            "b2": ["ex:b1", "ex:doesNotExist"],
-        }
-    )
+    f2 = model.Foo.from_json({
+        "id": "ex:f",
+        "literal": "test1",
+        "b": "ex:b",
+        "b_default": "ex:doesNotExist",
+        "b2": ["ex:b1", "ex:doesNotExist"],
+    })
     assert f2.b2[0].id == "ex:b1"
 
     # test if skipping of a required property throws an exception
@@ -222,7 +217,7 @@ def _run(pydantic_version="v1"):
     except Exception as e:
         assert isinstance(e, ValueError)
     else:
-        assert False, "ValueError not raised"
+        raise AssertionError("ValueError not raised")
 
     # test index operator for getting objects by IRI
     f = model.Foo["ex:f"]
@@ -330,15 +325,15 @@ def test_cast_v2():
 
 def _run_nested_iris_cast_tests(pydantic_version="v2"):
     """Test that __iris__ on nested objects survives cast() and constructor."""
-    from typing import Optional
 
     if pydantic_version == "v1":
         from pydantic.v1 import Field as PydField
 
         from oold.model.v1 import LinkedBaseModel
     else:
-        from oold.model import LinkedBaseModel
         from pydantic import Field as PydField
+
+        from oold.model import LinkedBaseModel
 
     from pydantic import ConfigDict
 
@@ -352,15 +347,15 @@ def _run_nested_iris_cast_tests(pydantic_version="v2"):
                 }
 
             value: int = 0
-            ref: Optional[str] = PydField(None, range="Category:Target")
+            ref: str | None = PydField(None, range="Category:Target")
 
         class Parent(LinkedBaseModel):
             name: str = "parent"
-            children: Optional[List[Child]] = None
+            children: list[Child] | None = None
 
         class ParentController(LinkedBaseModel):
             name: str = "parent"
-            children: Optional[List[Child]] = None
+            children: list[Child] | None = None
             extra: str = "ctrl"
 
     else:
@@ -373,17 +368,15 @@ def _run_nested_iris_cast_tests(pydantic_version="v2"):
                 },
             )
             value: int = 0
-            ref: Optional[str] = PydField(
-                None, json_schema_extra={"range": "Category:Target"}
-            )
+            ref: str | None = PydField(None, json_schema_extra={"range": "Category:Target"})
 
         class Parent(LinkedBaseModel):
             name: str = "parent"
-            children: Optional[List[Child]] = None
+            children: list[Child] | None = None
 
         class ParentController(LinkedBaseModel):
             name: str = "parent"
-            children: Optional[List[Child]] = None
+            children: list[Child] | None = None
             extra: str = "ctrl"
 
     # Create parent with children that have IRI refs

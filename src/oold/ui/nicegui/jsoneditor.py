@@ -1,5 +1,3 @@
-from typing import Dict, Optional, Type, Union
-
 from nicegui.element import Element
 from nicegui.events import GenericEventArguments, Handler, handle_event
 from typing_extensions import Self
@@ -16,8 +14,8 @@ class JsonEditor(
 ):
     def __init__(
         self,
-        options: Optional[Dict] = None,
-        on_change: Optional[Handler[GenericEventArguments]] = None,
+        options: dict | None = None,
+        on_change: Handler[GenericEventArguments] | None = None,
     ) -> None:
         """JsonEditor
 
@@ -57,9 +55,9 @@ class JsonEditor(
 class OswEditor(JsonEditor):
     def __init__(
         self,
-        options: Optional[Dict] = None,
-        on_change: Optional[Handler[GenericEventArguments]] = None,
-        entity: Union[Type[LinkedBaseModel], Type[LinkedBaseModel_v1]] = None,
+        options: dict | None = None,
+        on_change: Handler[GenericEventArguments] | None = None,
+        entity: type[LinkedBaseModel] | type[LinkedBaseModel_v1] | None = None,
     ) -> None:
         options = options or {
             # "theme": 'tailwind',

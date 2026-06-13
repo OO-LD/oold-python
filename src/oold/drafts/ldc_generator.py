@@ -1,14 +1,11 @@
 import json
-import os
 import re
 from pathlib import Path
 from pprint import pprint
 from tempfile import TemporaryDirectory
-from typing import List, Optional
 
 from datamodel_code_generator import DataModelType, InputFileType, generate
 from datamodel_code_generator.parser.jsonschema import (
-    JsonSchemaObject,
     JsonSchemaParser,
 )
 
@@ -64,17 +61,13 @@ def generate1(json_schemas):
             for cls in re.findall(pattern, org_content):
                 print(cls)
                 content = re.sub(
-                    r"(class\s*"
-                    + cls
-                    + r"\s*\(\s*\S*\s*\)\s*:.*\n[\s\S]*?(?:[^\S\n]*\n){3,})",
+                    r"(class\s*" + cls + r"\s*\(\s*\S*\s*\)\s*:.*\n[\s\S]*?(?:[^\S\n]*\n){3,})",
                     "",
                     content,
                     count=1,
                 )  # replace duplicated classes
 
-            content = re.sub(
-                r"(from __future__ import annotations)", "", content, 1
-            )  # remove import statement
+            content = re.sub(r"(from __future__ import annotations)", "", content, 1)  # remove import statement
 
         code += content + "\r\n"
         # pprint(parser.raw_obj)
@@ -92,12 +85,8 @@ def generate2(json_schemas):
         output = Path(temporary_directory / "model.py")
         for schema in json_schemas:
             name = schema["id"]
-            with open(
-                Path(temporary_directory / (name + ".json")), "w", encoding="utf-8"
-            ) as f:
-                schema_str = json.dumps(schema, ensure_ascii=False, indent=4).replace(
-                    "dollarref", "$ref"
-                )
+            with open(Path(temporary_directory / (name + ".json")), "w", encoding="utf-8") as f:
+                schema_str = json.dumps(schema, ensure_ascii=False, indent=4).replace("dollarref", "$ref")
                 # print(schema_str)
                 f.write(schema_str)
         generate(

@@ -29,7 +29,7 @@ def test_component(page: Page, port):
     assert app.jsoneditor.get_value() == {"testxy": ""}
 
     # note: css selector for id=root[testxy] needs to escaped,
-    # see https://stackoverflow.com/questions/1466103/escape-square-brackets-when-assigning-a-class-name-to-an-element # noqa
+    # see https://stackoverflow.com/questions/1466103/escape-square-brackets-when-assigning-a-class-name-to-an-element
     page.locator("#root\\[testxy\\]").fill("test123")
     page.locator("[for=root\\[testxy\\]]").click()
     assert app.jsoneditor.get_value() == {"testxy": "test123"}

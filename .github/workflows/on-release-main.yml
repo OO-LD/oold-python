@@ -1,0 +1,55 @@
+name: release-main
+
+on:
+  release:
+    types: [published]
+
+jobs:
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history + tags so hatch-vcs derives the version
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish package
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+  deploy-docs:
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Build documentation
+        run: uv run zensical build --clean
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

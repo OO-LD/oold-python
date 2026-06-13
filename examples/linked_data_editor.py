@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import List, Optional
 
 import panel as pn
 from pydantic import ConfigDict, Field
@@ -24,7 +23,7 @@ class Entity(LinkedBaseModel):
             "iri": "Entity.json",  # the IRI of the schema
         }
     )
-    type: Optional[str] = Field(
+    type: str | None = Field(
         "ex:Entity.json",
         json_schema_extra={"options": {"hidden": "true"}},
     )
@@ -69,10 +68,10 @@ class Person(Entity):
             "defaultProperties": ["type", "name", "hobbies"],
         }
     )
-    type: Optional[str] = "ex:Person.json"
-    hobbies: Optional[List[Hobby]] = None
+    type: str | None = "ex:Person.json"
+    hobbies: list[Hobby] | None = None
     """interests of the person, e.g. sports, music, art"""
-    knows: Optional[List["Person"]] = Field(
+    knows: list["Person"] | None = Field(
         None,
         # object property pointing to another Person
         json_schema_extra={"range": "Person.json"},

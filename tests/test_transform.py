@@ -35,9 +35,7 @@ def _test_simple_json():
     }
 
     print("Output Data:", output_data)
-    assert (
-        output_data == expected_output_data
-    ), f"Expected {expected_output_data}, but got {output_data}"
+    assert output_data == expected_output_data, f"Expected {expected_output_data}, but got {output_data}"
 
 
 @pytest.mark.benchmark(group="transform")
@@ -93,17 +91,17 @@ def _test_complex_graph():
         "name": "schema:name",
         "name*": "demo:full_name",
         # "_demo_full_name": "demo:full_name", # generated
-        ##"label": {"@id": "skos:prefLabel", "@container": "@set", "@language": "en", "@context": {"text": "@value", "lang": "@language"}},  # noqa
+        ##"label": {"@id": "skos:prefLabel", "@container": "@set", "@language": "en", "@context": {"text": "@value", "lang": "@language"}},
         "text": "@value",
         "lang": "@language",
         "label": {"@id": "skos:prefLabel", "@container": "@set"},
         "label*": {"@id": "demo:label", "@container": "@set", "@language": "en"},
-        # "_demo_label": {"@id": "demo:label"},#, "@container": "@set", "@language": "en"}, # generated  # noqa
+        # "_demo_label": {"@id": "demo:label"},#, "@container": "@set", "@language": "en"}, # generated
         "employes": {"@id": "schema:employes", "@type": "@id"},
         "employes*": {"@reverse": "schema:worksFor", "@type": "@id"},
         # "_schema_worksFor": {"@id": "schema:worksFor", "@type": "@id"}, # generated
         "employes**": {"@reverse": "demo:is_employed_by", "@type": "@id"},
-        # "_demo_is_employed_by": {"@id": "demo:is_employed_by", "@type": "@id"}, # generated  # noqa
+        # "_demo_is_employed_by": {"@id": "demo:is_employed_by", "@type": "@id"}, # generated
         "type": "@type",
         "id": "@id",
     }
@@ -146,9 +144,7 @@ def _test_complex_graph():
     # assert transformed_graph == expected,
     # f"Expected {expected}, but encountered following deviation: {_diff}"
 
-    assert (
-        transformed_graph == expected
-    ), f"Expected {expected}, but got {transformed_graph}"
+    assert transformed_graph == expected, f"Expected {expected}, but got {transformed_graph}"
 
 
 @pytest.mark.benchmark(group="transform")
@@ -198,13 +194,11 @@ def test_rocreate():
 
         <https://example/users/1234> a schema:Person ;
             schema:name "Doe, John" .
-    """  # noqa
+    """
 
     g = rdflib.Graph()
     g.parse(data=rdf, format="turtle")
-    data = jsonld.expand(
-        json.loads(g.serialize(format="json-ld", indent=4, context=None))
-    )
+    data = jsonld.expand(json.loads(g.serialize(format="json-ld", indent=4, context=None)))
 
     context = {
         "@version": 1.1,  # use version 1.1 for JSON-LD
@@ -243,8 +237,8 @@ def test_rocreate():
             "id": "https://example/records/56789",
             "type": "ELNEntry",
             "attachments": [
-                "https://example/records/56789/files/485d06f8-0000-4804-a615-e29aea4e732b",  # noqa
-                "https://example/records/56789/files/139a5c2f-0000-4c04-96a3-04fd4abbf165",  # noqa
+                "https://example/records/56789/files/485d06f8-0000-4804-a615-e29aea4e732b",
+                "https://example/records/56789/files/139a5c2f-0000-4c04-96a3-04fd4abbf165",
             ],
             "label": [{"lang": "en", "text": "ISEcell02defects"}],
             "schema:additionalType": "sample",
@@ -255,7 +249,7 @@ def test_rocreate():
             "keywords": ["abc02", "abccell"],
         },
         {
-            "id": "https://example/records/56789/files/139a5c2f-0000-4c04-96a3-04fd4abbf165",  # noqa
+            "id": "https://example/records/56789/files/139a5c2f-0000-4c04-96a3-04fd4abbf165",
             "type": "WikiFile",
             "label": [{"lang": "en", "text": "A4.jpg"}],
             "creator": "https://example/users/1234",
@@ -266,7 +260,7 @@ def test_rocreate():
             "uuid": "139a5c2f-0000-4c04-96a3-04fd4abbf165",
         },
         {
-            "id": "https://example/records/56789/files/485d06f8-0000-4804-a615-e29aea4e732b",  # noqa
+            "id": "https://example/records/56789/files/485d06f8-0000-4804-a615-e29aea4e732b",
             "type": "WikiFile",
             "label": [{"lang": "en", "text": "C2.jpg"}],
             "creator": "https://example/users/1234",
@@ -284,14 +278,10 @@ def test_rocreate():
     ]
 
     _diff = diff(transformed_graph["@graph"], expected)
-    assert (
-        transformed_graph["@graph"] == expected
-    ), f"Expected {expected}, but encountered following deviation: {_diff}"
+    assert transformed_graph["@graph"] == expected, f"Expected {expected}, but encountered following deviation: {_diff}"
 
 
-@pytest.mark.skip(
-    reason="This test fails due to the literal type annotation issue in JSON-LD"
-)
+@pytest.mark.skip(reason="This test fails due to the literal type annotation issue in JSON-LD")
 def test_literal_types():
     data = {
         "https://schema.org/contentSize": 177031,

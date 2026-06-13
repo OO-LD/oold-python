@@ -1,9 +1,10 @@
+import contextlib
 import contextvars
 import getpass
 import logging
 from enum import Enum
 from pathlib import Path
-from typing import ClassVar, Dict, List, Optional, Union
+from typing import ClassVar
 
 from pydantic import BaseModel, SecretStr
 
@@ -49,22 +50,22 @@ class OAuth2Credential(BaseCredential):
     """OAuth2 credentials with access and optional refresh token."""
 
     access_token: SecretStr
-    refresh_token: Optional[SecretStr] = None
-    token_type: str = "Bearer"
+    refresh_token: SecretStr | None = None
+    token_type: str = "Bearer"  # noqa: S105  # OAuth token-type label, not a secret
 
 
 class CertificateCredential(BaseCredential):
     """TLS client certificate authentication."""
 
     cert_path: str
-    key_path: Optional[str] = None
-    ca_path: Optional[str] = None
+    key_path: str | None = None
+    ca_path: str | None = None
 
 
 # Registry for credential type inference from YAML fields
 
 # Ordered most-specific-first so the first full match wins
-_CREDENTIAL_TYPES: List[type] = [
+_CREDENTIAL_TYPES: list[type] = [
     OAuth1Credential,
     OAuth2Credential,
     CertificateCredential,
@@ -79,9 +80,7 @@ def _infer_credential_type(data: dict) -> type:
     """Infer the most specific credential class from a dict of fields."""
     for cls in _CREDENTIAL_TYPES:
         required = {
-            name
-            for name, field in cls.model_fields.items()
-            if field.is_required() and name not in _BASE_FIELDS
+            name for name, field in cls.model_fields.items() if field.is_required() and name not in _BASE_FIELDS
         }
         if required <= data.keys():
             return cls
@@ -90,9 +89,13 @@ def _infer_credential_type(data: dict) -> type:
 
 # Context-var credential store
 
-_credentials: contextvars.ContextVar[
-    Dict[str, BaseCredential]
-] = contextvars.ContextVar("oold_credentials", default={})
+
+# The default dict is only ever read or copied-then-set, never mutated in
+# place, so the shared-mutable-default concern (B039) does not apply here.
+_credentials: contextvars.ContextVar[dict[str, BaseCredential]] = contextvars.ContextVar(
+    "oold_credentials",
+    default={},  # noqa: B039
+)
 
 
 def set_credential(credential: BaseCredential):
@@ -124,9 +127,9 @@ def get_credential(iri: str, exact: bool = False) -> BaseCredential:
 
 def find_credential(
     iri: str,
-    credentials: Dict[str, BaseCredential],
+    credentials: dict[str, BaseCredential],
     exact: bool = False,
-) -> Optional[BaseCredential]:
+) -> BaseCredential | None:
     """Find the best matching credential for the given IRI.
 
     Matching strategy (when ``exact=False``):
@@ -178,10 +181,9 @@ def find_credential(
     best_len = 0
     best_cred = None
     for stored_iri, cred in credentials.items():
-        if iri in stored_iri:
-            if best_len == 0 or len(stored_iri) < best_len:
-                best_len = len(stored_iri)
-                best_cred = cred
+        if iri in stored_iri and (best_len == 0 or len(stored_iri) < best_len):
+            best_len = len(stored_iri)
+            best_cred = cred
     return best_cred
 
 
@@ -196,8 +198,8 @@ def _secret_value(v) -> str:
 
 
 def dump_credentials(
-    filepath: Union[str, Path],
-    credentials: Optional[Dict[str, BaseCredential]] = None,
+    filepath: str | Path,
+    credentials: dict[str, BaseCredential] | None = None,
 ):
     """Save credentials to a YAML file.
 
@@ -239,9 +241,9 @@ def dump_credentials(
 
 
 def load_credentials(
-    filepath: Union[str, Path],
+    filepath: str | Path,
     into_store: bool = True,
-) -> Dict[str, BaseCredential]:
+) -> dict[str, BaseCredential]:
     """Load credentials from a YAML file.
 
     The credential type is inferred from the fields present in each entry
@@ -266,13 +268,13 @@ def load_credentials(
     if not filepath.exists():
         raise FileNotFoundError(f"Credentials file not found: {filepath}")
 
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     if raw is None:
         return {}
 
-    result: Dict[str, BaseCredential] = {}
+    result: dict[str, BaseCredential] = {}
     for iri, fields in raw.items():
         if not isinstance(fields, dict):
             continue
@@ -282,11 +284,9 @@ def load_credentials(
             field_info = cls.model_fields.get(key)
             if field_info and field_info.annotation in (
                 SecretStr,
-                Optional[SecretStr],
+                SecretStr | None,
             ):
-                coerced[key] = (
-                    SecretStr(value) if not isinstance(value, SecretStr) else value
-                )
+                coerced[key] = SecretStr(value) if not isinstance(value, SecretStr) else value
             else:
                 coerced[key] = value
         result[iri] = cls(**coerced)
@@ -308,7 +308,7 @@ class CredentialManager(BaseModel):
     Compatible with osw.auth.CredentialManager API.
     """
 
-    cred_filepath: Optional[Union[Union[str, Path], List[Union[str, Path]]]] = None
+    cred_filepath: str | Path | list[str | Path] | None = None
     """Filepath(s) to YAML file(s) with credentials."""
 
     class CredentialFallback(str, Enum):
@@ -318,7 +318,7 @@ class CredentialManager(BaseModel):
     class CredentialConfig(BaseModel):
         iri: str
         """IRI to look up."""
-        fallback: Optional[str] = "none"
+        fallback: str | None = "none"
         """Fallback strategy if no credential found: 'ask' or 'none'."""
 
     # Re-export credential types as nested classes for osw compatibility
@@ -335,9 +335,9 @@ class CredentialManager(BaseModel):
                 self.cred_filepath = [self.cred_filepath]
             self.cred_filepath = [Path(fp) for fp in self.cred_filepath if fp != ""]
 
-    def _load_file_credentials(self) -> Dict[str, BaseCredential]:
+    def _load_file_credentials(self) -> dict[str, BaseCredential]:
         """Load credentials from all configured YAML files."""
-        result: Dict[str, BaseCredential] = {}
+        result: dict[str, BaseCredential] = {}
         if not self.cred_filepath:
             return result
         for fp in self.cred_filepath:
@@ -347,13 +347,11 @@ class CredentialManager(BaseModel):
             try:
                 loaded = load_credentials(fp, into_store=False)
                 result.update(loaded)
-            except Exception as e:
-                _logger.error("Error loading credentials from %s: %s", fp, e)
+            except Exception:
+                _logger.exception("Error loading credentials from %s", fp)
         return result
 
-    def get_credential(
-        self, config: "CredentialManager.CredentialConfig"
-    ) -> Optional[BaseCredential]:
+    def get_credential(self, config: "CredentialManager.CredentialConfig") -> BaseCredential | None:
         """Look up a credential by IRI.
 
         Uses combined matching: exact, then stored-in-search (most specific),
@@ -380,10 +378,7 @@ class CredentialManager(BaseModel):
         if fallback == self.CredentialFallback.ask:
             if self.cred_filepath:
                 paths = ", ".join(str(fp) for fp in self.cred_filepath)
-                print(
-                    f"No credentials for {config.iri} found in '{paths}'. "
-                    f"Please use the prompt to login"
-                )
+                print(f"No credentials for {config.iri} found in '{paths}'. Please use the prompt to login")
             username = input("Enter username: ")
             password = getpass.getpass("Enter password: ")
             cred = UserPwdCredential(
@@ -414,7 +409,7 @@ class CredentialManager(BaseModel):
 
     def save_credentials_to_file(
         self,
-        filepath: Optional[Union[str, Path]] = None,
+        filepath: str | Path | None = None,
     ):
         """Save in-memory credentials to YAML file(s).
 
@@ -429,10 +424,8 @@ class CredentialManager(BaseModel):
             fp = Path(fp)
             existing = {}
             if fp.exists():
-                try:
+                with contextlib.suppress(Exception):
                     existing = load_credentials(fp, into_store=False)
-                except Exception:
-                    pass
             merged = {**existing}
             merged.update(creds)
             dump_credentials(fp, credentials=merged)

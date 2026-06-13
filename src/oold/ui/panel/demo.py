@@ -1,5 +1,3 @@
-from typing import Optional, Type, Union
-
 import panel as pn
 from rdflib import Graph
 
@@ -13,9 +11,9 @@ pn.extension("codeeditor")
 class OoldDemoEditor(pn.viewable.Viewer):
     def __init__(
         self,
-        oold_model: Union[Type[LinkedBaseModel], Type[LinkedBaseModel_v1]] = None,
-        options: Optional[dict] = None,
-        **params
+        oold_model: type[LinkedBaseModel] | type[LinkedBaseModel_v1] | None = None,
+        options: dict | None = None,
+        **params,
     ):
         options = params.get("options", {})
         json_editor_options = options.get("json_editor", {})
@@ -37,14 +35,10 @@ class OoldDemoEditor(pn.viewable.Viewer):
             options=json_editor_options,
         )
 
-        self.code_editor = pn.widgets.CodeEditor(
-            value="", sizing_mode="stretch_width", language="turtle", height=300
-        )
+        self.code_editor = pn.widgets.CodeEditor(value="", sizing_mode="stretch_width", language="turtle", height=300)
 
         self.save_btn_clicked = False
-        self.save_btn = pn.widgets.Button(
-            css_classes=["save_btn"], name="Save", button_type="primary"
-        )
+        self.save_btn = pn.widgets.Button(css_classes=["save_btn"], name="Save", button_type="primary")
 
         self.jsoneditor.param.watch(self.on_value_change, "value")
         pn.bind(self.on_save, self.save_btn, watch=True)
@@ -54,9 +48,7 @@ class OoldDemoEditor(pn.viewable.Viewer):
             pn.Row(self.jsoneditor, scroll=True),
             # display jsoneditor value in a JSON pane for debugging
             # pn.pane.JSON(self.jsoneditor.param.value, theme="light"),
-            pn.pane.Markdown(
-                "### RDF Representation (Turtle format)", sizing_mode="stretch_width"
-            ),
+            pn.pane.Markdown("### RDF Representation (Turtle format)", sizing_mode="stretch_width"),
             self.code_editor,
             self.save_btn,
             scroll=True,

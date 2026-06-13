@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pytest
 
 from oold.backend.document_store import SimpleDictDocumentStore
@@ -34,7 +32,7 @@ def _store_procedure(store: Backend, pydantic_version="v2"):
                     "$id": "https://example.com/Entity",  # the IRI of the schema
                 }
 
-            type: Optional[str] = "ex:Entity"
+            type: str | None = "ex:Entity"
             name: str
 
             def get_iri(self):
@@ -62,7 +60,7 @@ def _store_procedure(store: Backend, pydantic_version="v2"):
                 }
             )
 
-            type: Optional[str] = "ex:Entity"
+            type: str | None = "ex:Entity"
             name: str
 
             def get_iri(self):
@@ -74,9 +72,7 @@ def _store_procedure(store: Backend, pydantic_version="v2"):
     e = Entity(name="TestEntity")
     store.store(StoreParam(nodes={e.get_iri(): e}))
 
-    e2 = store.resolve(ResolveParam(iris=[e.get_iri()], model_cls=Entity)).nodes[
-        e.get_iri()
-    ]
+    e2 = store.resolve(ResolveParam(iris=[e.get_iri()], model_cls=Entity)).nodes[e.get_iri()]
     assert e2.name == "TestEntity"
 
     e10 = Entity(name="AnotherEntity")

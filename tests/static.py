@@ -1,14 +1,14 @@
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List
 
 import datamodel_code_generator
 
 from oold.generator import Generator
 
 
-def _run(
-    schemas: List, main_schema: str, test: Callable, pydantic_versions=["v1", "v2"]
-):
+def _run(schemas: list, main_schema: str, test: Callable, pydantic_versions=None):
+    if pydantic_versions is None:
+        pydantic_versions = ["v1", "v2"]
     for pydantic_version in pydantic_versions:
         if pydantic_version == "v1":
             # from oold.model.v1 import (
@@ -29,9 +29,7 @@ def _run(
             #     set_resolver,
             # )
 
-            output_model_type = (
-                datamodel_code_generator.DataModelType.PydanticV2BaseModel
-            )
+            output_model_type = datamodel_code_generator.DataModelType.PydanticV2BaseModel
 
         g = Generator()
         g.generate(

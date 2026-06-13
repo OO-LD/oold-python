@@ -9,9 +9,7 @@ class App(pn.viewable.Viewer):
 
         self.jsoneditor = JsonEditor(max_height=500, max_width=800)
 
-        self.save_btn = pn.widgets.Button(
-            css_classes=["save_btn"], name="Save", button_type="primary"
-        )
+        self.save_btn = pn.widgets.Button(css_classes=["save_btn"], name="Save", button_type="primary")
         pn.bind(self.on_save, self.save_btn, watch=True)
 
         self._view = pn.Column(

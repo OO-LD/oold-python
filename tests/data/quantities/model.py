@@ -12,12 +12,8 @@ from oold.model import LinkedBaseModel
 
 class LengthUnit(str, Enum):
     meter = "Item:OSWf101d25e944856e3bd4b4c9863db7de2"
-    milli_meter = (
-        "Item:OSWf101d25e944856e3bd4b4c9863db7de2#OSW322dec469be75aedb008b3ebff29db86"
-    )
-    kilo_meter = (
-        "Item:OSWf101d25e944856e3bd4b4c9863db7de2#OSWb1de8f91f1275572b37c2edfe40d5de6"
-    )
+    milli_meter = "Item:OSWf101d25e944856e3bd4b4c9863db7de2#OSW322dec469be75aedb008b3ebff29db86"
+    kilo_meter = "Item:OSWf101d25e944856e3bd4b4c9863db7de2#OSWb1de8f91f1275572b37c2edfe40d5de6"
 
 
 class Bar2(LinkedBaseModel):

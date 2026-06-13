@@ -10,7 +10,16 @@
 Linked data class python package for object oriented linked data ([OO-LD](https://github.com/OO-LD/schema)) based on [pydantic](https://github.com/pydantic/pydantic). This package aims to implemment this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package - work in progress.
 
 ## Installation
+
+With [uv](https://docs.astral.sh/uv/) (recommended):
+
+```bash
+uv add oold
 ```
+
+Or with pip:
+
+```bash
 pip install oold
 ```
 
@@ -233,15 +242,20 @@ loaded = MyModel["ex:foo"]  # resolves via registered backend
 Custom backends implement the `Backend` interface (`resolve_iris`, `store_json_dicts`).
 
 ## Dev
-```
+
+```bash
 git clone https://github.com/OpenSemanticWorld/oold-python
-pip install -e .[dev]
+cd oold-python
+uv sync        # create the venv and install all dependencies
 ```
 
 ### Run tests
+
+```bash
+make test      # or: uv run tox -e test
 ```
-tox -e test
-```
+
+See the [Development](#development) section above and [docs/dev.md](docs/dev.md) for the full workflow.
 
 ### Benchmarking
 ```

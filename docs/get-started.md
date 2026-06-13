@@ -9,16 +9,16 @@ This guide walks you from a fresh install to a working end-to-end example.
 
 ## Installation
 
+=== "uv (recommended)"
+
+    ```bash
+    uv add oold
+    ```
+
 === "pip"
 
     ```bash
     pip install oold
-    ```
-
-=== "uv"
-
-    ```bash
-    uv add oold
     ```
 
 Verify the installation:

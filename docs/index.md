@@ -24,16 +24,18 @@ Knowledge graph tools typically force you to choose between semantic richness an
 
 ## Quick install
 
+[uv](https://docs.astral.sh/uv/) is the recommended way to install oold-python:
+
+=== "uv (recommended)"
+
+    ```bash
+    uv add oold
+    ```
+
 === "pip"
 
     ```bash
     pip install oold
-    ```
-
-=== "uv"
-
-    ```bash
-    uv add oold
     ```
 
 ---

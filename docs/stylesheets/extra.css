@@ -57,6 +57,29 @@
   margin: 0.35rem 0.4rem;
 }
 
+/* Hide the footer on the landing page only (the page that carries the hero) */
+body:has(.oold-hero) .md-footer {
+  display: none;
+}
+
+/* ----------------------------------------------------------------------------
+   Mermaid diagrams: render large and let oversized ones scroll/pan
+---------------------------------------------------------------------------- */
+
+.mermaid {
+  /* Scroll to pan when a diagram is wider/taller than the content column.
+     Combine with the browser's native zoom (Ctrl/Cmd +) for fine detail -
+     SVG stays crisp at any zoom level. */
+  overflow: auto;
+  text-align: center;
+}
+
+.mermaid svg {
+  /* Render at full content width instead of mermaid's smaller default */
+  max-width: 100%;
+  height: auto;
+}
+
 @media screen and (max-width: 44.9375em) {
   .oold-hero {
     padding: 3rem 1rem 3.5rem;

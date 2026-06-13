@@ -4,23 +4,11 @@
    short text passage + call-to-action buttons over a soft brand gradient.
 ---------------------------------------------------------------------------- */
 
-/* The hero fills the full main area (see the landing-page layout rules below),
-   so it stays flush with the scrollbar gutter like every other page and starts
-   right at the nav/tabs line - no viewport-unit math, no right-side gap. */
+/* The hero holds the content only; the gradient lives on .md-main (the
+   full-height content region) so it is one continuous layer with no seam. */
 .oold-hero {
   padding: 4.5rem 1rem 5rem;
   text-align: center;
-  background:
-    radial-gradient(
-      60% 80% at 50% 0%,
-      color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent),
-      transparent 70%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--md-accent-fg-color) 6%, var(--md-default-bg-color)),
-      var(--md-default-bg-color)
-    );
 }
 
 .oold-hero__logo {
@@ -64,10 +52,31 @@ html:has(.oold-hero) {
   scrollbar-gutter: auto;
 }
 
-/* Landing page: let the hero own the full main area, flush under the tabs bar.
-   Removing the grid width cap, top margin and content padding makes the hero
-   span edge-to-edge (respecting the reserved scrollbar gutter) and start right
-   at the navigation line. */
+/* OO-LD brand yellow + the gradient's end color. */
+body:has(.oold-hero) {
+  --oold-hero-yellow: #ffd43b;
+  --oold-hero-end: color-mix(in srgb, var(--oold-hero-yellow) 60%, var(--md-default-bg-color));
+}
+
+/* One continuous gradient on the full-height content region: page background at
+   the top (white/black), fading to brand yellow at the very bottom. Scoped to
+   .md-main so the header, tabs and footer keep their own colors, and because
+   .md-main flex-grows to the page bottom there is no seam and no gap. */
+body:has(.oold-hero) .md-main {
+  background:
+    radial-gradient(
+      70% 55% at 50% 100%,
+      color-mix(in srgb, var(--oold-hero-yellow) 40%, transparent),
+      transparent 72%
+    ),
+    linear-gradient(
+      180deg,
+      var(--md-default-bg-color) 30%,
+      var(--oold-hero-end) 100%
+    );
+}
+
+/* Landing page: hero starts flush under the tabs bar and spans the full width. */
 body:has(.oold-hero) .md-main__inner {
   margin-top: 0;
   max-width: none;

@@ -4,11 +4,10 @@
    short text passage + call-to-action buttons over a soft brand gradient.
 ---------------------------------------------------------------------------- */
 
+/* The hero fills the full main area (see the landing-page layout rules below),
+   so it stays flush with the scrollbar gutter like every other page and starts
+   right at the nav/tabs line - no viewport-unit math, no right-side gap. */
 .oold-hero {
-  /* Break out of the content column to span the full viewport width */
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
-  margin-top: -1.5rem;
   padding: 4.5rem 1rem 5rem;
   text-align: center;
   background:
@@ -55,6 +54,28 @@
 
 .oold-hero__actions .md-button {
   margin: 0.35rem 0.4rem;
+}
+
+/* The landing page is a short hero with no scrolling, so don't reserve the
+   scrollbar gutter (the theme sets `scrollbar-gutter: stable` globally).
+   Otherwise an empty strip shows on the right where scrolling pages put the
+   scrollbar. */
+html:has(.oold-hero) {
+  scrollbar-gutter: auto;
+}
+
+/* Landing page: let the hero own the full main area, flush under the tabs bar.
+   Removing the grid width cap, top margin and content padding makes the hero
+   span edge-to-edge (respecting the reserved scrollbar gutter) and start right
+   at the navigation line. */
+body:has(.oold-hero) .md-main__inner {
+  margin-top: 0;
+  max-width: none;
+}
+
+body:has(.oold-hero) .md-content__inner {
+  margin: 0;
+  padding: 0;
 }
 
 /* Hide the footer on the landing page only (the page that carries the hero) */

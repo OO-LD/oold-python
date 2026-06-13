@@ -93,7 +93,7 @@ Fields annotated with `"range": "<Schema>.json"` become IRI-transparent referenc
 ```python
 tag = model.Tag(id="ex:t1", name="python")
 article = model.Article(id="ex:a1", title="Hello World", tag=tag)
-# or by IRI — resolved lazily when accessed
+# or by IRI - resolved lazily when accessed
 article2 = model.Article(id="ex:a2", title="Another Post", tag="ex:t1")
 ```
 

@@ -6,7 +6,7 @@ oold-python's core feature is *IRI-transparent references*: a field annotated wi
 
 ## Direct object assignment
 
-The simplest case — pass objects directly:
+The simplest case - pass objects directly:
 
 ```python
 from oold.model import LinkedBaseModel
@@ -58,7 +58,7 @@ store.store(StoreParam(nodes={
     "ex:tag-async":  async_tag,
 }))
 
-# Assign IRIs — objects are NOT loaded yet
+# Assign IRIs - objects are NOT loaded yet
 article2 = Article(
     id="ex:article-2",
     title="Another Post",
@@ -67,7 +67,7 @@ article2 = Article(
 )
 
 # First access triggers backend resolution
-print(article2.primary_tag.name)  # python  — loaded from store on demand
+print(article2.primary_tag.name)  # python  - loaded from store on demand
 print(article2.tags[0].name)      # python
 ```
 
@@ -101,7 +101,7 @@ article3 = Article(
 
 ---
 
-## `cast()` — converting between model classes
+## `cast()` - converting between model classes
 
 `cast()` converts an instance from one model class to another while preserving `__iris__` references.
 
@@ -124,7 +124,7 @@ v1 = ArticleV1(id="ex:a1", title="Hello", body="Some text")
 v2 = v1.cast(ArticleV2, remove_extra=True, none_to_default=True)
 print(v2.id)       # ex:a1
 print(v2.title)    # Hello
-print(v2.content)  # ""  — default, since 'body' doesn't exist on V2
+print(v2.content)  # ""  - default, since 'body' doesn't exist on V2
 ```
 
 `cast()` parameters:

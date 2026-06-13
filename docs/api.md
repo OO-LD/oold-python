@@ -28,7 +28,7 @@ Mixin for adding runtime behavior to a `LinkedBaseModel` subclass without pollut
 
 ---
 
-## LinkedBaseModel (v1 — legacy)
+## LinkedBaseModel (v1 - legacy)
 
 Pydantic v1 implementation. Use `oold.model.LinkedBaseModel` for new projects.
 

@@ -80,7 +80,7 @@ OO-LD schemas are standard JSON Schema documents extended with a `range` keyword
 **`LinkedBaseModel`** (`model/__init__.py`) extends the generic base with:
 
 - IRI-transparent field validation: fields annotated with `range` accept both objects and IRI strings
-- Lazy resolution via `__get__` descriptors — IRIs are resolved on first attribute access
+- Lazy resolution via `__get__` descriptors - IRIs are resolved on first attribute access
 - Class-level `[]` subscript operator for direct IRI lookup
 - `cast()` for cross-model conversion
 
@@ -100,7 +100,7 @@ Backends are registered per IRI prefix via `set_resolver` / `set_backend`, so mu
 
 ### Serialization
 
-`to_jsonld()` produces a self-describing JSON-LD document. Object references are serialized as IRI strings, not as embedded objects — keeping the graph flat and enabling partial loading. The output can be fed directly into RDFLib or any JSON-LD aware triple store.
+`to_jsonld()` produces a self-describing JSON-LD document. Object references are serialized as IRI strings, not as embedded objects - keeping the graph flat and enabling partial loading. The output can be fed directly into RDFLib or any JSON-LD aware triple store.
 
 ### UI Layer (optional)
 
@@ -143,10 +143,10 @@ sequenceDiagram
 
 ## Key design decisions
 
-**IRI transparency** — the same field can hold either an object or an IRI. This means you can work with partial graphs (load only what you need) and still produce correct JSON-LD.
+**IRI transparency** - the same field can hold either an object or an IRI. This means you can work with partial graphs (load only what you need) and still produce correct JSON-LD.
 
-**Schema-first** — all semantic meaning lives in the JSON schema, not in Python class annotations. This makes schemas portable across languages and tools.
+**Schema-first** - all semantic meaning lives in the JSON schema, not in Python class annotations. This makes schemas portable across languages and tools.
 
-**Pluggable backends** — no single storage technology is assumed. Swapping backends requires only re-registering the prefix; model code is unchanged.
+**Pluggable backends** - no single storage technology is assumed. Swapping backends requires only re-registering the prefix; model code is unchanged.
 
-**Controller separation** — runtime behavior is kept out of data models entirely, so serialization is always deterministic and backend-independent.
+**Controller separation** - runtime behavior is kept out of data models entirely, so serialization is always deterministic and backend-independent.

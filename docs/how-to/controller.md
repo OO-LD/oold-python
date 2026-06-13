@@ -1,6 +1,6 @@
 # BaseController
 
-A controller adds runtime behavior — connections, caching, state machines — to a data model. oold-python keeps these concerns separate: the data model is a pure `LinkedBaseModel`, and the controller is a mixin that inherits from both `BaseController` and the data model.
+A controller adds runtime behavior - connections, caching, state machines - to a data model. oold-python keeps these concerns separate: the data model is a pure `LinkedBaseModel`, and the controller is a mixin that inherits from both `BaseController` and the data model.
 
 ---
 
@@ -13,7 +13,7 @@ A controller adds runtime behavior — connections, caching, state machines — 
 | Passed between systems | Machine- or session-local |
 | e.g. `Robot.joint_count` | e.g. `RobotController._socket` |
 
-Keeping them separate means `to_json()` / `to_jsonld()` always produces clean, controller-free documents — and the backend type registry always resolves to the pure data class.
+Keeping them separate means `to_json()` / `to_jsonld()` always produces clean, controller-free documents - and the backend type registry always resolves to the pure data class.
 
 ---
 
@@ -122,5 +122,5 @@ This is useful for checkpointing state (e.g. saving `joint_count` after a calibr
 ## Guidelines
 
 - Prefix controller-only attributes with `_` to make the distinction explicit
-- Keep `__init__` arguments limited to data model fields — controllers should be constructed from data, not from runtime handles
+- Keep `__init__` arguments limited to data model fields - controllers should be constructed from data, not from runtime handles
 - If a controller needs runtime resources (sockets, threads), initialize them in a dedicated `connect()` / `start()` method, not in `__init__`

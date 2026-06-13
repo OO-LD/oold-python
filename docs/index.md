@@ -1,12 +1,16 @@
 # Object Oriented Linked Data
 
+<p align="center" markdown>
+  ![OO-LD logo](https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg){ width="220" }
+</p>
+
 [![DOI](https://zenodo.org/badge/691355012.svg)](https://zenodo.org/doi/10.5281/zenodo.8374237)
 [![PyPI](https://img.shields.io/pypi/v/oold.svg)](https://pypi.org/project/oold/)
 [![Build](https://img.shields.io/github/actions/workflow/status/OO-LD/oold-python/main.yml?branch=main)](https://github.com/OO-LD/oold-python/actions/workflows/main.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/OO-LD/oold-python/branch/main/graph/badge.svg)](https://codecov.io/gh/OO-LD/oold-python)
 [![License](https://img.shields.io/github/license/OO-LD/oold-python)](https://github.com/OO-LD/oold-python/blob/main/LICENSE)
 
-**oold-python** brings the semantic web into your Python type system. Define schemas once, generate fully typed Pydantic models, resolve objects across knowledge graphs by IRI, and serialize back to JSON-LD — all without leaving familiar Python patterns.
+**oold-python** brings the semantic web into your Python type system. Define schemas once, generate fully typed Pydantic models, resolve objects across knowledge graphs by IRI, and serialize back to JSON-LD - all without leaving familiar Python patterns.
 
 ---
 
@@ -14,11 +18,11 @@
 
 Knowledge graph tools typically force you to choose between semantic richness and developer ergonomics. oold-python bridges that gap:
 
-- **Typed models from schemas** — generate Pydantic dataclasses directly from OO-LD / JSON Schema definitions
-- **IRI-transparent references** — fields can hold either a Python object or an IRI string; the library resolves them on demand
-- **Pluggable backends** — swap between in-memory dicts, SQLite, local RDF graphs, or live SPARQL endpoints without changing model code
-- **Lossless JSON-LD** — serialize any model instance to JSON-LD, preserving the full semantic context
-- **Controller pattern** — add runtime behavior (connections, state, archiving) as a mixin without polluting the data model
+- **Typed models from schemas** - generate Pydantic dataclasses directly from OO-LD / JSON Schema definitions
+- **IRI-transparent references** - fields can hold either a Python object or an IRI string; the library resolves them on demand
+- **Pluggable backends** - swap between in-memory dicts, SQLite, local RDF graphs, or live SPARQL endpoints without changing model code
+- **Lossless JSON-LD** - serialize any model instance to JSON-LD, preserving the full semantic context
+- **Controller pattern** - add runtime behavior (connections, state, archiving) as a mixin without polluting the data model
 
 ---
 
@@ -73,21 +77,29 @@ print(alice.to_jsonld())
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: **[Get Started](get-started.md)**
+- :material-rocket-launch:{ .lg .middle } **[Get Started](get-started.md)**
+
+    ---
 
     Install oold-python and run your first end-to-end example in minutes.
 
-- :material-book-open-variant: **[How to Use](how-to/index.md)**
+- :material-book-open-variant:{ .lg .middle } **[How to Use](how-to/index.md)**
+
+    ---
 
     Step-by-step guides for code generation, backends, RDF export, and more.
 
-- :material-layers: **[Architecture](architecture.md)**
+- :material-layers:{ .lg .middle } **[Architecture](architecture.md)**
 
-    Understand how the layers fit together — from schemas to SPARQL.
+    ---
 
-- :material-source-pull: **[Contributing](contributing.md)**
+    Understand how the layers fit together - from schemas to SPARQL.
 
-    Fork, fix, and submit — everything you need to contribute.
+- :material-source-pull:{ .lg .middle } **[Contributing](contributing.md)**
+
+    ---
+
+    Fork, fix, and submit - everything you need to contribute.
 
 </div>
 
@@ -106,7 +118,7 @@ If you use oold-python in your research, please cite it:
 }
 ```
 
-A `CITATION.cff` file is included in the repository — GitHub uses it to populate the **Cite this repository** button on the repo page.
+A `CITATION.cff` file is included in the repository - GitHub uses it to populate the **Cite this repository** button on the repo page.
 
 ---
 

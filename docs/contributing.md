@@ -73,7 +73,7 @@ Doc sources live in `docs/`. The site is configured in `zensical.toml`.
 
     ```bash
     make docs        # serve with live reload at http://localhost:8000
-    make docs-test   # strict build — fails on any warning
+    make docs-test   # strict build - fails on any warning
     ```
 
 === "without make"
@@ -97,4 +97,4 @@ git tag v0.17.0
 git push origin v0.17.0
 ```
 
-CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs` — no manual version bumping needed.
+CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs` - no manual version bumping needed.

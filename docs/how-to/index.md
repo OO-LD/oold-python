@@ -1,27 +1,43 @@
 # How to Use
 
-Practical guides for every major feature of oold-python. Start with [Get Started](../get-started.md) if you haven't run the first example yet.
+Practical, task-focused guides for every major feature of oold-python. Each one is self-contained - pick the topic you need, or read them in order to build up the full picture.
+
+New here? Start with [Get Started](../get-started.md) to run your first end-to-end example, then come back for the deep dives.
 
 ---
 
 ## Guides
 
-### [Code Generation](codegen.md)
+<div class="grid cards" markdown>
 
-Generate fully typed Pydantic models from OO-LD / JSON Schema definitions. Covers single and multi-schema workflows, schema references, and available output model types.
+- :material-code-braces:{ .lg .middle } **[Code Generation](codegen.md)**
 
-### [Object Graph Mapping](object-graph-mapping.md)
+    ---
 
-Work with knowledge graph entities as Python objects. Covers IRI-transparent field assignment, lazy resolution, multiple backends, and the `cast()` conversion utility.
+    Turn OO-LD / JSON Schema definitions into fully typed Pydantic models - single and multi-schema workflows, schema references, and output model types.
 
-### [Backends](backends.md)
+- :material-vector-link:{ .lg .middle } **[Object Graph Mapping](object-graph-mapping.md)**
 
-Persist and resolve entities across different storage systems. Covers `SimpleDictDocumentStore`, `SqliteDocumentStore`, `LocalSparqlBackend`, and how to implement a custom backend.
+    ---
 
-### [RDF Export](rdf-export.md)
+    Treat knowledge-graph entities as ordinary Python objects - IRI-transparent fields, lazy resolution across backends, and the `cast()` utility.
 
-Serialize model instances to JSON-LD, load them into an RDFLib graph, and run SPARQL queries. Covers context injection, cross-object linking, and round-trip serialization.
+- :material-database:{ .lg .middle } **[Backends](backends.md)**
 
-### [BaseController](controller.md)
+    ---
 
-Add runtime behavior to data models without polluting them. Covers the controller mixin pattern, serialization rules, and multi-model controllers.
+    Persist and resolve entities anywhere - `SimpleDictDocumentStore`, `SqliteDocumentStore`, `LocalSparqlBackend`, and how to roll your own.
+
+- :material-graph-outline:{ .lg .middle } **[RDF Export](rdf-export.md)**
+
+    ---
+
+    Serialize models to JSON-LD, load them into RDFLib, and query with SPARQL - context injection, cross-object links, and round-trip fidelity.
+
+- :material-tune:{ .lg .middle } **[BaseController](controller.md)**
+
+    ---
+
+    Attach runtime behavior to data models without polluting them - the controller mixin pattern, serialization rules, and multi-model controllers.
+
+</div>

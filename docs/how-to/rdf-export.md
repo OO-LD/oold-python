@@ -140,4 +140,4 @@ alice2 = Person(id=data["@id"], name=data["name"])
 print(alice2.name)  # Alice
 ```
 
-For more complex round-trips — including nested objects — use a registered backend and resolve by IRI after storing.
+For more complex round-trips - including nested objects - use a registered backend and resolve by IRI after storing.

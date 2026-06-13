@@ -33,6 +33,10 @@ docstring_style = "numpy"
 
 [project.theme]
 language = "en"
+# Logo/favicon referenced directly from the OO-LD org so they stay in sync
+# with the source of truth (no vendored copy to maintain).
+logo = "https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg"
+favicon = "https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg"
 features = [
     "announce.dismiss",
     "content.code.annotate",
@@ -83,6 +87,14 @@ link = "https://github.com/OO-LD/oold-python"
 [[project.extra.social]]
 icon = "fontawesome/brands/python"
 link = "https://pypi.org/project/oold"
+
+[project.markdown_extensions.attr_list]
+
+[project.markdown_extensions.md_in_html]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
 
 [project.markdown_extensions.pymdownx.superfences]
 

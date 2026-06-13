@@ -8,8 +8,8 @@ Backends are the persistence and resolution layer for IRI-referenced entities. Y
 
 Every backend implements two operations from `oold.backend.interface.Backend`:
 
-- **`resolve_iris`** — fetch entities by IRI and deserialize them into model instances
-- **`store_json_dicts`** — persist entities as JSON dictionaries
+- **`resolve_iris`** - fetch entities by IRI and deserialize them into model instances
+- **`store_json_dicts`** - persist entities as JSON dictionaries
 
 You configure which backend handles which IRI prefix using `set_resolver` and `set_backend`:
 

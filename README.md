@@ -261,9 +261,17 @@ pre-commit install
 ```
 Please enable GitHub Actions for your fork to run the tests automatically.
 
-<!-- pyscaffold-notes -->
+## Citation
 
-## Note
+If you use oold-python in your research, please cite it:
 
-This project has been set up using PyScaffold 4.5. For details and usage
-information on PyScaffold see https://pyscaffold.org/.
+```bibtex
+@software{oold_python,
+  author  = {OO-LD Contributors},
+  title   = {oold-python: Object Oriented Linked Data for Python},
+  url     = {https://github.com/OO-LD/oold-python},
+  doi     = {10.5281/zenodo.8374237},
+}
+```
+
+[![DOI](https://zenodo.org/badge/691355012.svg)](https://zenodo.org/doi/10.5281/zenodo.8374237)

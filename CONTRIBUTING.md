@@ -9,6 +9,17 @@ Requires `uv` and `git`.
 ```bash
 git clone git@github.com:YOUR_NAME/oold-python.git
 cd oold-python
+```
+
+With `make`:
+
+```bash
+make install
+```
+
+Without `make`:
+
+```bash
 uv sync
 uv run pre-commit install
 ```
@@ -20,14 +31,16 @@ uv run pre-commit install
 3. Run checks and tests (see below)
 4. Commit and push, then open a pull request
 
-### With `make`
+### Checks and tests
+
+With `make`:
 
 ```bash
 make check   # lint, type-check, dependency audit
 make test    # pytest with coverage
 ```
 
-### Without `make`
+Without `make`:
 
 ```bash
 uv lock --locked
@@ -35,6 +48,22 @@ uv run pre-commit run -a
 uv run ty check
 uv run deptry src
 uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
+```
+
+### Docs
+
+With `make`:
+
+```bash
+make docs        # serve with live reload at http://localhost:8000
+make docs-test   # strict build — fails on any warning
+```
+
+Without `make`:
+
+```bash
+uv run zensical serve
+uv run zensical build -s
 ```
 
 ## Releasing

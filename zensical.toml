@@ -10,7 +10,18 @@ copyright = 'Maintained by <a href="https://github.com/OO-LD">OO-LD</a>.'
 
 nav = [
     { "Home" = "index.md" },
-    { "oold" = "oold.md" },
+    { "Get Started" = "get-started.md" },
+    { "How to Use" = [
+        { "Overview" = "how-to/index.md" },
+        { "Code Generation" = "how-to/codegen.md" },
+        { "Object Graph Mapping" = "how-to/object-graph-mapping.md" },
+        { "Backends" = "how-to/backends.md" },
+        { "RDF Export" = "how-to/rdf-export.md" },
+        { "BaseController" = "how-to/controller.md" },
+    ]},
+    { "Architecture" = "architecture.md" },
+    { "Contributing" = "contributing.md" },
+    { "API Reference" = "api.md" },
     { "Development" = "dev.md" },
 ]
 

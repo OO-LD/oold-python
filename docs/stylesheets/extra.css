@@ -1,0 +1,70 @@
+/* ----------------------------------------------------------------------------
+   OO-LD landing hero (docs/index.md)
+   Full-bleed, centered hero in the style of zensical.org: logo + headline +
+   short text passage + call-to-action buttons over a soft brand gradient.
+---------------------------------------------------------------------------- */
+
+.oold-hero {
+  /* Break out of the content column to span the full viewport width */
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  margin-top: -1.5rem;
+  padding: 4.5rem 1rem 5rem;
+  text-align: center;
+  background:
+    radial-gradient(
+      60% 80% at 50% 0%,
+      color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-accent-fg-color) 6%, var(--md-default-bg-color)),
+      var(--md-default-bg-color)
+    );
+}
+
+.oold-hero__logo {
+  width: 200px;
+  max-width: 55%;
+  height: auto;
+  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.18));
+}
+
+.oold-hero__title {
+  margin: 1.4rem 0 0.3rem;
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.oold-hero__tagline {
+  margin: 0 auto 1.2rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--md-default-fg-color--light);
+}
+
+.oold-hero__text {
+  max-width: 42rem;
+  margin: 0 auto 2rem;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: var(--md-default-fg-color--light);
+}
+
+.oold-hero__actions .md-button {
+  margin: 0.35rem 0.4rem;
+}
+
+@media screen and (max-width: 44.9375em) {
+  .oold-hero {
+    padding: 3rem 1rem 3.5rem;
+  }
+  .oold-hero__title {
+    font-size: 2rem;
+  }
+  .oold-hero__tagline {
+    font-size: 1.1rem;
+  }
+}

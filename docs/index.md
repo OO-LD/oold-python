@@ -1,148 +1,28 @@
 ---
 title: Object Oriented Linked Data
+hide:
+  - navigation
+  - toc
 ---
 
-<p align="center" markdown>
-  ![OO-LD logo](https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg){ width="240" }
+<div class="oold-hero" markdown>
+
+<img class="oold-hero__logo" alt="OO-LD logo" src="https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg">
+
+<h1 class="oold-hero__title">Object Oriented Linked Data</h1>
+
+<p class="oold-hero__tagline">Link object-oriented programming with linked data and the semantic web.</p>
+
+<p class="oold-hero__text">
+Define data structure and semantics in a single source by embedding JSON-LD
+contexts within JSON Schema - then reuse that one schema for validation, RDF
+generation, code generation, UIs, and API definitions. oold-python brings it
+all into your Python type system.
 </p>
 
-<h1 align="center" style="margin-top: 0;">Object Oriented Linked Data</h1>
-
-<p align="center"><em>The semantic web, in your Python type system.</em></p>
-
-<p align="center">
-<a href="https://zenodo.org/doi/10.5281/zenodo.8374237"><img alt="DOI" src="https://zenodo.org/badge/691355012.svg"></a>
-<a href="https://pypi.org/project/oold/"><img alt="PyPI" src="https://img.shields.io/pypi/v/oold.svg"></a>
-<a href="https://github.com/OO-LD/oold-python/actions/workflows/main.yml?query=branch%3Amain"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/OO-LD/oold-python/main.yml?branch=main"></a>
-<a href="https://codecov.io/gh/OO-LD/oold-python"><img alt="Coverage" src="https://codecov.io/gh/OO-LD/oold-python/branch/main/graph/badge.svg"></a>
-<a href="https://github.com/OO-LD/oold-python/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/OO-LD/oold-python"></a>
+<p class="oold-hero__actions" markdown>
+[Get started](get-started.md){ .md-button .md-button--primary }
+[Learn more](about.md){ .md-button }
 </p>
-
-<p align="center" markdown>
-[:material-rocket-launch: Get Started](get-started.md){ .md-button .md-button--primary }
-[:material-book-open-variant: How to Use](how-to/index.md){ .md-button }
-</p>
-
----
-
-Define schemas once, generate fully typed Pydantic models, resolve objects across knowledge graphs by IRI, and serialize back to JSON-LD - all without leaving familiar Python patterns.
-
-## Why oold-python?
-
-Knowledge graph tools typically force you to choose between semantic richness and developer ergonomics. oold-python bridges that gap:
-
-- **Typed models from schemas** - generate Pydantic dataclasses directly from OO-LD / JSON Schema definitions
-- **IRI-transparent references** - fields can hold either a Python object or an IRI string; the library resolves them on demand
-- **Pluggable backends** - swap between in-memory dicts, SQLite, local RDF graphs, or live SPARQL endpoints without changing model code
-- **Lossless JSON-LD** - serialize any model instance to JSON-LD, preserving the full semantic context
-- **Controller pattern** - add runtime behavior (connections, state, archiving) as a mixin without polluting the data model
-
----
-
-## Quick install
-
-[uv](https://docs.astral.sh/uv/) is the recommended way to install oold-python:
-
-=== "uv (recommended)"
-
-    ```bash
-    uv add oold
-    ```
-
-=== "pip"
-
-    ```bash
-    pip install oold
-    ```
-
----
-
-## First steps
-
-```python
-from oold.model import LinkedBaseModel
-from pydantic import ConfigDict
-
-class Person(LinkedBaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "@context": {"name": "https://schema.org/name"},
-            "$id": "https://example.com/Person",
-        }
-    )
-    name: str
-
-alice = Person(name="Alice")
-print(alice.to_jsonld())
-```
-
-```json
-{
-  "@context": {"name": "https://schema.org/name"},
-  "@type": "https://example.com/Person",
-  "name": "Alice"
-}
-```
-
----
-
-## Where to go next
-
-<div class="grid cards" markdown>
-
-- :material-rocket-launch:{ .lg .middle } **[Get Started](get-started.md)**
-
-    ---
-
-    Install oold-python and run your first end-to-end example in minutes.
-
-- :material-book-open-variant:{ .lg .middle } **[How to Use](how-to/index.md)**
-
-    ---
-
-    Step-by-step guides for code generation, backends, RDF export, and more.
-
-- :material-layers:{ .lg .middle } **[Architecture](architecture.md)**
-
-    ---
-
-    Understand how the layers fit together - from schemas to SPARQL.
-
-- :material-source-pull:{ .lg .middle } **[Contributing](contributing.md)**
-
-    ---
-
-    Fork, fix, and submit - everything you need to contribute.
 
 </div>
-
----
-
-## Citation
-
-If you use oold-python in your research, please cite it:
-
-```bibtex
-@software{oold_python,
-  author  = {OO-LD Contributors},
-  title   = {oold-python: Object Oriented Linked Data for Python},
-  url     = {https://github.com/OO-LD/oold-python},
-  doi     = {10.5281/zenodo.8374237},
-}
-```
-
-A `CITATION.cff` file is included in the repository - GitHub uses it to populate the **Cite this repository** button on the repo page.
-
----
-
-## Related work
-
-| Library | Notes |
-|---|---|
-| [RDFLib](https://github.com/RDFLib/rdflib) | RDF management; no schema validation or type safety. Used as a backend by oold-python. |
-| [SuRF](https://github.com/cosminbasca/surfrdf) | ORM-like RDF; dynamically generated classes, no static type checking. |
-| [Owlready2](https://github.com/pwin/owlready2) | OWL-aligned classes with native reasoning; no remote SPARQL support. |
-| [twa](https://github.com/TheWorldAvatar/baselib/tree/main/python_wrapper) | Pydantic-based OGM; tightly couples RDF properties and type annotations. |
-| [COLD](https://github.com/DigiBatt/cold/) | Generates static classes from OWL; no object-to-graph mapping. |
-
-See also: Bai et al. [https://doi.org/10.1039/D5DD00069F](https://doi.org/10.1039/D5DD00069F)

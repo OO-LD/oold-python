@@ -8,8 +8,11 @@ edit_uri = "edit/main/docs/"
 repo_name = "OO-LD/oold-python"
 copyright = 'Maintained by <a href="https://github.com/OO-LD">OO-LD</a>.'
 
+extra_css = ["stylesheets/extra.css"]
+
 nav = [
     { "Home" = "index.md" },
+    { "About" = "about.md" },
     { "Get Started" = "get-started.md" },
     { "How to Use" = [
         { "Overview" = "how-to/index.md" },

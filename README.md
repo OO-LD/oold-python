@@ -251,7 +251,7 @@ make test      # run the test suite with coverage
 make docs      # build and serve the documentation locally
 ```
 
-See [docs/dev.md](docs/dev.md) for the full workflow.
+See [docs/contributing.md](docs/contributing.md) for the full workflow.
 
 ### Benchmarking
 

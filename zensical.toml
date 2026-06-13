@@ -25,7 +25,6 @@ nav = [
     { "Architecture" = "architecture.md" },
     { "Contributing" = "contributing.md" },
     { "API Reference" = "api.md" },
-    { "Development" = "dev.md" },
 ]
 
 [project.plugins.mkdocstrings.handlers.python]

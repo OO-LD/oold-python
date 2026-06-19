@@ -1,5 +1,4 @@
 import json
-from typing import Dict, List, Optional
 
 from pydantic import ConfigDict
 from rdflib import Graph
@@ -12,14 +11,14 @@ from oold.backend.interface import Backend, Resolver, StoreResult
 class LocalSparqlResolver(Resolver):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    graph: Optional[Graph] = None
+    graph: Graph | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if self.graph is None:
             self.graph = Graph()
 
-    def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+    def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
         # using CONSTRUCT to get the full node
         # format the result as json-ld
@@ -40,9 +39,7 @@ class LocalSparqlResolver(Resolver):
                     ?s ?p ?o .
                     {{{iri_filter}}}
                 }
-                """.replace(
-                    "{{{iri_filter}}}", iri_filter
-                )
+                """.replace("{{{iri_filter}}}", iri_filter)
             )
             jsonld_dict = json.loads(qres.serialize(format="json-ld"))[0]
             jsonld_dicts[iri] = jsonld_dict
@@ -50,9 +47,9 @@ class LocalSparqlResolver(Resolver):
 
 
 class LocalSparqlBackend(LocalSparqlResolver, Backend):
-    def store_jsonld_dicts(self, jsonld_dicts: Dict[str, Dict]) -> StoreResult:
+    def store_jsonld_dicts(self, jsonld_dicts: dict[str, dict]) -> StoreResult:
         # delete all triples with the given iris as subject
-        for iri in jsonld_dicts.keys():
+        for iri in jsonld_dicts:
             iri_filter = f"{iri}"
             # check if the iri is a full IRI or a prefix
             if iri.startswith("http"):
@@ -62,9 +59,7 @@ class LocalSparqlBackend(LocalSparqlResolver, Backend):
                 DELETE WHERE {
                     {{{iri_filter}}} ?p ?o .
                 }
-                """.replace(
-                "{{{iri_filter}}}", iri_filter
-            )
+                """.replace("{{{iri_filter}}}", iri_filter)
             self.graph.update(query)
             # convert jsonld_dict to rdflib triples and add to graph
             g = Graph()
@@ -86,7 +81,7 @@ class SparqlResolver(Resolver):
 
         self._sparql = SPARQLWrapper(self.endpoint)
 
-    def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+    def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
         # using CONSTRUCT to get the full node
         # format the result as json-ld
@@ -97,11 +92,8 @@ class SparqlResolver(Resolver):
             cred = get_credential(self.endpoint)
         except ValueError:
             cred = None
-        if cred is not None:
-            if isinstance(cred, UserPwdCredential):
-                self._sparql.setCredentials(
-                    cred.username, cred.password.get_secret_value()
-                )
+        if cred is not None and isinstance(cred, UserPwdCredential):
+            self._sparql.setCredentials(cred.username, cred.password.get_secret_value())
 
         for iri in iris:
             iri_filter = f"FILTER (?s = {iri})"
@@ -118,9 +110,7 @@ class SparqlResolver(Resolver):
                     ?s ?p ?o .
                     {{{iri_filter}}}
                 }
-                """.replace(
-                    "{{{iri_filter}}}", iri_filter
-                )
+                """.replace("{{{iri_filter}}}", iri_filter)
             )
             self._sparql.setReturnFormat(JSONLD)
             result: Graph = self._sparql.query().convert()
@@ -143,7 +133,7 @@ class WikiDataSparqlResolver(Resolver):
 
         self._sparql = SPARQLWrapper(self.endpoint)
 
-    def resolve_iri(self, iris: List[str]) -> Dict[str, Dict]:
+    def resolve_iri(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
         # using CONSTRUCT to get the full node
         # format the result as json-ld
@@ -164,18 +154,14 @@ class WikiDataSparqlResolver(Resolver):
                     ?s ?p ?o .
                     {{{iri_filter}}}
                 }
-                """.replace(
-                    "{{{iri_filter}}}", iri_filter
-                )
+                """.replace("{{{iri_filter}}}", iri_filter)
             )
             self._sparql.setReturnFormat(JSONLD)
             result: Graph = self._sparql.query().convert()
             jsonld_dict = json.loads(result.serialize(format="json-ld"))[0]
             # replace http://www.wikidata.org/prop/direct/P31 with @type
             if "http://www.wikidata.org/prop/direct/P31" in jsonld_dict:
-                jsonld_dict["@type"] = jsonld_dict.pop(
-                    "http://www.wikidata.org/prop/direct/P31"
-                )[0]["@id"]
+                jsonld_dict["@type"] = jsonld_dict.pop("http://www.wikidata.org/prop/direct/P31")[0]["@id"]
             jsonld_dicts[iri] = jsonld_dict
 
         return jsonld_dicts

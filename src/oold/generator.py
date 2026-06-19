@@ -3,9 +3,9 @@ import os
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional
 
 import datamodel_code_generator
+import datamodel_code_generator.parser.jsonschema
 from datamodel_code_generator import DataModelType, InputFileType, generate
 from pydantic import BaseModel
 
@@ -14,22 +14,18 @@ from oold.utils.codegen import OOLDJsonSchemaParserFixedRefs as OOLDJsonSchemaPa
 
 class Generator:
     class GenerateParams(BaseModel):
-        json_schemas: List[Dict]
+        json_schemas: list[dict]
         """JSON SCHEMA source(s)"""
         preprocess: bool = True
         """Preprocess the JSON schemas before generating the models"""
-        main_schema: Optional[str] = None
+        main_schema: str | None = None
         """File name of the main schema"""
-        output_model_type: Optional[DataModelType] = (
-            DataModelType.PydanticV2BaseModel,
-        )
+        output_model_type: DataModelType | None = (DataModelType.PydanticV2BaseModel,)
         """Output model type, e.g. PydanticV2BaseModel or PydanticBaseModel"""
-        output_model_path: Optional[Path] = (
-            Path(__file__).parent / "model" / "example.py"
-        )
+        output_model_path: Path | None = Path(__file__).parent / "model" / "example.py"
         """Output model path, if not set the model will be generated
         in the current directory"""
-        working_dir_path: Optional[Path] = None
+        working_dir_path: Path | None = None
         """Working directory to store intermedia files
         and the generated partial models"""
         generate_init_py_files: bool = True
@@ -40,14 +36,10 @@ class Generator:
         params: GenerateParams,
     ):
         if params.preprocess:
-            self.preprocess(
-                Generator.PreprocessParams(json_schemas=params.json_schemas)
-            )
+            self.preprocess(Generator.PreprocessParams(json_schemas=params.json_schemas))
 
         # monkey patch class
-        datamodel_code_generator.parser.jsonschema.JsonSchemaParser = (
-            OOLDJsonSchemaParser
-        )
+        datamodel_code_generator.parser.jsonschema.JsonSchemaParser = OOLDJsonSchemaParser
 
         with TemporaryDirectory() as temporary_directory_name:
             temporary_directory = Path(temporary_directory_name)
@@ -73,9 +65,7 @@ class Generator:
                 # e.g. 'C:' or '/var'
                 for segment in target_dir.parts:
                     # create the segment path
-                    segment_path = Path(
-                        *target_dir.parts[: target_dir.parts.index(segment) + 1]
-                    )
+                    segment_path = Path(*target_dir.parts[: target_dir.parts.index(segment) + 1])
                     # check if the segment path exists
                     if not segment_path.exists():
                         # create the __init__.py file
@@ -90,14 +80,10 @@ class Generator:
                     os.path.dirname(Path(temporary_directory / (name + ".json"))),
                     exist_ok=True,
                 )
-                with open(
-                    Path(temporary_directory / (name + ".json")), "w", encoding="utf-8"
-                ) as f:
-                    schema_str = json.dumps(
-                        schema, ensure_ascii=False, indent=4
-                    ).replace("dollarref", "$ref")
+                with open(Path(temporary_directory / (name + ".json")), "w", encoding="utf-8") as f:
+                    schema_str = json.dumps(schema, ensure_ascii=False, indent=2).replace("dollarref", "$ref")
                     # print(schema_str)
-                    f.write(schema_str)
+                    f.write(schema_str + "\n")
 
             if params.output_model_type == DataModelType.PydanticV2BaseModel:
                 base_class = "oold.model.LinkedBaseModel"
@@ -115,9 +101,7 @@ class Generator:
                 field_include_all_keys=True,
                 base_class=base_class,
                 # use_default = True,
-                allof_class_hierarchy=(
-                    datamodel_code_generator.AllOfClassHierarchy.Always
-                ),
+                allof_class_hierarchy=(datamodel_code_generator.AllOfClassHierarchy.Always),
                 enum_field_as_literal=datamodel_code_generator.LiteralType.Off,
                 use_title_as_name=True,
                 use_schema_description=True,
@@ -137,7 +121,7 @@ class Generator:
 
             if params.main_schema is not None:
                 content = ""
-                with open(output, "r", encoding="utf-8") as f:
+                with open(output, encoding="utf-8") as f:
                     content = f.read()
                 os.remove(output)
 
@@ -151,9 +135,7 @@ class Generator:
                     # we are now using pydantic.v1
                     # pydantic imports lead to uninitialized fields
                     # (FieldInfo still present)
-                    content = re.sub(
-                        r"(from pydantic import)", "from pydantic.v1 import", content
-                    )
+                    content = re.sub(r"(from pydantic import)", "from pydantic.v1 import", content)
 
                 # fix unserializable defaults from datamodel-code-generator
                 # when allOf merges a property override (e.g. hidden:true) with
@@ -172,7 +154,7 @@ class Generator:
                     f.write(content)
 
     class PreprocessParams(BaseModel):
-        json_schemas: List[Dict]
+        json_schemas: list[dict]
         """JSON SCHEMA source(s)"""
 
     def preprocess(self, params: PreprocessParams):
@@ -199,9 +181,7 @@ class Generator:
                         if "type" in property["items"]:
                             del property["items"]["type"]
                         if isinstance(property["items"]["range"], str):
-                            property["items"]["allOf"] = [
-                                {"$ref": property["items"]["range"]}
-                            ]
+                            property["items"]["allOf"] = [{"$ref": property["items"]["range"]}]
                         else:
                             property["items"]["$ref"] = property["items"]["range"]
                         property["range"] = property["items"]["range"]
@@ -214,9 +194,7 @@ class Generator:
                                 property["x-oold-required-iri"] = True
 
                     if "properties" in property["items"]:
-                        self.preprocess(
-                            Generator.PreprocessParams(json_schemas=[property["items"]])
-                        )
+                        self.preprocess(Generator.PreprocessParams(json_schemas=[property["items"]]))
 
                 if "properties" in property:
                     self.preprocess(Generator.PreprocessParams(json_schemas=[property]))

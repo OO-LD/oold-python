@@ -23,11 +23,7 @@ from oold.backend.auth import (
 
 
 def test_set_and_get_credential():
-    set_credential(
-        UserPwdCredential(
-            iri="localhost:8080", username="admin", password=SecretStr("pass123")
-        )
-    )
+    set_credential(UserPwdCredential(iri="localhost:8080", username="admin", password=SecretStr("pass123")))
     cred = get_credential("localhost:8080")
     assert isinstance(cred, UserPwdCredential)
     assert cred.iri == "localhost:8080"
@@ -48,27 +44,15 @@ def test_get_credential_missing_raises():
 
 
 def test_overwrite_credential():
-    set_credential(
-        UserPwdCredential(
-            iri="overwrite.test", username="user1", password=SecretStr("pass1")
-        )
-    )
-    set_credential(
-        UserPwdCredential(
-            iri="overwrite.test", username="user2", password=SecretStr("pass2")
-        )
-    )
+    set_credential(UserPwdCredential(iri="overwrite.test", username="user1", password=SecretStr("pass1")))
+    set_credential(UserPwdCredential(iri="overwrite.test", username="user2", password=SecretStr("pass2")))
     cred = get_credential("overwrite.test")
     assert cred.username == "user2"
 
 
 def test_contextvars_isolation():
     """Credentials set in a child context should not affect the parent."""
-    set_credential(
-        UserPwdCredential(
-            iri="parent.test", username="parent_user", password=SecretStr("parent_pass")
-        )
-    )
+    set_credential(UserPwdCredential(iri="parent.test", username="parent_user", password=SecretStr("parent_pass")))
 
     ctx = contextvars.copy_context()
 
@@ -94,41 +78,27 @@ def test_contextvars_isolation():
 
 
 def test_get_credential_exact_match():
-    set_credential(
-        UserPwdCredential(
-            iri="match.exact.test", username="exact_user", password=SecretStr("p")
-        )
-    )
+    set_credential(UserPwdCredential(iri="match.exact.test", username="exact_user", password=SecretStr("p")))
     cred = get_credential("match.exact.test", exact=True)
     assert cred.username == "exact_user"
 
 
 def test_get_credential_exact_match_missing_raises():
-    set_credential(
-        UserPwdCredential(iri="match.exact.base", username="u", password=SecretStr("p"))
-    )
+    set_credential(UserPwdCredential(iri="match.exact.base", username="u", password=SecretStr("p")))
     with pytest.raises(ValueError):
         get_credential("match.exact.base/subpath", exact=True)
 
 
 def test_get_credential_substring_match():
     """Stored IRI is a substring of the search IRI."""
-    set_credential(
-        UserPwdCredential(
-            iri="match.sub.host", username="sub_user", password=SecretStr("p")
-        )
-    )
+    set_credential(UserPwdCredential(iri="match.sub.host", username="sub_user", password=SecretStr("p")))
     cred = get_credential("https://match.sub.host:443/api")
     assert cred.username == "sub_user"
 
 
 def test_get_credential_most_specific_match():
     """Longest stored IRI that is a substring of the search wins."""
-    set_credential(
-        UserPwdCredential(
-            iri="specificity.host", username="general", password=SecretStr("p")
-        )
-    )
+    set_credential(UserPwdCredential(iri="specificity.host", username="general", password=SecretStr("p")))
     set_credential(
         UserPwdCredential(
             iri="specificity.host:443",
@@ -155,9 +125,7 @@ def test_get_credential_most_specific_match():
 
 
 def test_get_credential_no_substring_match_raises():
-    set_credential(
-        UserPwdCredential(iri="nomatch.host", username="u", password=SecretStr("p"))
-    )
+    set_credential(UserPwdCredential(iri="nomatch.host", username="u", password=SecretStr("p")))
     with pytest.raises(ValueError):
         get_credential("completely.different.host")
 
@@ -171,9 +139,7 @@ def test_base_credential():
 
 
 def test_user_pwd_credential():
-    cred = UserPwdCredential(
-        iri="u.test", username="admin", password=SecretStr("s3cret")
-    )
+    cred = UserPwdCredential(iri="u.test", username="admin", password=SecretStr("s3cret"))
     assert isinstance(cred, BaseCredential)
     assert cred.username == "admin"
     assert cred.password.get_secret_value() == "s3cret"
@@ -245,11 +211,7 @@ def test_certificate_credential_minimal():
 
 
 def test_set_get_preserves_user_pwd_type():
-    set_credential(
-        UserPwdCredential(
-            iri="db.example.com:5432", username="db_user", password=SecretStr("db_pass")
-        )
-    )
+    set_credential(UserPwdCredential(iri="db.example.com:5432", username="db_user", password=SecretStr("db_pass")))
     retrieved = get_credential("db.example.com:5432")
     assert isinstance(retrieved, UserPwdCredential)
 
@@ -269,9 +231,7 @@ def test_set_get_preserves_oauth1_type():
 
 
 def test_set_get_preserves_token_type():
-    set_credential(
-        TokenCredential(iri="postgrest.local:3000", token=SecretStr("pgrst_jwt"))
-    )
+    set_credential(TokenCredential(iri="postgrest.local:3000", token=SecretStr("pgrst_jwt")))
     retrieved = get_credential("postgrest.local:3000")
     assert isinstance(retrieved, TokenCredential)
 
@@ -280,9 +240,7 @@ def test_set_get_preserves_token_type():
 
 
 def test_credential_iri_accessible():
-    set_credential(
-        UserPwdCredential(iri="iri.access.test", username="u", password=SecretStr("p"))
-    )
+    set_credential(UserPwdCredential(iri="iri.access.test", username="u", password=SecretStr("p")))
     cred = get_credential("iri.access.test")
     assert cred.iri == "iri.access.test"
 
@@ -301,9 +259,7 @@ def yaml_path():
 
 def test_dump_and_load_user_pwd(yaml_path):
     creds = {
-        "wiki.test.com": UserPwdCredential(
-            iri="wiki.test.com", username="admin", password=SecretStr("secret")
-        ),
+        "wiki.test.com": UserPwdCredential(iri="wiki.test.com", username="admin", password=SecretStr("secret")),
     }
     dump_credentials(yaml_path, credentials=creds)
 
@@ -345,13 +301,9 @@ def test_dump_and_load_oauth1(yaml_path):
 
 def test_dump_and_load_mixed(yaml_path):
     creds = {
-        "wiki.mixed.com": UserPwdCredential(
-            iri="wiki.mixed.com", username="u", password=SecretStr("p")
-        ),
+        "wiki.mixed.com": UserPwdCredential(iri="wiki.mixed.com", username="u", password=SecretStr("p")),
         "api.mixed.com": TokenCredential(iri="api.mixed.com", token=SecretStr("tok")),
-        "cert.mixed.com": CertificateCredential(
-            iri="cert.mixed.com", cert_path="/c.pem", key_path="/k.pem"
-        ),
+        "cert.mixed.com": CertificateCredential(iri="cert.mixed.com", cert_path="/c.pem", key_path="/k.pem"),
     }
     dump_credentials(yaml_path, credentials=creds)
 
@@ -367,9 +319,7 @@ def test_dump_excludes_iri_from_yaml(yaml_path):
     import yaml
 
     creds = {
-        "iri.key.test": UserPwdCredential(
-            iri="iri.key.test", username="u", password=SecretStr("p")
-        ),
+        "iri.key.test": UserPwdCredential(iri="iri.key.test", username="u", password=SecretStr("p")),
     }
     dump_credentials(yaml_path, credentials=creds)
 
@@ -381,9 +331,7 @@ def test_dump_excludes_iri_from_yaml(yaml_path):
 
 def test_load_into_store(yaml_path):
     creds = {
-        "store.load.test": UserPwdCredential(
-            iri="store.load.test", username="loaded", password=SecretStr("pw")
-        ),
+        "store.load.test": UserPwdCredential(iri="store.load.test", username="loaded", password=SecretStr("pw")),
     }
     dump_credentials(yaml_path, credentials=creds)
 
@@ -488,9 +436,7 @@ def test_credential_manager_multi_file(yaml_path):
 
 def test_credential_manager_add_credential():
     cm = CredentialManager(cred_filepath=None)
-    cred = UserPwdCredential(
-        iri="added.test", username="added", password=SecretStr("pw")
-    )
+    cred = UserPwdCredential(iri="added.test", username="added", password=SecretStr("pw"))
     cm.add_credential(cred)
     result = cm.get_credential(CredentialManager.CredentialConfig(iri="added.test"))
     assert result.username == "added"

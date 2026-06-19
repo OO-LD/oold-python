@@ -1,6 +1,5 @@
 import json
 from pprint import pprint
-from typing import Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field
 class LinkedBaseModel(BaseModel):
     type: str
     id: str
-    __iris__: Optional[Dict[str, str]] = {}
+    __iris__: dict[str, str] | None = {}
 
     def __init__(self, *a, **kw):
         # pprint(a)
@@ -17,11 +16,10 @@ class LinkedBaseModel(BaseModel):
             # rewrite <attr> to <attr>_iri
             # pprint(self.__fields__)
             # if hasattr(self.__fields__[name], "extra") and "range" in self.__fields__[name].extra: # pydantic v1
-            if not "__iris__" in kw:
+            if "__iris__" not in kw:
                 kw["__iris__"] = {}
             if (
-                self.model_fields[name].json_schema_extra
-                and "range" in self.model_fields[name].json_schema_extra
+                self.model_fields[name].json_schema_extra and "range" in self.model_fields[name].json_schema_extra
             ):  # pydantic v2: model_fields
                 if isinstance(kw[name], BaseModel):  # contructed with object ref
                     # print(kw[name].id)
@@ -39,18 +37,17 @@ class LinkedBaseModel(BaseModel):
         if name in ["__dict__", "__pydantic_private__", "__iris__"]:
             return BaseModel.__getattribute__(self, name)  # prevent loop
         # if name in ["__pydantic_extra__"]
-        if "__iris__" in self.__dict__:
-            if name in self.__dict__["__iris__"]:
-                # if self.__iris__:
-                #    if name in self.__iris__:
-                # print("in dict")
-                iri = self.__iris__[name]
-                # we will need an osw instance here
-                # if iri in graph:
-                # print("in graph")
-                node = get(iri)
-                if node:
-                    self.__setattr__(name, node)
+        if "__iris__" in self.__dict__ and name in self.__dict__["__iris__"]:
+            # if self.__iris__:
+            #    if name in self.__iris__:
+            # print("in dict")
+            iri = self.__iris__[name]
+            # we will need an osw instance here
+            # if iri in graph:
+            # print("in graph")
+            node = get(iri)
+            if node:
+                self.__setattr__(name, node)
         return BaseModel.__getattribute__(self, name)
 
     def _object_to_iri(self, d):
@@ -76,22 +73,20 @@ class LinkedBaseModel(BaseModel):
 
     def model_dump_json(self, **kwargs):
         # print("json")
-        d = json.loads(
-            BaseModel.model_dump_json(self, **kwargs)
-        )  # ToDo directly use dict?
+        d = json.loads(BaseModel.model_dump_json(self, **kwargs))  # ToDo directly use dict?
         self._object_to_iri(d)
         return json.dumps(d, **kwargs)
 
 
 class Bar(LinkedBaseModel):
-    type: Optional[str] = "Bar"
+    type: str | None = "Bar"
     prop1: str
 
 
 class Foo(LinkedBaseModel):
-    type: Optional[str] = "Foo"
+    type: str | None = "Foo"
     literal: str
-    b: Optional[Bar] = Field(None, range="ex:test")
+    b: Bar | None = Field(None, range="ex:test")
 
 
 graph = [
@@ -119,7 +114,7 @@ graph = [
 ]
 
 
-def get(iri) -> Union[None, LinkedBaseModel]:
+def get(iri) -> None | LinkedBaseModel:
     for node in graph:
         if node["id"] == iri:
             cls = node["type"]

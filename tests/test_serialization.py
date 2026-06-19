@@ -72,11 +72,9 @@ def test_to_json_exclude_defaults_false(pydantic_version):
 def test_to_json_excludes_none(pydantic_version):
     LinkedBaseModel = _get_models(pydantic_version)
 
-    from typing import Optional
-
     class Foo(LinkedBaseModel):
         value: float
-        label: Optional[str] = None
+        label: str | None = None
 
     obj = Foo(value=1.0)
     result = obj.to_json()

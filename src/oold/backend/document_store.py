@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any
 
 from oold.backend.interface import (
     Backend,
@@ -24,8 +24,8 @@ class SimpleDictDocumentStore(Backend):
     On every store, writes the full dict back to disk.
     """
 
-    _store: Optional[Dict[str, dict]] = None
-    file_path: Optional[Union[Path, str]] = None
+    _store: dict[str, dict] | None = None
+    file_path: Path | str | None = None
     format: LinkedDataFormat = LinkedDataFormat.JSON
 
     def __init__(self, **kwargs):
@@ -43,13 +43,13 @@ class SimpleDictDocumentStore(Backend):
             with open(self.file_path, "w") as f:
                 json.dump(self._store, f, indent=2)
 
-    def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+    def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         jsonld_dicts = {}
         for iri in iris:
             jsonld_dicts[iri] = self._store.get(iri, None)
         return jsonld_dicts
 
-    def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
+    def store_json_dicts(self, json_dicts: dict[str, dict]) -> StoreResult:
         for iri, json_dict in json_dicts.items():
             self._store[iri] = json_dict
         self._persist()
@@ -60,9 +60,9 @@ class SimpleDictDocumentStore(Backend):
         key: str,
         operator: str,
         value: Any,
-        context: Optional[Dict[str, Dict]] = None,
-        data: Optional[Dict[str, Dict]] = None,
-    ) -> Set[str]:
+        context: dict[str, dict] | None = None,
+        data: dict[str, dict] | None = None,
+    ) -> set[str]:
         if data is None:
             data = self._store
         # retrieve property mapping from context
@@ -71,17 +71,16 @@ class SimpleDictDocumentStore(Backend):
         #    key = context[key]
         matched_entities = set()
         for iri, jsonld_dict in data.items():
-            if key in jsonld_dict:
-                if apply_operator(operator, jsonld_dict[key], value):
-                    matched_entities.add(iri)
+            if key in jsonld_dict and apply_operator(operator, jsonld_dict[key], value):
+                matched_entities.add(iri)
         return matched_entities
 
     def _query(
         self,
-        query: Union[Query, Condition],
-        context: Dict = None,
-        data: Optional[Dict[str, Dict]] = None,
-    ) -> Set[str]:
+        query: Query | Condition,
+        context: dict | None = None,
+        data: dict[str, dict] | None = None,
+    ) -> set[str]:
         print("QUERY", query)
         if data is None:
             data = self._store
@@ -99,7 +98,7 @@ class SimpleDictDocumentStore(Backend):
             else:
                 raise NotImplementedError(f"Operator {query.operator} not implemented")
         else:
-            raise ValueError("Invalid query type")
+            raise TypeError("Invalid query type")
 
     def query(self, param: QueryParam) -> ResolveResult:
         context = None
@@ -112,10 +111,10 @@ class SimpleDictDocumentStore(Backend):
 
 
 class SqliteDocumentStore(Backend):
-    db_path: Union[Path, str]
+    db_path: Path | str
     format: LinkedDataFormat = LinkedDataFormat.JSON
     persist_connection: bool = False
-    _conn: Optional[sqlite3.Connection] = None
+    _conn: sqlite3.Connection | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -145,16 +144,15 @@ class SqliteDocumentStore(Backend):
             self._conn.close()
             self._conn = None
 
-    def resolve_iris(self, iris: List[str]) -> Dict[str, Dict]:
+    def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         jsonld_dicts = {}
         conn = self._conn if self.persist_connection else sqlite3.connect(self.db_path)
         c = conn.cursor()
+        # Only the number of `?` placeholders is interpolated; the actual IRI
+        # values are bound as query parameters, so this is not an injection vector.
+        placeholders = ",".join("?" for _ in iris)
         c.execute(
-            """
-            SELECT id, data FROM entities WHERE id IN ({})
-            """.format(
-                ",".join("?" for _ in iris)
-            ),
+            f"SELECT id, data FROM entities WHERE id IN ({placeholders})",  # noqa: S608
             iris,
         )
         rows = c.fetchall()
@@ -164,7 +162,7 @@ class SqliteDocumentStore(Backend):
             conn.close()
         return jsonld_dicts
 
-    def _store_dicts(self, dicts: Dict[str, Dict]) -> StoreResult:
+    def _store_dicts(self, dicts: dict[str, dict]) -> StoreResult:
         conn = self._conn if self.persist_connection else sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.executemany(
@@ -178,7 +176,7 @@ class SqliteDocumentStore(Backend):
             conn.close()
         return StoreResult(success=True)
 
-    def store_json_dicts(self, json_dicts: Dict[str, Dict]) -> StoreResult:
+    def store_json_dicts(self, json_dicts: dict[str, dict]) -> StoreResult:
         return self._store_dicts(json_dicts)
 
     def query():

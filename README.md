@@ -1,36 +1,50 @@
+<p align="center">
+  <img alt="OO-LD logo" src="https://raw.githubusercontent.com/OO-LD/schema/main/OO-LD_logo.jpg" width="220" />
+</p>
+
 [![DOI](https://zenodo.org/badge/691355012.svg)](https://zenodo.org/doi/10.5281/zenodo.8374237)
 [![PyPI-Server](https://img.shields.io/pypi/v/oold.svg)](https://pypi.org/project/oold/)
-[![Coveralls](https://img.shields.io/coveralls/github/OpenSemanticWorld/oold-python/main.svg)](https://coveralls.io/r/<USER>/oold)
-[![Project generated with PyScaffold](https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold)](https://pyscaffold.org/)
+[![Build status](https://img.shields.io/github/actions/workflow/status/OO-LD/oold-python/main.yml?branch=main)](https://github.com/OO-LD/oold-python/actions/workflows/main.yml?query=branch%3Amain)
+[![codecov](https://codecov.io/gh/OO-LD/oold-python/branch/main/graph/badge.svg)](https://codecov.io/gh/OO-LD/oold-python)
+[![License](https://img.shields.io/github/license/OO-LD/oold-python)](https://github.com/OO-LD/oold-python/blob/main/LICENSE)
 
 
 # oold-python
 
-Linked data class python package for object oriented linked data ([OO-LD](https://github.com/OO-LD/schema)) based on [pydantic](https://github.com/pydantic/pydantic). This package aims to implemment this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package - work in progress.
+Linked data class python package for object oriented linked data ([OO-LD](https://github.com/OO-LD/schema)) based on [pydantic](https://github.com/pydantic/pydantic). This package aims to implement this functionality independent from the [osw-python](https://github.com/OpenSemanticLab/osw-python) package - work in progress.
 
 ## Installation
+
+With [uv](https://docs.astral.sh/uv/) (recommended):
+
+```bash
+uv add oold
 ```
+
+Or with pip:
+
+```bash
 pip install oold
 ```
 
 ## Objectives
 - lossless transpilation between [OO-LD](https://github.com/OO-LD/schema) schemas and extended pydantic data classes
-- interprete string IRIs with `oold-range` annotation as typed class property
+- interpret string IRIs with `oold-range` annotation as typed class property
 - dynamically resolve such IRIs from one or multiple backends (simple in-memory dict, RDF-Graph, SPARQL-Endpoint, Document Store, etc.)
-- serialized class instances to JSON-LD while replacing python object-references with IRIs
+- serialize class instances to JSON-LD while replacing python object-references with IRIs
 - apply filters / queries to backend-requests (SPARQL, GraphQL, ...)
 
 ## Related Work
 
-| **Lib Name** | **Repo**                                                                                     | **Description**                                                                                                                                                                    |
-|--------------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **RDFLib**   | [https://github.com/RDFLib/rdflib](https://github.com/RDFLib/rdflib)                         | Widely used for managing RDF data; lacks built-in schema validation or type safety, requires external reasoning tools. Provides local/remote SPARQL support (used as backend for oold-python).  |
-| **SuRF**     | [https://github.com/cosminbasca/surfrdf](https://github.com/cosminbasca/surfrdf)             | ORM-like approach for RDF; Dynamically generated class definitions, no static type checking.                                                                                                    |
-| **Owlready2**| [https://github.com/pwin/owlready2](https://github.com/pwin/owlready2)                       | Provides Python classes aligned with OWL and includes native reasoning (HermiT/Pellet). Limited runtime type validation; no direct remote SPARQL endpoint support.                              |
-| **twa**      | [https://github.com/TheWorldAvatar/baselib/tree/main/python_wrapper](https://github.com/TheWorldAvatar/baselib/tree/main/python_wrapper) | Pydantic-based OGM with built-in schema validation/type safety; Strong coupling of RDF-Properties and type annotations.                             |
-| **COLD**     | [https://github.com/DigiBatt/cold/](https://github.com/DigiBatt/cold/)                       | Generates static python classes from OWL classes to offer RDF generation. No object-to-graph mapping                                                                                            |
+| Library | Notes |
+|---|---|
+| [RDFLib](https://github.com/RDFLib/rdflib) | RDF management; no schema validation or type safety. Used as a backend by oold-python. |
+| [SuRF](https://github.com/cosminbasca/surfrdf) | ORM-like RDF; dynamically generated classes, no static type checking. |
+| [Owlready2](https://github.com/pwin/owlready2) | OWL-aligned classes with native reasoning; no remote SPARQL support. |
+| [twa](https://github.com/TheWorldAvatar/baselib/tree/main/python_wrapper) | Pydantic-based OGM; tightly couples RDF properties and type annotations. |
+| [COLD](https://github.com/DigiBatt/cold/) | Generates static classes from OWL; no object-to-graph mapping. |
 
-see also Bai et al. https://doi.org/10.1039/D5DD00069F
+See also: Bai et al. [https://doi.org/10.1039/D5DD00069F](https://doi.org/10.1039/D5DD00069F)
 
 
 ## Features
@@ -219,38 +233,52 @@ loaded = MyModel["ex:foo"]  # resolves via registered backend
 
 Custom backends implement the `Backend` interface (`resolve_iris`, `store_json_dicts`).
 
-## Dev
-```
-git clone https://github.com/OpenSemanticWorld/oold-python
-pip install -e .[dev]
+## Development
+
+This project uses [uv](https://docs.astral.sh/uv/) and `make`. Clone and set up:
+
+```bash
+git clone https://github.com/OO-LD/oold-python
+cd oold-python
+make install   # create the venv and install pre-commit hooks
 ```
 
-### Run tests
+Common tasks:
+
+```bash
+make check     # ruff (lint+format), ty (types), deptry (deps)
+make test      # run the test suite with coverage
+make docs      # build and serve the documentation locally
 ```
-tox -e test
-```
+
+See [docs/contributing.md](docs/contributing.md) for the full workflow.
 
 ### Benchmarking
-```
-tox -e benchmark
+
+```bash
+uv run tox -e benchmark           # run benchmarks
+uv run tox -e benchmark-compare   # compare against the previous run without storing results
 ```
 
-Compare to previous benchmark run without storing new results:
-```
-tox -e benchmark-compare
-```
+### Contributing
 
-### Contribute
-We welcome contributions! Please fork the repository and submit a pull request with your changes.
-Please enable pre-commit hooks in your fork to ensure code quality.
-```
+We welcome contributions! Fork the repository, enable the pre-commit hooks, and open a pull request:
+
+```bash
 pre-commit install
 ```
-Please enable GitHub Actions for your fork to run the tests automatically.
 
-<!-- pyscaffold-notes -->
+Please also enable GitHub Actions on your fork so the test suite runs automatically.
 
-## Note
+## Citation
 
-This project has been set up using PyScaffold 4.5. For details and usage
-information on PyScaffold see https://pyscaffold.org/.
+If you use oold-python in your research, please cite it:
+
+```bibtex
+@software{oold_python,
+  author  = {OO-LD Contributors},
+  title   = {oold-python: Object Oriented Linked Data for Python},
+  url     = {https://github.com/OO-LD/oold-python},
+  doi     = {10.5281/zenodo.8374237},
+}
+```

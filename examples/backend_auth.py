@@ -12,9 +12,7 @@ set_credential(
     )
 )
 
-r = SparqlResolver(
-    endpoint="https://blazegraph.kiprobatt.de/blazegraph/namespace/kb/sparql"
-)
+r = SparqlResolver(endpoint="https://blazegraph.kiprobatt.de/blazegraph/namespace/kb/sparql")
 
 # this will lookup the credential and use it for authentication
 # raise an error if the credential is missing or invalid

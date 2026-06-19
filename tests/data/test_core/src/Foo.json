@@ -1,63 +1,63 @@
 {
-    "id": "Foo",
-    "title": "Foo",
-    "type": "object",
-    "required": [
-        "id"
-    ],
-    "properties": {
-        "id": {
-            "type": "string"
-        },
-        "type": {
-            "type": "array",
-            "items": {
-                "type": "string"
-            },
-            "default": [
-                "Foo"
-            ]
-        },
-        "literal": {
-            "type": "string"
-        },
-        "b": {
-            "range": "Bar.json",
-            "allOf": [
-                {
-                    "$ref": "Bar.json"
-                }
-            ],
-            "x-oold-required-iri": true
-        },
-        "b_default": {
-            "range": "Bar.json",
-            "default": "ex:b",
-            "allOf": [
-                {
-                    "$ref": "Bar.json"
-                }
-            ]
-        },
-        "b_set_later": {
-            "range": "Bar.json",
-            "allOf": [
-                {
-                    "$ref": "Bar.json"
-                }
-            ]
-        },
-        "b2": {
-            "type": "array",
-            "items": {
-                "range": "Bar.json",
-                "allOf": [
-                    {
-                        "$ref": "Bar.json"
-                    }
-                ]
-            },
-            "range": "Bar.json"
+  "id": "Foo",
+  "title": "Foo",
+  "type": "object",
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "Foo"
+      ]
+    },
+    "literal": {
+      "type": "string"
+    },
+    "b": {
+      "range": "Bar.json",
+      "allOf": [
+        {
+          "$ref": "Bar.json"
         }
+      ],
+      "x-oold-required-iri": true
+    },
+    "b_default": {
+      "range": "Bar.json",
+      "default": "ex:b",
+      "allOf": [
+        {
+          "$ref": "Bar.json"
+        }
+      ]
+    },
+    "b_set_later": {
+      "range": "Bar.json",
+      "allOf": [
+        {
+          "$ref": "Bar.json"
+        }
+      ]
+    },
+    "b2": {
+      "type": "array",
+      "items": {
+        "range": "Bar.json",
+        "allOf": [
+          {
+            "$ref": "Bar.json"
+          }
+        ]
+      },
+      "range": "Bar.json"
     }
+  }
 }

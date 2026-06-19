@@ -3,14 +3,16 @@ import inspect
 import json
 import logging
 from abc import abstractmethod
+from collections.abc import Callable
 from enum import Enum
 from functools import partial
 from operator import is_
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Literal, TypeVar, Union
 
 import jsondiff
 import pydantic_core.core_schema as core_schema
 import pyld
+import pyld.documentloader.requests
 import yaml
 from pydantic import BaseModel, create_model
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
@@ -18,7 +20,6 @@ from pydantic.v1 import BaseModel as BaseModel_v1
 from pydantic.v1 import create_model as create_model_v1
 from pydantic_core import CoreSchema, to_jsonable_python
 from pyld import jsonld
-from typing_extensions import Literal
 
 from oold.utils.environment import get_object_source
 
@@ -60,13 +61,12 @@ def enum_docstrings(enum: type[E]) -> type[E]:
         member: E | None = None
         for node in class_def.body:
             # case ast.Assign(targets=[ast.Name(id=name)]) if name in names:
-            if isinstance(node, ast.Assign):
-                if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-                    name = node.targets[0].id
-                    if name in names:
-                        # Enum member assignment, look for a docstring next
-                        member = enum[name]
-                        continue
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                name = node.targets[0].id
+                if name in names:
+                    # Enum member assignment, look for a docstring next
+                    member = enum[name]
+                    continue
 
             # case ast.Expr(value=ast.Constant(value=str(docstring)))
             # if member and unassigned(member.__doc__):
@@ -89,12 +89,10 @@ def enum_docstrings(enum: type[E]) -> type[E]:
 
 
 class OOLDJsonSchemaGenerator(GenerateJsonSchema):
-    def generate(
-        self, schema: CoreSchema, mode: JsonSchemaMode = "validation"
-    ) -> JsonSchemaValue:
+    def generate(self, schema: CoreSchema, mode: JsonSchemaMode = "validation") -> JsonSchemaValue:
         return super().generate(schema, mode)
 
-    def nullable_schema(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+    def nullable_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
         """Override to handle nullable schemas - do not add 'null' type
         since optional fields are already handled by 'required'."""
         inner_json_schema = self.generate_inner(schema["schema"])
@@ -110,9 +108,7 @@ class OOLDJsonSchemaGenerator(GenerateJsonSchema):
             The generated JSON schema.
         """
         enum_type = enum_docstrings(schema["cls"])
-        description = (
-            None if not enum_type.__doc__ else inspect.cleandoc(enum_type.__doc__)
-        )
+        description = None if not enum_type.__doc__ else inspect.cleandoc(enum_type.__doc__)
         if (
             description == "An enumeration."
         ):  # This is the default value provided by enum.EnumMeta.__new__; don't use it
@@ -188,14 +184,10 @@ class GenericLinkedBaseModel:
         return d
 
     @staticmethod
-    def remove_none(d: Dict) -> Dict:
+    def remove_none(d: dict) -> dict:
         """Remove None values from a dictionary recursively."""
         if isinstance(d, dict):
-            return {
-                k: GenericLinkedBaseModel.remove_none(v)
-                for k, v in d.items()
-                if v is not None
-            }
+            return {k: GenericLinkedBaseModel.remove_none(v) for k, v in d.items() if v is not None}
         elif isinstance(d, list):
             return [GenericLinkedBaseModel.remove_none(i) for i in d]
         else:
@@ -204,15 +196,11 @@ class GenericLinkedBaseModel:
     @classmethod
     def export_schema(
         cls,
-        mode: Optional[SchemaExportMode] = SchemaExportMode.FULL,
-        cutoff_base_cls: Optional[
-            Union[Union[BaseModel, BaseModel_v1], Tuple[Union[BaseModel, BaseModel_v1]]]
-        ] = None,
-        partial_mode: Optional[
-            PartialSchemaExportMode
-        ] = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
-        serialize: Optional[Literal["json", "yaml"]] = None,
-    ) -> Dict:
+        mode: SchemaExportMode | None = SchemaExportMode.FULL,
+        cutoff_base_cls: BaseModel | BaseModel_v1 | tuple[BaseModel | BaseModel_v1] | None = None,
+        partial_mode: PartialSchemaExportMode | None = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
+        serialize: Literal["json", "yaml"] | None = None,
+    ) -> dict:
         """Export the schema of the model as a dictionary."""
         schema = export_schema(cls, mode, cutoff_base_cls, partial_mode)
         if serialize == "json":
@@ -227,25 +215,25 @@ class GenericLinkedBaseModel:
 
     @classmethod
     @abstractmethod
-    def from_jsonld(cls, jsonld: Dict) -> "GenericLinkedBaseModel":
+    def from_jsonld(cls, jsonld: dict) -> "GenericLinkedBaseModel":
         """Constructs a model instance from a JSON-LD representation."""
         pass
 
     @abstractmethod
-    def to_jsonld(self) -> Dict:
+    def to_jsonld(self) -> dict:
         """Returns the JSON-LD representation of the model instance as a dictionary."""
         pass
 
     @classmethod
     @abstractmethod
-    def from_json(cls, json_dict: Dict) -> "GenericLinkedBaseModel":
+    def from_json(cls, json_dict: dict) -> "GenericLinkedBaseModel":
         """Constructs a model instance from a JSON representation.
         Note: the given JSON must contain a field to identify the model class,
         default is 'type'."""
         pass
 
     @abstractmethod
-    def to_json(self) -> Dict:
+    def to_json(self) -> dict:
         """Return the JSON representation of the object as a dictionary."""
         pass
 
@@ -256,7 +244,7 @@ class GenericLinkedBaseModel:
 
     @classmethod
     @abstractmethod
-    def get_cls_iri(cls) -> Union[str, List[str], None]:
+    def get_cls_iri(cls) -> str | list[str] | None:
         """Get the IRI of the model itself.
         It will be used as key for a type registry and should be stored
         in the type field of the JSON(-LD) representation.
@@ -329,35 +317,35 @@ def _interate_annotation_args(field_annotation_class):
     """Get the annotation class from a field annotation.
     e.g. <SomeClass> or List[SomeClass] or Optional[SomeClass]"""
     annotation_class = None
-    if hasattr(field_annotation_class, "__origin__"):
-        # if _origin__ is List or list or Union interate over __args__
-        if field_annotation_class.__origin__ in [list, List, Union]:
-            for arg in field_annotation_class.__args__:
-                # recursive call if arg is List or Union
-                # Todo: handle multiple types in Union
-                if hasattr(arg, "__origin__"):
-                    annotation_class = _interate_annotation_args(arg)
-                    if annotation_class is not None:
-                        break
-                if arg is not type(None):
-                    annotation_class = arg
+    # if _origin__ is List or list or Union interate over __args__
+    if hasattr(field_annotation_class, "__origin__") and field_annotation_class.__origin__ in [list, list, Union]:
+        for arg in field_annotation_class.__args__:
+            # recursive call if arg is List or Union
+            # Todo: handle multiple types in Union
+            if hasattr(arg, "__origin__"):
+                annotation_class = _interate_annotation_args(arg)
+                if annotation_class is not None:
                     break
+            if arg is not type(None):
+                annotation_class = arg
+                break
     return annotation_class
 
 
-def get_model_schema(model_cls) -> Union[Dict, None]:
+def get_model_schema(model_cls) -> dict | None:
     """Get the json schema annotation of a model class."""
-    if issubclass(model_cls, BaseModel):
-        if "json_schema_extra" in model_cls.model_config:
-            return model_cls.model_config["json_schema_extra"]
-    elif issubclass(model_cls, BaseModel_v1):
-        if hasattr(model_cls, "__config__"):
-            if hasattr(model_cls.__config__, "schema_extra"):
-                return model_cls.__config__.schema_extra
+    if issubclass(model_cls, BaseModel) and "json_schema_extra" in model_cls.model_config:
+        return model_cls.model_config["json_schema_extra"]
+    elif (
+        issubclass(model_cls, BaseModel_v1)
+        and hasattr(model_cls, "__config__")
+        and hasattr(model_cls.__config__, "schema_extra")
+    ):
+        return model_cls.__config__.schema_extra
     return None
 
 
-def build_context(model_cls, model_type, visited=None) -> Dict:
+def build_context(model_cls, model_type, visited=None) -> dict:
     """Takes the base context from the model_type.
     Iterate over the model_type fields.
     If the field is another LinkedBaseModel, a nested context is built recursively."""
@@ -378,9 +366,8 @@ def build_context(model_cls, model_type, visited=None) -> Dict:
         for field_name, field_value in model_cls.model_fields.items():
             annotation_class = _interate_annotation_args(field_value.annotation)
             json_schema_annotation = field_value.json_schema_extra
-            if json_schema_annotation is not None:
-                if "range" in json_schema_annotation:
-                    continue  # skip fields of type IRI
+            if json_schema_annotation is not None and "range" in json_schema_annotation:
+                continue  # skip fields of type IRI
             if annotation_class is not None and issubclass(annotation_class, BaseModel):
                 nested_context = build_context(annotation_class, model_type, visited)
                 target_context = context
@@ -414,16 +401,14 @@ def build_context(model_cls, model_type, visited=None) -> Dict:
     return context
 
 
-def export_jsonld(model_instance: GenericLinkedBaseModel, model_type) -> Dict:
+def export_jsonld(model_instance: GenericLinkedBaseModel, model_type) -> dict:
     """Return the RDF representation of the object as JSON-LD."""
 
     # serialize the model to a dictionary
     # to_string().to_json() roundtrips is needed to serialize enums correctly
     if model_type == BaseModel:
         # get the context from self.ConfigDict.json_schema_extra["@context"]
-        context = model_instance.model_config.get("json_schema_extra", {}).get(
-            "@context", {}
-        )
+        context = model_instance.model_config.get("json_schema_extra", {}).get("@context", {})
         context = build_context(model_instance.__class__, model_type)
         data = model_instance.to_json()
     if model_type == BaseModel_v1:
@@ -435,9 +420,7 @@ def export_jsonld(model_instance: GenericLinkedBaseModel, model_type) -> Dict:
         if id is not None:
             data["id"] = id
     jsonld_dict = {"@context": context, **data}
-    jsonld.set_document_loader(
-        get_jsonld_context_loader(model_instance.__class__, model_type)
-    )
+    jsonld.set_document_loader(get_jsonld_context_loader(model_instance.__class__, model_type))
     jsonld_dict = jsonld.expand(jsonld_dict)
     if isinstance(jsonld_dict, list):
         jsonld_dict = jsonld_dict[0]
@@ -455,10 +438,7 @@ def normalize_iri(iri: str, model_cls, expand: bool) -> str:
     jsonld.set_document_loader(get_jsonld_context_loader(model_cls, BaseModel))
     if expand:
         expanded = jsonld.expand({"@context": context, "id": iri})
-        if isinstance(expanded, list) and len(expanded) > 0:
-            expanded_iri = expanded[0].get("@id", iri)
-        else:
-            expanded_iri = iri
+        expanded_iri = expanded[0].get("@id", iri) if isinstance(expanded, list) and len(expanded) > 0 else iri
         return expanded_iri
     else:
         compacted = jsonld.compact({"@context": context, "id": iri}, context)
@@ -468,7 +448,7 @@ def normalize_iri(iri: str, model_cls, expand: bool) -> str:
 
 def resolve_type(
     type_iri,
-    _types: Dict[str, type],
+    _types: dict[str, type],
     prefer_controller: bool = True,
 ):
     """Resolve a type IRI to a class.
@@ -504,28 +484,25 @@ def resolve_type(
                 )
         except ImportError:
             pass
-    return _types.get(type_iri, None)
+    return _types.get(type_iri)
 
 
 def import_jsonld(
     model_type,
     model_root_cls: GenericLinkedBaseModel,
     model_cls: GenericLinkedBaseModel,
-    jsonld_dict: Dict,
-    _types: Dict[str, type],
+    jsonld_dict: dict,
+    _types: dict[str, type],
 ) -> GenericLinkedBaseModel:
     """Return the object instance from the JSON-LD representation."""
     # ToDo: apply jsonld frame with @id restriction
     # get the @type from the jsonld_dict
     type_field_name = model_root_cls.get_type_field()
-    type_iri = jsonld_dict.get("@type", jsonld_dict.get(type_field_name, None))
+    type_iri = jsonld_dict.get("@type", jsonld_dict.get(type_field_name))
     # if type_iri is None, return None
     if type_iri is None:
         if model_root_cls != model_cls:
-            _logger.debug(
-                f"Fall back to {model_cls.__name__} "
-                f"- no type IRI found in JSON-LD dict: {jsonld_dict}"
-            )
+            _logger.debug(f"Fall back to {model_cls.__name__} - no type IRI found in JSON-LD dict: {jsonld_dict}")
         else:
             raise ValueError(
                 f"No specific subclass of {model_root_cls.__name__} given "
@@ -568,20 +545,17 @@ def import_json(
     model_type,
     model_root_cls: GenericLinkedBaseModel,
     model_cls: GenericLinkedBaseModel,
-    json_dict: Dict,
-    _types: Dict[str, type],
+    json_dict: dict,
+    _types: dict[str, type],
 ) -> GenericLinkedBaseModel:
     """Return the object instance from the JSON representation."""
     # get the type from the json_dict
     type_field_name = model_root_cls.get_type_field()
-    type_iri = json_dict.get(type_field_name, None)
+    type_iri = json_dict.get(type_field_name)
     # if type_iri is None, return None
     if type_iri is None:
         if model_root_cls != model_cls:
-            _logger.debug(
-                f"Fall back to {model_cls.__name__} "
-                f"- no type IRI found in JSON dict: {json_dict}"
-            )
+            _logger.debug(f"Fall back to {model_cls.__name__} - no type IRI found in JSON dict: {json_dict}")
         else:
             raise ValueError(
                 f"No specific subclass of {model_root_cls.__name__} given "
@@ -622,7 +596,7 @@ def _get_schema(model_cls):
         return model_cls.schema(ref_template="#/$defs/{model}")
 
 
-def _inverse_preprocess(schema: Dict):
+def _inverse_preprocess(schema: dict):
     """Inverse preprocess the JSON schemas to remove
     the $refs generated from x-oold-range annotations."""
 
@@ -634,20 +608,13 @@ def _inverse_preprocess(schema: Dict):
                 if "allOf" in property:
                     # remove the array element that matches the range
                     # or a self-referencing $ref
-                    property["allOf"] = [
-                        item
-                        for item in property["allOf"]
-                        if item["$ref"] in ["#", property["range"]]
-                    ]
-                if "$ref" in property:
-                    if property["$ref"] in ["#", property["range"]]:
-                        del property["$ref"]
+                    property["allOf"] = [item for item in property["allOf"] if item["$ref"] in ["#", property["range"]]]
+                if "$ref" in property and property["$ref"] in ["#", property["range"]]:
+                    del property["$ref"]
             else:
                 if "allOf" in property:
                     # remove the array element that matches the range
-                    property["allOf"] = [
-                        item for item in property["allOf"] if item == property["range"]
-                    ]
+                    property["allOf"] = [item for item in property["allOf"] if item == property["range"]]
             if "allOf" in property and len(property["allOf"]) == 0:
                 del property["allOf"]
             if "type" not in property:
@@ -677,9 +644,7 @@ def _inverse_preprocess(schema: Dict):
     return schema
 
 
-def _export_schema_from_dynamic_model(
-    model_cls: Union[BaseModel, BaseModel_v1]
-) -> Dict:
+def _export_schema_from_dynamic_model(model_cls: BaseModel | BaseModel_v1) -> dict:
     """Export the OO-LD schema of a single pydantic model.
     Class hierarchy is not considered, only the model itself
     by generating a model copy without base classes.
@@ -701,7 +666,7 @@ def _export_schema_from_dynamic_model(
         )
 
     elif issubclass(model_cls, BaseModel_v1):
-        model_cls: BaseModel_v1 = model_cls  # type: ignore
+        model_cls: BaseModel_v1 = model_cls  # type: ignore[assignment]
         field_dict = {}
         for field_name, model_field in model_cls.__fields__.items():
             field_dict[field_name] = (model_field.annotation, model_field.field_info)
@@ -722,15 +687,11 @@ def _export_schema_from_dynamic_model(
 
 
 def export_schema(
-    model_cls: Union[BaseModel, BaseModel_v1],
-    mode: Optional[SchemaExportMode] = SchemaExportMode.FULL,
-    cutoff_base_cls: Optional[
-        Union[Union[BaseModel, BaseModel_v1], Tuple[Union[BaseModel, BaseModel_v1]]]
-    ] = None,
-    partial_mode: Optional[
-        PartialSchemaExportMode
-    ] = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
-) -> Dict:
+    model_cls: BaseModel | BaseModel_v1,
+    mode: SchemaExportMode | None = SchemaExportMode.FULL,
+    cutoff_base_cls: BaseModel | BaseModel_v1 | tuple[BaseModel | BaseModel_v1] | None = None,
+    partial_mode: PartialSchemaExportMode | None = PartialSchemaExportMode.BASE_CLASS_CUTOFF,
+) -> dict:
     """Export the OO-LD schema of the model as a JSON-SCHEMA with JSON-LD context"""
 
     if mode == SchemaExportMode.FULL:
@@ -773,13 +734,9 @@ def export_schema(
             # try the follwing schema extra attributes: $id, iri, class name
             import_ref = None
             if issubclass(model_cls, BaseModel):
-                import_ref = baseclass.model_config.get("json_schema_extra", {}).get(
-                    "$id", None
-                )
+                import_ref = baseclass.model_config.get("json_schema_extra", {}).get("$id", None)
                 if import_ref is None:
-                    import_ref = baseclass.model_config.get(
-                        "json_schema_extra", {}
-                    ).get("iri", None)
+                    import_ref = baseclass.model_config.get("json_schema_extra", {}).get("iri", None)
                 if import_ref is None:
                     import_ref = baseclass.__name__
 
@@ -806,9 +763,7 @@ def export_schema(
                     baseclass_schema = {**baseclass_schema, **schema}
 
             model_schema_full = _get_schema(model_cls)
-            model_schema_diff = jsondiff.diff(
-                baseclass_schema, model_schema_full, marshal=True
-            )
+            model_schema_diff = jsondiff.diff(baseclass_schema, model_schema_full, marshal=True)
 
             # implementation note: jsonpath does not work
             # since we cannot reconstruct the diff document
@@ -820,11 +775,10 @@ def export_schema(
             # print("Diff: ", json.dumps(patch.apply({}), indent=2))
 
             required = []
-            if "required" in model_schema_diff:
-                if "$insert" in model_schema_diff["required"]:
-                    for r in model_schema_diff["required"]["$insert"]:
-                        required.append(r[1])
-                    del model_schema_diff["required"]
+            if "required" in model_schema_diff and "$insert" in model_schema_diff["required"]:
+                for r in model_schema_diff["required"]["$insert"]:
+                    required.append(r[1])
+                del model_schema_diff["required"]
             model_schema_diff["required"] = required
             if "$delete" in model_schema_diff:
                 del model_schema_diff["$delete"]
@@ -858,7 +812,8 @@ def export_schema(
             "@context": context,
             "$defs": defs,
             **json.loads(
-                json.dumps(model_schema_diff)
+                json
+                .dumps(model_schema_diff)
                 .replace("title_", "title*")
                 .replace("description_", "description*")
                 .replace("$$ref", "$ref")
@@ -900,16 +855,14 @@ def export_schema(
                     refs.append(property["$ref"])
                     if property["$ref"] == ref:
                         property["$ref"] = "#"
-                if "items" in property:
-                    if "$ref" in property["items"]:
-                        refs.append(property["items"]["$ref"])
-                        if property["items"]["$ref"] == ref:
-                            property["items"]["$ref"] = "#"
+                if "items" in property and "$ref" in property["items"]:
+                    refs.append(property["items"]["$ref"])
+                    if property["items"]["$ref"] == ref:
+                        property["items"]["$ref"] = "#"
             # if non of the refs is a subpath of the ref, remove $defs element
             # in case it is at root level of $defs
-            if not any(_ref.startswith(ref + "/") for _ref in refs):
-                if ref.split("/")[:-1] == ["#", "$defs"]:
-                    del result_schema["$defs"][ref.split("/")[-1]]
+            if not any(_ref.startswith(ref + "/") for _ref in refs) and ref.split("/")[:-1] == ["#", "$defs"]:
+                del result_schema["$defs"][ref.split("/")[-1]]
 
             del result_schema["$ref"]
     result_schema = _inverse_preprocess(result_schema)

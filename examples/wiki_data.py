@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import ConfigDict, Field
 
@@ -6,7 +6,7 @@ from oold.backend.interface import SetResolverParam, set_resolver
 from oold.backend.sparql import WikiDataSparqlResolver
 
 # based on pydantic v2
-from oold.model import LinkedBaseModel  # noqa
+from oold.model import LinkedBaseModel
 
 
 class MultiLanguageString(LinkedBaseModel):
@@ -42,24 +42,21 @@ class WikiDataEntity(LinkedBaseModel):
         }
     )
     id: str
-    type: Optional[str]
+    type: str | None
     # label: Optional[List[MultiLanguageString]] = None
-    name: Optional[str] = None
+    name: str | None = None
 
     @classmethod
     def get_class_iri(cls):
         # return default value of field 'type' if not set
-        if (
-            cls.model_fields.get("type")
-            and cls.model_fields["type"].default is not None
-        ):
+        if cls.model_fields.get("type") and cls.model_fields["type"].default is not None:
             return cls.model_fields["type"].default
 
     def get_iri(self):
         return "ex:" + self.name
 
 
-class Person(WikiDataEntity):  # noqa
+class Person(WikiDataEntity):
     model_config = ConfigDict(
         json_schema_extra={
             "@context": [
@@ -80,12 +77,12 @@ class Person(WikiDataEntity):  # noqa
             "iri": "Q5",
         }
     )
-    type: Optional[str] = "wd:Q5"  # Q5 is the Wikidata item for human
+    type: str | None = "wd:Q5"  # Q5 is the Wikidata item for human
     father: Optional["Person"] = Field(
         None,
         json_schema_extra={"range": "Person.json"},
     )
-    knows: Optional[List["Person"]] = Field(
+    knows: list["Person"] | None = Field(
         None,
         # object property pointing to another Person
         json_schema_extra={"range": "Person.json"},

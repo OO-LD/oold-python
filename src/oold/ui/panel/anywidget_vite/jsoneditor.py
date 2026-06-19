@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Type, Union
 
 import panel as pn
 import param
@@ -33,14 +32,14 @@ class JsonEditor(AnyWidgetComponent):
         "imports": {
             "vue": "https://esm.sh/vue@3",
             # works with `import {JSONEditor} from "@json-editor/json-editor"`:
-            # "@json-editor/json-editor": "https://esm.sh/@json-editor/json-editor@latest",  # noqa
+            # "@json-editor/json-editor": "https://esm.sh/@json-editor/json-editor@latest",
             # works with `import("@json-editor/json-editor")`:
             # "@json-editor/json-editor": (
             #   "https://cdn.jsdelivr.net/npm/@json-editor/json-editor",
             #   "@latest/dist/jsoneditor.min.js"
             # ),
             # works with `import("jsoneditor")`:
-            "jsoneditor": "https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js",  # noqa
+            "jsoneditor": "https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js",
         }
     }
     # __javascript__= [
@@ -91,11 +90,7 @@ class JsonEditor(AnyWidgetComponent):
 class OoldEditor(JsonEditor):
     """JsonEditor generated from an oold model schema."""
 
-    def __init__(
-        self,
-        oold_model: Union[Type[LinkedBaseModel], Type[LinkedBaseModel_v1]] = None,
-        **params
-    ):
+    def __init__(self, oold_model: type[LinkedBaseModel] | type[LinkedBaseModel_v1] | None = None, **params):
         options = params.get("options", {})
 
         if oold_model is not None:

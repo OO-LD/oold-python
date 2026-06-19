@@ -53,16 +53,11 @@ def test_oneof_subschema(benchmark):
         if pydantic_version == "v1":
             import data.oneof_subschema.model_v1 as model
 
-            assert (
-                model.Subschema1.__fields__["subprop1"].field_info.extra["custom_key"]
-                == "custom_value_1"
-            )
+            assert model.Subschema1.__fields__["subprop1"].field_info.extra["custom_key"] == "custom_value_1"
         else:
             import data.oneof_subschema.model_v2 as model
 
-            model.Subschema1.model_fields["subprop1"].json_schema_extra[
-                "custom_key"
-            ] == "custom_value_1"
+            assert model.Subschema1.model_fields["subprop1"].json_schema_extra["custom_key"] == "custom_value_1"
 
     if benchmark:
         benchmark(
@@ -114,32 +109,16 @@ def test_enum_docstrings(benchmark):
             import data.enum_docstrings.model_v1 as model
 
             Hobby = parse_enum_docstrings(model.Hobby)
-            assert (
-                Hobby.SPORTS.__doc__.strip()
-                == "Sports hobby, e.g. football, basketball, etc."
-            )
-            assert (
-                Hobby.MUSIC.__doc__.strip()
-                == "Music hobby, e.g. playing instruments, singing, etc."
-            )
-            assert (
-                Hobby.ART.__doc__.strip() == "Art hobby, e.g. painting, drawing, etc."
-            )
+            assert Hobby.SPORTS.__doc__.strip() == "Sports hobby, e.g. football, basketball, etc."
+            assert Hobby.MUSIC.__doc__.strip() == "Music hobby, e.g. playing instruments, singing, etc."
+            assert Hobby.ART.__doc__.strip() == "Art hobby, e.g. painting, drawing, etc."
         else:
             import data.enum_docstrings.model_v2 as model
 
             Hobby = parse_enum_docstrings(model.Hobby)
-            assert (
-                Hobby.SPORTS.__doc__.strip()
-                == "Sports hobby, e.g. football, basketball, etc."
-            )
-            assert (
-                Hobby.MUSIC.__doc__.strip()
-                == "Music hobby, e.g. playing instruments, singing, etc."
-            )
-            assert (
-                Hobby.ART.__doc__.strip() == "Art hobby, e.g. painting, drawing, etc."
-            )
+            assert Hobby.SPORTS.__doc__.strip() == "Sports hobby, e.g. football, basketball, etc."
+            assert Hobby.MUSIC.__doc__.strip() == "Music hobby, e.g. playing instruments, singing, etc."
+            assert Hobby.ART.__doc__.strip() == "Art hobby, e.g. painting, drawing, etc."
 
     if benchmark:
         benchmark(
@@ -191,7 +170,7 @@ def test_subclass_inheritance(benchmark):
             "required": ["name"],
             "properties": {
                 "type": {
-                    "$comment": "Already defined in playground:Thing -> we override just the default",  # noqa: E501
+                    "$comment": "Already defined in playground:Thing -> we override just the default",
                     "default": "playground:Person",
                 },
                 "name": {
@@ -267,7 +246,7 @@ def test_class_hierarchy(benchmark):
                         "title": "NestedSubSchema",
                         "x-custom-annotation": "custom value",
                         # "allOf": [{
-                        "$ref": "NestedSubSchema.json"
+                        "$ref": "NestedSubSchema.json",
                         # }]
                     },
                 }
@@ -283,7 +262,7 @@ def test_class_hierarchy(benchmark):
                     "description": "An example using a subschema",
                     "x-custom-annotation": "custom value",
                     # "allOf": [{
-                    "$ref": "NestedSubSchema.json"
+                    "$ref": "NestedSubSchema.json",
                     # }]
                 }
             },
@@ -307,8 +286,7 @@ def test_class_hierarchy(benchmark):
         classes = [
             cls_name
             for cls_name in dir(model)
-            if isinstance(getattr(model, cls_name), type)
-            and getattr(model, cls_name).__module__ == model.__name__
+            if isinstance(getattr(model, cls_name), type) and getattr(model, cls_name).__module__ == model.__name__
         ]
         assert set(classes) == {"Entity", "NestedSubSchema", "SimpleSubSchema"}
 

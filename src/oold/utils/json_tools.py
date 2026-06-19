@@ -6,7 +6,7 @@ https://github.com/OpenSemanticLab/mediawiki-extensions-MwJson/blob/main/modules
 import json
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, Optional, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel
 from typing_extensions import deprecated
@@ -30,15 +30,9 @@ def deep_equal(x: JsonType, y: JsonType):
     """
 
     if x is not None and y is not None and isinstance(x, dict) and isinstance(y, dict):
-        return len(x.keys()) == len(y.keys()) and all(
-            deep_equal(x[key], y.get(key, None)) for key in x
-        )
-    elif (
-        x is not None and y is not None and isinstance(x, list) and isinstance(y, list)
-    ):
-        return len(x) == len(y) and all(
-            deep_equal(x[key], y[key]) for key in range(0, len(x))
-        )
+        return len(x.keys()) == len(y.keys()) and all(deep_equal(x[key], y.get(key, None)) for key in x)
+    elif x is not None and y is not None and isinstance(x, list) and isinstance(y, list):
+        return len(x) == len(y) and all(deep_equal(x[key], y[key]) for key in range(0, len(x)))
     else:
         return x == y
     # all(deep_equal(x[key], y.get(key)) for key in x) or x == y
@@ -233,10 +227,7 @@ def merge_jsonld_context_object_list(context: list) -> list:
     last = None
     for e in context:
         if is_object(e):
-            if last is None:
-                last = e
-            else:
-                last = merge_deep(last, e)
+            last = e if last is None else merge_deep(last, e)
         else:
             if last is not None:
                 result.append(last)
@@ -255,24 +246,22 @@ class AggregateGeneratedSchemasParamMode(str, Enum):
 
 
 class AggregateGeneratedSchemasParam(BaseModel):
-    target_schema: Optional[dict] = {}
+    target_schema: dict | None = {}
     """ The target schema to be merged with the generated schema """
-    generated_schemas: Dict[str, dict]
+    generated_schemas: dict[str, dict]
     """ List of JSON schemas to be aggregated """
-    mode: AggregateGeneratedSchemasParamMode = (
-        AggregateGeneratedSchemasParamMode.ROOT_LEVEL
-    )
+    mode: AggregateGeneratedSchemasParamMode = AggregateGeneratedSchemasParamMode.ROOT_LEVEL
     """ The mode to be used for aggregation """
-    def_key: Optional[str] = "$defs"
+    def_key: str | None = "$defs"
     """ The keyword for schema definitions. $defs is recommended"""
-    gen_def_key: Optional[str] = "generated"
+    gen_def_key: str | None = "generated"
     """ The keyword to store the generated schema.
     Note: Having a separate section per generated schema would lead
     to many partial classes in code generation """
-    generate_root_ref: Optional[bool] = False
+    generate_root_ref: bool | None = False
     """ If true, generate $ref: "#/def...", else allOf: [{$ref: "#/def...""}.
     Root refs are not supported by json_ref_parser < 0.10 and data-model-codegen """
-    gen_def_pointer: Optional[str] = None
+    gen_def_pointer: str | None = None
     """ The pointer to the generated schema. If None, it will be set to
     "#/" + def_key + "/" + gen_def_key """
 
@@ -308,7 +297,7 @@ def aggregate_generated_schemas(
     generate_root_ref = param.generate_root_ref
     schema = param.target_schema
 
-    for generated_schema_id in param.generated_schemas.keys():
+    for generated_schema_id in param.generated_schemas:
         generated_schema = param.generated_schemas[generated_schema_id]
         if mode == AggregateGeneratedSchemasParamMode.ROOT_LEVEL:
             schema = merge_deep(schema, generated_schema)
@@ -336,62 +325,46 @@ def aggregate_generated_schemas(
                     elif not is_array(existing_context) and is_array(generated_context):
                         existing_context = [existing_context]
                         # case C + D
-                    elif not is_array(existing_context) and not is_array(
-                        generated_context
+                    elif (
+                        not is_array(existing_context)
+                        and not is_array(generated_context)
+                        and (is_string(existing_context) or is_string(existing_context))  # case A + B
                     ):
-                        if is_string(existing_context) or is_string(
-                            existing_context
-                        ):  # case A + B
-                            generated_context = [generated_context]
-                            existing_context = [existing_context]
+                        generated_context = [generated_context]
+                        existing_context = [existing_context]
                     # case E + F: nothing to do
-                schema["@context"] = merge_deep(
-                    {"@context": existing_context}, {"@context": generated_context}
-                )["@context"]
+                schema["@context"] = merge_deep({"@context": existing_context}, {"@context": generated_context})[
+                    "@context"
+                ]
                 if is_array(schema["@context"]):
-                    schema["@context"] = merge_jsonld_context_object_list(
-                        schema["@context"]
-                    )
+                    schema["@context"] = merge_jsonld_context_object_list(schema["@context"])
 
             if def_key not in schema:
                 schema[def_key] = {}
             if gen_def_key not in schema[def_key]:
-                schema[def_key][gen_def_key] = {
-                    "$comment": "Autogenerated section - do not edit. Generated from"
-                }
+                schema[def_key][gen_def_key] = {"$comment": "Autogenerated section - do not edit. Generated from"}
             schema[def_key][gen_def_key]["$comment"] += " " + generated_schema_id
             # schema[def_key][gen_def_key] = generated_schema; # full override
-            schema[def_key][gen_def_key] = merge_deep(
-                schema[def_key][gen_def_key], generated_schema
-            )
+            schema[def_key][gen_def_key] = merge_deep(schema[def_key][gen_def_key], generated_schema)
             # merge
 
             if generate_root_ref:
                 if "$ref" in schema and schema["$ref"] != gen_def_pointer:
-                    print(
-                        "Error while applying generated schema: $ref already set to "
-                        + schema["$ref"]
-                    )
+                    print("Error while applying generated schema: $ref already set to " + schema["$ref"])
                 else:
                     schema["$ref"] = gen_def_pointer
             else:
                 if "allOf" not in schema:
                     schema["allOf"] = []
                 # check if any allOf already points to the generated schema
-                exists = any(
-                    [allOf["$ref"] == gen_def_pointer for allOf in schema["allOf"]]
-                )
+                exists = any(allOf["$ref"] == gen_def_pointer for allOf in schema["allOf"])
                 if not exists:
                     schema["allOf"].append({"$ref": gen_def_pointer})
                 if "title" in generated_schema:
                     schema["title"] = generated_schema["title"]
-                    schema[def_key][gen_def_key]["title"] = (
-                        "Generated" + generated_schema["title"]
-                    )
+                    schema[def_key][gen_def_key]["title"] = "Generated" + generated_schema["title"]
                     schema[def_key][gen_def_key]["description"] = (
-                        "This is an autogenerated partial class definition of '"
-                        + generated_schema["title"]
-                        + "'"
+                        "This is an autogenerated partial class definition of '" + generated_schema["title"] + "'"
                     )
                 if "description" in generated_schema:
                     schema["description"] = generated_schema["description"]
@@ -429,16 +402,9 @@ def merge_generated_definitions(schema: JsonType):
         if schema.get("$ref") == "#/$defs/generated":
             # if schema has no description use the multi-lang description
             # (pref: en, else first) in the $defs section
-            if (
-                "description" not in schema
-                or schema["description"] is None
-                or schema["description"] == ""
-            ):
-                if (
-                    "description*" in generated_content
-                    and len(generated_content["description*"]) > 0
-                ):
-                    first_key = list(generated_content["description*"].keys())[0]
+            if "description" not in schema or schema["description"] is None or schema["description"] == "":
+                if "description*" in generated_content and len(generated_content["description*"]) > 0:
+                    first_key = next(iter(generated_content["description*"].keys()))
                     schema["description"] = generated_content["description*"].get(
                         "en", generated_content["description*"][first_key]
                     )
@@ -459,21 +425,12 @@ def merge_generated_definitions(schema: JsonType):
                             break
                     # if schema has no description use the multi-lang description
                     # (pref: en, else first) in the $defs section
-                    if (
-                        "description" not in schema
-                        or schema["description"] is None
-                        or schema["description"] == ""
-                    ):
-                        if (
-                            "description*" in generated_content
-                            and len(generated_content["description*"]) > 0
-                        ):
-                            first_key = list(generated_content["description*"].keys())[
-                                0
-                            ]
-                            schema["description"] = generated_content[
-                                "description*"
-                            ].get("en", generated_content["description*"][first_key])
+                    if "description" not in schema or schema["description"] is None or schema["description"] == "":
+                        if "description*" in generated_content and len(generated_content["description*"]) > 0:
+                            first_key = next(iter(generated_content["description*"].keys()))
+                            schema["description"] = generated_content["description*"].get(
+                                "en", generated_content["description*"][first_key]
+                            )
                         else:
                             schema["description"] = generated_content.get("description")
                     schema = merge_deep(deepcopy(generated_content), schema)

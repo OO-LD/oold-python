@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "oold-python: Object Oriented Linked Data for Python"
+abstract: "A Python package for abstract and object-oriented access to knowledge graphs, bridging semantic web technologies (RDF, JSON-LD, SPARQL) with Pydantic type safety."
+repository-code: "https://github.com/OO-LD/oold-python"
+url: "https://OO-LD.github.io/oold-python/"
+license: MIT
+doi: 10.5281/zenodo.8374237
+authors:
+  - name: "OO-LD Contributors"
+    website: "https://github.com/OO-LD/oold-python/graphs/contributors"

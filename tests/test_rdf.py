@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.backend.sparql import LocalSparqlResolver
 
@@ -27,7 +25,7 @@ def _run(pydantic_version):
                     "$id": "https://example.com/Entity",  # the id of the schema
                 }
 
-            type: Optional[str] = "ex:Entity"
+            type: str | None = "ex:Entity"
             name: str
 
             def get_iri(self):
@@ -51,8 +49,8 @@ def _run(pydantic_version):
                     "$id": "https://example.com/Person",
                 }
 
-            type: Optional[str] = "ex:Person"
-            knows: Optional[List["Person"]] = Field(
+            type: str | None = "ex:Person"
+            knows: list["Person"] | None = Field(
                 None,
                 # object property pointing to another Person
                 range="ex:Person",
@@ -62,7 +60,7 @@ def _run(pydantic_version):
         from pydantic import ConfigDict, Field
 
         # based on pydantic v2
-        from oold.model import LinkedBaseModel  # noqa
+        from oold.model import LinkedBaseModel
 
         class Entity(LinkedBaseModel):
             model_config = ConfigDict(
@@ -86,7 +84,7 @@ def _run(pydantic_version):
             def get_iri(self):
                 return "ex:" + self.name
 
-        class Person(Entity):  # noqa
+        class Person(Entity):
             model_config = ConfigDict(
                 json_schema_extra={
                     "@context": [

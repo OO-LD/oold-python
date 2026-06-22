@@ -56,7 +56,7 @@ With `make`:
 
 ```bash
 make docs        # serve with live reload at http://localhost:8000
-make docs-test   # strict build — fails on any warning
+make docs-test   # strict build, fails on any warning
 ```
 
 Without `make`:
@@ -78,4 +78,14 @@ Releases are published automatically by CI when a version tag is pushed.
    git push origin v0.17.0
    ```
 
-CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs` — no manual version bumping needed.
+CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs`, so no manual version bumping is needed.
+
+## Use of AI
+
+**We use AI!** AI assistance is allowed, but not fully automated. All source code must be reviewed by a developer before it is merged.
+
+| # | Allowed | Not allowed |
+| --- | --- | --- |
+| 1 | AI-assisted coding and suggestions | Fully automated changes without developer review |
+| 2 | AI output reviewed and approved by a developer | `Co-Authored-By` / "Generated with" footers in commit messages |
+| 3 | Standard punctuation written or reviewed by a developer | Long dashes (em dashes) in docs or code, which signal unreviewed AI text |

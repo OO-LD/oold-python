@@ -142,6 +142,7 @@ subclass-of-final-class = "ignore"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov --cov-config=pyproject.toml --cov-report=term-missing"
 
 [tool.deptry]
 # The anywidget notebook only runs in the browser (pyodide) and imports

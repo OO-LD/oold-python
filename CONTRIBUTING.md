@@ -80,12 +80,6 @@ Releases are published automatically by CI when a version tag is pushed.
 
 CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs`, so no manual version bumping is needed.
 
-## Use of AI
+## AI Guidelines
 
-**We use AI!** AI assistance is allowed, but not fully automated. All source code must be reviewed by a developer before it is merged.
-
-| # | Allowed | Not allowed |
-| --- | --- | --- |
-| 1 | AI-assisted coding and suggestions | Fully automated changes without developer review |
-| 2 | AI output reviewed and approved by a developer | `Co-Authored-By` / "Generated with" footers in commit messages |
-| 3 | Standard punctuation written or reviewed by a developer | Long dashes (em dashes) in docs or code, which signal unreviewed AI text |
+We believe that AI, and in particular LLMs, can be helpful conventional tools to accelerate development and improve quality when used responsibly. AI or any other tool is never the author of code; a human developer always is. Therefore, it is mandatory to carefully review all generated content for correctness, quality, and the absence of legal and ethical issues. For consistency, please avoid patterns that are hard to maintain manually, such as duplicated content or special characters like em dashes or UTF icons.

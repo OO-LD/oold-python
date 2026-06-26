@@ -56,7 +56,7 @@ With `make`:
 
 ```bash
 make docs        # serve with live reload at http://localhost:8000
-make docs-test   # strict build — fails on any warning
+make docs-test   # strict build, fails on any warning
 ```
 
 Without `make`:
@@ -78,4 +78,8 @@ Releases are published automatically by CI when a version tag is pushed.
    git push origin v0.17.0
    ```
 
-CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs` — no manual version bumping needed.
+CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs`, so no manual version bumping is needed.
+
+## AI Guidelines
+
+We believe that AI, and in particular LLMs, can be helpful conventional tools to accelerate development and improve quality when used responsibly. AI or any other tool is never the author of code; a human developer always is. Therefore, it is mandatory to carefully review all generated content for correctness, quality, and the absence of legal and ethical issues. For consistency, please avoid patterns that are hard to maintain manually, such as duplicated content or special characters like em dashes or UTF icons.

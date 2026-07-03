@@ -7,6 +7,3 @@ repository-code: "https://github.com/OO-LD/oold-python"
 url: "https://OO-LD.github.io/oold-python/"
 license: MIT
 doi: 10.5281/zenodo.8374237
-authors:
-  - name: "OO-LD Contributors"
-    website: "https://github.com/OO-LD/oold-python/graphs/contributors"

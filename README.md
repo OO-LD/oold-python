@@ -274,16 +274,3 @@ pre-commit install
 ```
 
 Please also enable GitHub Actions on your fork so the test suite runs automatically.
-
-## Citation
-
-If you use oold-python in your research, please cite it:
-
-```bibtex
-@software{oold_python,
-  author  = {OO-LD Contributors},
-  title   = {oold-python: Object Oriented Linked Data for Python},
-  url     = {https://github.com/OO-LD/oold-python},
-  doi     = {10.5281/zenodo.8374237},
-}
-```

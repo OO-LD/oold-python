@@ -7,3 +7,15 @@ repository-code: "https://github.com/OO-LD/oold-python"
 url: "https://OO-LD.github.io/oold-python/"
 license: MIT
 doi: 10.5281/zenodo.8374237
+# Authors listed here are the creators shown on each Zenodo release.
+# Listing is opt-in: to be added, open a PR (see CONTRIBUTING.md, "Citation and authorship").
+authors:
+  - given-names: Simon
+    family-names: Stier
+    orcid: "https://orcid.org/0000-0003-0410-3616"
+  - given-names: Lukas
+    family-names: Gold
+    orcid: "https://orcid.org/0000-0001-7444-2969"
+  - given-names: Andreas
+    family-names: Räder
+    orcid: "https://orcid.org/0000-0002-2673-0832"

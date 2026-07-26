@@ -69,6 +69,61 @@ jobs:
       - name: Check if documentation can be built
         run: uv run zensical build -s
 
+  version-preview:
+    # Show contributors what a merge would release, based on the conventional
+    # commits on the branch. Pull requests only; informational.
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # PSR needs full history + tags to compute the bump
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Compute release preview
+        id: preview
+        run: |
+          current=$(uv version --short 2>/dev/null || echo "unknown")
+          next=$(uv run semantic-release version --print 2>/dev/null || echo "")
+          if [ -n "$next" ] && [ "$next" != "$current" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          {
+            echo "changelog<<PSR_EOF"
+            uv run semantic-release changelog --print 2>/dev/null | head -60 || echo "(no changelog preview)"
+            echo "PSR_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post release preview comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: version-preview
+          message: |
+            ## Release preview
+
+            ${{ steps.preview.outputs.released == 'true' && format('Merging this PR would release **v{0}** (current: `{1}`).', steps.preview.outputs.next, steps.preview.outputs.current) || format('No version bump from the current commits (stays at `{0}`). Use conventional commit types (`feat`, `fix`, ...) to trigger a release.', steps.preview.outputs.current) }}
+
+            <details><summary>Changelog preview (truncated)</summary>
+
+            ```markdown
+            ${{ steps.preview.outputs.changelog }}
+            ```
+
+            </details>
+
+            <sub>Computed by python-semantic-release from the conventional commits on this branch.</sub>
+
   benchmark:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false

@@ -7,7 +7,9 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 keywords = ['python', 'linked-data', 'json-ld', 'pydantic', 'oo-ld']
 requires-python = ">=3.10,<4.0"
-dynamic = ["version"]
+# Version is managed by python-semantic-release (see [tool.semantic_release]).
+# Do not edit by hand; it is bumped automatically on merge to main.
+version = "0.16.2"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -88,17 +90,39 @@ dev = [
     "ruff>=0.15.7",
     "zensical>=0.0.26",
     "mkdocstrings-python>=1.0.3",
+    "python-semantic-release>=10.0.0",
 ]
 
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/oold"]
+
+[tool.semantic_release]
+# python-semantic-release owns the version and changelog. On merge to main it
+# reads the conventional commits, bumps the static version in the files below,
+# updates the changelog, commits, and tags. The v-prefixed tag namespace is
+# preserved (matches the existing 32 releases).
+commit_parser = "conventional"
+tag_format = "v{version}"
+commit_message = "chore(release): v{version} [skip ci]"
+allow_zero_version = true
+build_command = "uv lock"
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["CITATION.cff:version"]
+exclude_commit_patterns = ['''chore\(release\):.*''']
+# uv.lock pins oold's own version, so re-lock (build_command) and include it in
+# the release commit to keep `uv sync --frozen` consistent on the next run.
+assets = ["uv.lock"]
+
+[tool.semantic_release.changelog]
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
 
 [tool.ty.environment]
 python = "./.venv"

@@ -20,9 +20,13 @@ make install
 Without `make`:
 
 ```bash
-uv sync
+uv sync --all-extras
 uv run pre-commit install
 ```
+
+`pre-commit install` installs both the `pre-commit` and `commit-msg` stage hooks
+(via `default_install_hook_types`); the latter enforces Conventional Commits (see
+below).
 
 ## Making Changes
 
@@ -66,19 +70,42 @@ uv run zensical serve
 uv run zensical build -s
 ```
 
+## Commit messages (Conventional Commits)
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/).
+Commit messages drive versioning and the changelog automatically, so the format
+matters. The local `commit-msg` hook rejects malformed messages.
+
+Format: `type(scope): subject`, for example `fix: correct sidebar collapse on
+small screens`. The scope is optional.
+
+| Type | Release effect | Use for |
+| ---- | -------------- | ------- |
+| `feat` | minor bump | a new feature |
+| `fix` | patch bump | a bug fix |
+| `perf` | patch bump | a performance improvement |
+| `docs`, `chore`, `test`, `refactor`, `ci`, `style`, `build` | no release | changes that do not ship user-facing behavior |
+| `BREAKING CHANGE:` footer, or `!` after the type | major bump | an incompatible change |
+
+A breaking change is marked either with a `!` (`feat!: drop Python 3.9`) or a
+`BREAKING CHANGE:` footer in the commit body.
+
 ## Releasing
 
-Releases are published automatically by CI when a version tag is pushed.
+Releases are fully automated by python-semantic-release. You do not tag or bump
+the version by hand.
 
-1. Ensure all changes are merged to `main`
-2. Tag the commit and push:
+1. Open a PR. CI comments the version that a merge would release, based on your
+   commits.
+2. Merge to `main`. On merge, CI reads the new conventional commits, bumps the
+   version in `pyproject.toml` and `CITATION.cff`, updates `CHANGELOG.md`,
+   commits with `[skip ci]`, and pushes the `vX.Y.Z` tag.
+3. CI then builds the package, publishes it to PyPI via OIDC trusted publishing,
+   and deploys the docs to GitHub Pages.
 
-   ```bash
-   git tag v0.17.0
-   git push origin v0.17.0
-   ```
-
-CI will build the package (`uv build`), publish it to PyPI, and deploy the docs to GitHub Pages. The version is derived from the git tag via `hatch-vcs`, so no manual version bumping is needed.
+If a merge contains only non-releasing commit types (for example `docs` or
+`chore`), no release is cut. The version lives in `pyproject.toml`; never edit it
+manually.
 
 ## Citation and authorship
 

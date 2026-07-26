@@ -1,7 +1,8 @@
-# Changelog
+# CHANGELOG
 
-## Version 0.1 (development)
+All notable changes to this project are documented here. Versions are cut
+automatically from Conventional Commits on every merge to main by
+[python-semantic-release](https://python-semantic-release.readthedocs.io/). Do
+not edit released sections by hand.
 
-- Feature A added
-- FIX: nasty bug #1729 fixed
-- add your changes here!
+<!-- version list -->

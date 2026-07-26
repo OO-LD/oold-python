@@ -2,6 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "oold-python: Object Oriented Linked Data for Python"
+# Managed by python-semantic-release (version_variables). Do not edit by hand.
+version: 0.16.2
 abstract: "A Python package for abstract and object-oriented access to knowledge graphs, bridging semantic web technologies (RDF, JSON-LD, SPARQL) with Pydantic type safety."
 repository-code: "https://github.com/OO-LD/oold-python"
 url: "https://OO-LD.github.io/oold-python/"

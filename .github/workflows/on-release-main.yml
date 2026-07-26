@@ -2,31 +2,71 @@ name: release-main
 
 on:
   push:
-    tags: ['v[0-9]*']
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
 
-  publish:
+  release:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC trusted publishing to PyPI
+      contents: write   # push the release commit and tag, create the GitHub release
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history + tags so hatch-vcs derives the version
+          fetch-depth: 0   # full history + tags so PSR can analyze commits
+          ref: main
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Semantic release version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          before=$(git rev-parse HEAD)
+          uv run semantic-release version
+          after=$(git rev-parse HEAD)
+          if [ "$before" != "$after" ]; then
+            tag=$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -1)
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "Released $tag"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "No release for this push."
+          fi
+
       - name: Build package
+        if: steps.version.outputs.released == 'true'
         run: uv build
 
-      - name: Publish package
-        run: uv publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - name: Check package metadata
+        if: steps.version.outputs.released == 'true'
+        run: uvx twine check dist/*
+
+      - name: Publish to PyPI (OIDC trusted publishing)
+        if: steps.version.outputs.released == 'true'
+        run: uv publish --trusted-publishing always
 
   deploy-docs:
-    needs: publish
+    needs: release
+    if: needs.release.outputs.released == 'true'
     permissions:
       contents: read
       pages: write
@@ -38,6 +78,8 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4
+        with:
+          ref: main   # include the release commit just pushed by PSR
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env

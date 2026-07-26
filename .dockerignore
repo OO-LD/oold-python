@@ -1,0 +1,35 @@
+# Keep the build context small and stop shipping git history into image layers.
+# The project version is static (pyproject.toml [project.version]), so .git is
+# not needed to build; excluding it is safe (unlike under hatch-vcs).
+.git
+.gitignore
+.github
+
+# Local scratch and migration notes (git-ignored)
+.ign
+
+# Virtual environments and build artifacts
+.venv
+dist
+build
+site
+
+# Caches
+.tox
+.mypy_cache
+.ruff_cache
+.pytest_cache
+**/__pycache__
+*.py[cod]
+
+# Benchmarks and coverage outputs
+.benchmarks
+benchmark_results.json
+baseline_benchmark.json
+coverage.xml
+.coverage
+
+# Editor and OS noise
+.vscode
+.idea
+.DS_Store

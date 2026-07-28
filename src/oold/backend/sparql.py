@@ -133,7 +133,7 @@ class WikiDataSparqlResolver(Resolver):
 
         self._sparql = SPARQLWrapper(self.endpoint)
 
-    def resolve_iri(self, iris: list[str]) -> dict[str, dict]:
+    def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
         # using CONSTRUCT to get the full node
         # format the result as json-ld

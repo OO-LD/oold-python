@@ -90,6 +90,9 @@ jobs:
       - name: Compute release preview
         id: preview
         run: |
+          # PSR only computes a release on the main branch; name the checked-out
+          # PR head 'main' so the preview reflects what a merge would release.
+          git checkout -B main >/dev/null 2>&1 || true
           current=$(uv version --short 2>/dev/null || echo "unknown")
           next=$(uv run semantic-release version --print 2>/dev/null || echo "")
           if [ -n "$next" ] && [ "$next" != "$current" ]; then

@@ -48,7 +48,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           before=$(git rev-parse HEAD)
-          uv run semantic-release version
+          # PSR bumps files, updates CHANGELOG.md, commits and tags, but does not
+          # create the GitHub release; we create it below with GitHub's generated
+          # "What's Changed" notes so Zenodo shows them (no changelog duplication).
+          uv run semantic-release version --no-vcs-release
           after=$(git rev-parse HEAD)
           if [ "$before" != "$after" ]; then
             tag=$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -1)
@@ -71,6 +74,19 @@ jobs:
       - name: Publish to PyPI (OIDC trusted publishing)
         if: steps.version.outputs.released == 'true'
         run: uv publish --trusted-publishing always
+
+      - name: Create GitHub release with generated notes
+        if: steps.version.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --generate-notes
+          # Append a link to the full grouped changelog (kept in CHANGELOG.md),
+          # so the release has "What's Changed" plus a pointer, no duplication.
+          notes=$(gh release view "v$VERSION" --json body -q .body)
+          link="Full grouped changelog: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSION}/CHANGELOG.md)"
+          gh release edit "v$VERSION" --notes "${notes}"$'\n\n---\n'"${link}"
 
   deploy-docs:
     needs: release

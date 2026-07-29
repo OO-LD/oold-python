@@ -7,7 +7,6 @@ version: 0.16.3
 abstract: "A Python package for abstract and object-oriented access to knowledge graphs, bridging semantic web technologies (RDF, JSON-LD, SPARQL) with Pydantic type safety."
 repository-code: "https://github.com/OO-LD/oold-python"
 url: "https://OO-LD.github.io/oold-python/"
-license: MIT
 doi: 10.5281/zenodo.8374237
 # Authors listed here are the creators shown on each Zenodo release.
 # Listing is opt-in: to be added, open a PR (see CONTRIBUTING.md, "Citation and authorship").

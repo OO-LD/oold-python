@@ -20,11 +20,19 @@ jobs:
       released: ${{ steps.version.outputs.released }}
       version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Check out
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history + tags so PSR can analyze commits
           ref: main
+          token: ${{ steps.app-token.outputs.token }}   # app identity bypasses the main ruleset
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
@@ -37,7 +45,7 @@ jobs:
       - name: Semantic release version
         id: version
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           before=$(git rev-parse HEAD)
           uv run semantic-release version

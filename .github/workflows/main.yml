@@ -102,9 +102,14 @@ jobs:
           fi
           echo "current=$current" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
+          # Stamp the upcoming changelog section locally (no commit/tag/push/build)
+          # so the preview shows the notes this merge would add.
+          if [ -n "$next" ] && [ "$next" != "$current" ]; then
+            uv run semantic-release version --no-commit --no-tag --no-push --no-vcs-release --skip-build >/dev/null 2>&1 || true
+          fi
           {
             echo "changelog<<PSR_EOF"
-            uv run semantic-release changelog --print 2>/dev/null | head -60 || echo "(no changelog preview)"
+            git --no-pager diff HEAD -- CHANGELOG.md | awk '/^\+/ && !/^\+\+\+/ {sub(/^\+/,""); print}' | head -80
             echo "PSR_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -115,7 +120,7 @@ jobs:
           message: |
             ## Release preview
 
-            ${{ steps.preview.outputs.released == 'true' && format('Merging this PR would release **v{0}** (current: `{1}`).', steps.preview.outputs.next, steps.preview.outputs.current) || format('No version bump from the current commits (stays at `{0}`). Use conventional commit types (`feat`, `fix`, ...) to trigger a release.', steps.preview.outputs.current) }}
+            ${{ steps.preview.outputs.released == 'true' && format('Merging this PR would release **v{0}** (current: `v{1}`).', steps.preview.outputs.next, steps.preview.outputs.current) || format('No version bump from the current commits (stays at `v{0}`). Use conventional commit types (`feat`, `fix`, ...) to trigger a release.', steps.preview.outputs.current) }}
 
             <details><summary>Changelog preview (truncated)</summary>
 
@@ -125,7 +130,7 @@ jobs:
 
             </details>
 
-            <sub>Computed by python-semantic-release from the conventional commits on this branch.</sub>
+            <sub>Preview via python-semantic-release and conventional commits.</sub>
 
   benchmark:
     runs-on: ubuntu-latest

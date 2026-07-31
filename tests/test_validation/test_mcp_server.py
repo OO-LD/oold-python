@@ -23,6 +23,7 @@ EXPECTED_TOOLS = {
     "generate_oold_instance",
     "check_context_mapping",
     "list_meta_versions",
+    "list_oold_rules",
 }
 
 

@@ -40,6 +40,9 @@ class Check:
     message: str = ""
     detail: dict[str, Any] = field(default_factory=dict)
     meta_version: str | None = None
+    #: The normative rule this check enforces, e.g. ``OOLD-RT-002``. None when the check maps to
+    #: no single requirement, or when the meta version in use predates the rule catalog.
+    rule: str | None = None
 
     @property
     def failed(self) -> bool:
@@ -55,6 +58,8 @@ class Check:
             payload["message"] = self.message
         if self.meta_version is not None:
             payload["meta_version"] = self.meta_version
+        if self.rule is not None:
+            payload["rule"] = self.rule
         if self.detail and verbosity == "full":
             payload["detail"] = self.detail
         return payload
@@ -62,9 +67,10 @@ class Check:
     def line(self) -> str:
         """A single-line rendering, in the reference harness's column style."""
         label = self.status.upper().ljust(4)
+        rule = f" {self.rule}" if self.rule else ""
         version = f" [{self.meta_version}]" if self.meta_version else ""
         message = f": {self.message}" if self.message else ""
-        return f"{label} {self.id:<24} {self.target}{version}{message}"
+        return f"{label}{rule} {self.id:<24} {self.target}{version}{message}"
 
 
 @dataclass
@@ -87,6 +93,7 @@ class Report:
         message: str = "",
         detail: dict[str, Any] | None = None,
         meta_version: str | None = None,
+        rule: str | None = None,
     ) -> Check:
         check = Check(
             id=id,
@@ -95,6 +102,7 @@ class Report:
             message=message,
             detail=detail or {},
             meta_version=meta_version,
+            rule=rule,
         )
         self.checks.append(check)
         return check

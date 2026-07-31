@@ -16,12 +16,16 @@ from pathlib import Path
 
 import click
 
-from .meta_store import MetaSchemaError, describe_store, fetch_remote
+from .meta_store import MetaSchemaError, describe_store, fetch_remote, resolve_selection
 from .pipeline import Options, run_compliance, validate_directory, validate_instance, validate_schema
 from .report import FAIL, OK, SKIP, WARN, Report
 
 EXIT_OK = 0
 EXIT_FAILED = 1
+
+#: Where a rule id resolves in the published specification. The anchor is emitted by
+#: oold-schema's spec renderer, so a report can link straight to the requirement it cites.
+SPEC_RULE_URL = "https://oo-ld.org/latest/spec/#rule-"
 
 _STATUS_STYLE = {
     OK: {"fg": "green"},
@@ -82,9 +86,12 @@ def _print_human(report: Report, verbose: bool) -> None:
         for check in shown:
             style = _STATUS_STYLE.get(check.status, {})
             label = click.style(check.status.upper().ljust(4), **style)
+            rule = click.style(f" {check.rule}", fg="blue") if check.rule else ""
             version = f" [{check.meta_version}]" if check.meta_version else ""
             message = f": {check.message}" if check.message else ""
-            click.echo(f"  {label} {check.id:<22} {check.target}{version}{message}")
+            click.echo(f"  {label}{rule} {check.id:<22} {check.target}{version}{message}")
+            if check.rule and verbose:
+                click.echo(f"       {SPEC_RULE_URL}{check.rule}")
 
     for note in report.notes[1:] if report.notes else []:
         click.echo(f"  note: {note}")
@@ -215,6 +222,109 @@ def meta_fetch(force: bool) -> None:
     click.echo(f"fetched into {target}")
 
 
+@click.group("rules")
+def rules_group() -> None:
+    """Look up the normative rules the validator cites."""
+
+
+@rules_group.command("list")
+@_meta_option
+@_offline_option
+@click.option("--area", help="Only rules in this area, e.g. RT, CMP, INS.")
+@click.option(
+    "--unchecked",
+    is_flag=True,
+    help="Only checkable rules that no check enforces yet, which is the coverage gap.",
+)
+@_json_option
+def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: bool) -> None:
+    """List the rules in the specification's catalog."""
+    from .pipeline import CHECK_RULES
+
+    bundle = _rules_bundle(meta, offline)
+    rules = bundle.rules
+    if area:
+        rules = [r for r in rules if r["area"].upper() == area.upper()]
+    if unchecked:
+        enforced = set(CHECK_RULES.values())
+        rules = [r for r in bundle.checkable_rules() if r["id"] not in enforced]
+
+    if as_json:
+        click.echo(json.dumps(rules, indent=2))
+        return
+    if not rules:
+        click.echo("no rules match")
+        return
+
+    enforced_by = {v: k for k, v in CHECK_RULES.items()}
+    for rule in rules:
+        flag = "!" if rule.get("deprecated") else " "
+        check = enforced_by.get(rule["id"], "-")
+        click.echo(
+            f"{flag}{click.style(rule['id'], fg='blue')}  {rule['level']:<10} "
+            f"{rule['applies_to']:<14} {check:<20} {rule['summary']}"
+        )
+    click.echo()
+    click.echo(f"  {len(rules)} rule(s); the column before the summary is the check that enforces each")
+
+
+@rules_group.command("explain")
+@click.argument("rule_id")
+@_meta_option
+@_offline_option
+@_json_option
+def rules_explain(rule_id: str, meta, offline: bool, as_json: bool) -> None:
+    """Show one rule in full: its level, what it binds, and the specification text."""
+    from .pipeline import CHECK_RULES
+
+    bundle = _rules_bundle(meta, offline)
+    rule = bundle.rule(rule_id.upper())
+    if rule is None:
+        raise click.ClickException(
+            f"{rule_id} is not in the catalog for meta-schema {bundle.version}. "
+            "Try `oold rules list` to see what is available."
+        )
+    if as_json:
+        click.echo(json.dumps(rule, indent=2))
+        return
+
+    enforced_by = {v: k for k, v in CHECK_RULES.items()}
+    click.echo(click.style(rule["id"], fg="blue", bold=True) + f"  {rule['level']}")
+    click.echo(f"  {rule['summary']}")
+    click.echo()
+    click.echo(f"  area       {rule['area']}")
+    click.echo(f"  applies to {rule['applies_to']}")
+    click.echo(
+        f"  checkable  {rule['checkable']}"
+        + (f" (enforced by {enforced_by[rule['id']]})" if rule["id"] in enforced_by else "")
+    )
+    click.echo(f"  since      {rule['since']}")
+    if rule.get("deprecated"):
+        click.echo(
+            f"  {click.style('DEPRECATED', fg='yellow')} superseded by {', '.join(rule.get('superseded_by', [])) or 'nothing'}"
+        )
+    click.echo(f"  spec       {SPEC_RULE_URL}{rule['id']}")
+    click.echo()
+    click.echo(click.style("  specification text:", bold=True))
+    click.echo(click.wrap_text(rule["text"], width=94, initial_indent="    ", subsequent_indent="    "))
+
+
+def _rules_bundle(meta, offline: bool):
+    """The first selected bundle that actually ships a catalog."""
+    try:
+        bundles = resolve_selection(tuple(meta) or ("latest",), offline=offline)
+    except MetaSchemaError as exc:
+        raise click.ClickException(str(exc)) from exc
+    for bundle in bundles:
+        if bundle.has_rules:
+            return bundle
+    names = ", ".join(b.version for b in bundles)
+    raise click.ClickException(
+        f"meta-schema version(s) {names} ship no rule catalog. It was introduced upstream after "
+        "0.8.0, so try `--meta remote` once oold-schema has published it."
+    )
+
+
 @click.group()
 @click.version_option(package_name="oold")
 def main() -> None:
@@ -225,6 +335,7 @@ main.add_command(validate)
 main.add_command(validate_instance_command)
 main.add_command(compliance_command)
 main.add_command(meta_group)
+main.add_command(rules_group)
 
 
 if __name__ == "__main__":

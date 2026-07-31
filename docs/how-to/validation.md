@@ -85,6 +85,44 @@ catch. The `[0.7.0]` tag is what tells you this is a version difference rather t
 meaning behind your back. Adding a version is documented in
 `src/oold/validation/meta/README.md`.
 
+## Rule citations
+
+Every finding can cite the normative statement it enforces. Rule ids come from the specification's
+catalog (`meta/oold-rules.json`, generated upstream from the spec prose) and are permanent, so they
+can be quoted in a review or a changelog:
+
+```console
+$ oold validate Author.schema.json --verbose
+  FAIL OOLD-RT-002 lint.container    Author.schema.json: strict array property without @container
+       https://oo-ld.org/latest/spec/#rule-OOLD-RT-002
+```
+
+```bash
+oold rules list                    # every rule, and the check that enforces it
+oold rules list --area RT          # just round-trip safety
+oold rules list --unchecked        # checkable rules no check enforces yet
+oold rules explain OOLD-RT-002     # level, binding, spec text and link
+```
+
+The catalog was introduced upstream after 0.8.0, so no tracked version ships one yet; use
+`--meta remote` until a release includes it. A version without a catalog is fully supported: it
+validates exactly as before, findings simply carry no citation, and `coverage.rules` reports
+`skip`.
+
+Each rule records **who it binds**, which decides what can enforce it:
+
+| `applies_to` | Meaning |
+|---|---|
+| `document` | Checkable by validating a schema or instance. These are what the validator can enforce |
+| `implementation` | Constrains a library rather than a document; needs a conformance suite |
+| `advisory` | Guidance that nothing verifies automatically |
+
+`coverage.rules` reports the gap between the checkable rules and the checks that exist. It is a
+**warning**, never a failure: the gap is what the catalog exists to make visible, and an id absent
+from an older catalog is indistinguishable from a typo, so failing would break validation against
+older meta versions for no reason. A genuine typo is caught instead by the opt-in parity test,
+which resolves every mapping against the current upstream catalog.
+
 ## The checks
 
 | Check | What it asserts |
@@ -102,6 +140,7 @@ meaning behind your back. Adding a version is documented in
 | `instance.schema` | A committed instance validates against its schema, with `format` asserted. |
 | `roundtrip.instance` | It round-trips through RDF unchanged. |
 | `compliance.*`, `coverage.vocab` | Fixture suites with exact expected outcomes, plus a cross-check that every meta-schema keyword has a test. |
+| `coverage.rules` | *(warning)* Which checkable rules no check enforces yet. |
 
 ### Cyclic scoped contexts
 
@@ -144,7 +183,7 @@ A working config is committed at `.mcp.json`:
 
 Transport is stdio. Tools: `validate_oold_schema`, `validate_oold_instance`,
 `validate_oold_directory`, `run_oold_compliance`, `generate_oold_instance`,
-`check_context_mapping`, `list_meta_versions`. Each takes `verbosity` as `"summary"` (default) or
+`check_context_mapping`, `list_meta_versions`, `list_oold_rules`. Each takes `verbosity` as `"summary"` (default) or
 `"full"`, and returns errors as data rather than raising.
 
 ## Differences from the reference harness

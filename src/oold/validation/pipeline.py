@@ -37,6 +37,19 @@ from .schema_checks import check_usable_as_validator, validate_against_meta
 SCHEMA_SUFFIX = ".schema.json"
 INSTANCE_SUFFIX = ".instance.json"
 
+#: Which normative rule each check enforces, so a finding can cite the requirement rather than
+#: only this package's internal check name. Deliberately partial: a check is mapped only where it
+#: enforces one identifiable requirement. `schema.meta` for instance asserts the whole meta-schema
+#: rather than any single statement, and `roundtrip.*` asserts a contract the specification states
+#: across several bullets. Leaving those unmapped is what makes `coverage.rules` meaningful - an
+#: invented mapping would report coverage the validator does not actually have.
+CHECK_RULES: dict[str, str] = {
+    "lint.pattern": "OOLD-RT-001",  # no coercion to a natively-JSON-encoded datatype
+    "lint.container": "OOLD-RT-002",  # a strict array declares @container @set/@list
+    "lint.iri-format": "OOLD-EXT-006",  # an IRI-valued property constrains its lexical form
+    "context.predicates": "OOLD-EXT-007",  # a compact-IRI prefix is defined in the @context
+}
+
 #: Why a schema's JSON-LD checks were skipped. Shared so the message is identical everywhere.
 CYCLIC_NOTE = (
     "reaches a cyclic scoped @context, which neither PyLD nor jsonld.js can process "
@@ -85,8 +98,22 @@ class _Run:
         return self._bounded[name]
 
     def add(self, check_id: str, *args: Any, **kwargs: Any) -> None:
-        if self.options.wants(check_id):
-            self.report.add(check_id, *args, **kwargs)
+        """Record a check, tagging it with the rule it enforces where one is known.
+
+        The rule is attached here rather than at each call site so the mapping stays in one
+        place, and it is only attached when the meta version in use actually ships a catalog
+        containing that id - an older version reports findings with no citation.
+        """
+        if not self.options.wants(check_id):
+            return
+        kwargs.setdefault("rule", self.rule_for(check_id))
+        self.report.add(check_id, *args, **kwargs)
+
+    def rule_for(self, check_id: str) -> str | None:
+        rule_id = CHECK_RULES.get(check_id)
+        if not rule_id:
+            return None
+        return rule_id if any(b.rule(rule_id) for b in self.bundles) else None
 
 
 # ---------------------------------------------------------------------------- setup
@@ -610,4 +637,61 @@ def run_compliance(path: str | Path, options: Options | None = None) -> Report:
                 f"all {len(bundle.declared_keywords())} keywords covered",
                 meta_version=bundle.version,
             )
+        _check_rule_coverage(run, directory.name, bundle)
     return run.report
+
+
+def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
+    """Report which checkable rules this validator actually enforces.
+
+    Both directions are reported as a warning rather than a failure, for different reasons.
+
+    An unenforced checkable rule is the gap the catalog exists to expose; failing on it would
+    block every run on requirements nobody has implemented a check for yet.
+
+    A mapped id the catalog does not contain looks like a dangling reference, but it is
+    ambiguous: it is equally what a *older* meta version looks like, one minted before that rule
+    existed. Failing would make validating against an older version break for no reason. A
+    genuine typo in `CHECK_RULES` is caught instead by the shape test and by the live parity test
+    that resolves every mapping against the current upstream catalog.
+    """
+    if not bundle.has_rules:
+        run.add(
+            "coverage.rules",
+            target,
+            SKIP,
+            f"meta-schema {bundle.version} ships no rule catalog",
+            meta_version=bundle.version,
+        )
+        return
+
+    unknown = sorted({r for r in CHECK_RULES.values() if not bundle.rule(r)})
+    checkable = bundle.checkable_rules()
+    missing = sorted(r["id"] for r in checkable if r["id"] not in set(CHECK_RULES.values()))
+
+    notes: list[str] = []
+    if missing:
+        notes.append(f"{len(missing)}/{len(checkable)} checkable rule(s) have no check: " + ", ".join(missing))
+    if unknown:
+        notes.append(
+            f"{len(unknown)} mapped rule id(s) absent from this catalog (newer than "
+            f"{bundle.version}, or renamed): " + ", ".join(unknown)
+        )
+
+    if notes:
+        run.add(
+            "coverage.rules",
+            target,
+            WARN,
+            "; ".join(notes),
+            {"unenforced": missing, "unknown": unknown},
+            bundle.version,
+        )
+    else:
+        run.add(
+            "coverage.rules",
+            target,
+            OK,
+            f"all {len(checkable)} checkable rules are enforced",
+            meta_version=bundle.version,
+        )

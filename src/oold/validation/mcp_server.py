@@ -29,8 +29,9 @@ except ImportError:  # pragma: no cover - depends on the installed mcp major ver
     # decorator and `run(transport=...)` - are identical across both.
     from mcp.server.fastmcp import FastMCP as _Server  # ty: ignore[unresolved-import]
 
+from .cli import SPEC_RULE_URL
 from .generate import generate
-from .meta_store import MetaSchemaError, describe_store
+from .meta_store import MetaSchemaError, describe_store, resolve_selection
 from .pipeline import Options, run_compliance, validate_directory, validate_instance, validate_schema
 from .predicates import check_predicates
 from .report import Report, failure_reasons
@@ -247,6 +248,58 @@ def check_context_mapping(document: str, context: str | None = None) -> dict[str
 
     payload = {k: v for k, v in parsed.items() if k not in ("@context", "$schema")}
     return check_predicates(payload, active).to_dict(include_documents=True)
+
+
+@mcp.tool()
+def list_oold_rules(
+    meta: list[str] | None = None,
+    area: str | None = None,
+    unenforced_only: bool = False,
+    offline: bool = False,
+) -> dict[str, Any]:
+    """List the normative rules the specification defines, and which checks enforce them.
+
+    Every validation finding cites a rule id such as OOLD-RT-002; this resolves those ids to the
+    requirement text, its level (MUST / SHOULD / ...), and the specification URL. Use it to
+    explain a finding, or with unenforced_only to see which requirements the validator does not
+    yet check.
+
+    Args:
+        meta: Meta-schema versions to read the catalog from. The catalog was introduced upstream
+            after 0.8.0, so ["remote"] may be needed until a release ships it.
+        area: Restrict to one area, e.g. RT (round-trip), CMP (composition), INS (instances).
+        unenforced_only: Only checkable rules that no check enforces yet.
+        offline: Never fetch over the network.
+    """
+    from .pipeline import CHECK_RULES
+
+    try:
+        bundles = resolve_selection(tuple(meta) if meta else ("latest",), offline=offline)
+    except MetaSchemaError as exc:
+        return {"rules": [], "error": str(exc)}
+
+    bundle = next((b for b in bundles if b.has_rules), None)
+    if bundle is None:
+        return {
+            "rules": [],
+            "error": (
+                f"meta-schema version(s) {', '.join(b.version for b in bundles)} ship no rule "
+                "catalog; try meta=['remote']"
+            ),
+        }
+
+    enforced_by = {v: k for k, v in CHECK_RULES.items()}
+    rules = bundle.checkable_rules() if unenforced_only else bundle.rules
+    if area:
+        rules = [r for r in rules if r["area"].upper() == area.upper()]
+    if unenforced_only:
+        rules = [r for r in rules if r["id"] not in enforced_by]
+
+    return {
+        "meta_version": bundle.version,
+        "count": len(rules),
+        "rules": [{**r, "enforced_by": enforced_by.get(r["id"]), "spec_url": SPEC_RULE_URL + r["id"]} for r in rules],
+    }
 
 
 @mcp.tool()

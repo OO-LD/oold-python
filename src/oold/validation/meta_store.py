@@ -40,6 +40,12 @@ META_SCHEMA_FILE = "oold-meta-schema.json"
 UI_META_SCHEMA_FILE = "oold-ui-meta-schema.json"
 PATTERN_LINT_FILE = "oold-pattern-lint.schema.json"
 
+#: The rule catalog, generated upstream from the specification prose. Unlike the three
+#: meta-schemas this file is **optional**: it was introduced after 0.8.0, so a version predating
+#: it must still load, simply reporting no rule ids. Findings then carry no citation rather than
+#: the run failing, which is what lets an older meta version stay usable.
+RULES_FILE = "oold-rules.json"
+
 #: Selector for the unreleased upstream state.
 REMOTE = "remote"
 LATEST = "latest"
@@ -123,10 +129,32 @@ class MetaBundle:
     origin: str
     documents: dict[str, Any]
     registry: Registry = field(repr=False)
+    #: The rule catalog for this version, empty when it predates one.
+    rules: list[dict[str, Any]] = field(default_factory=list, repr=False)
 
     @property
     def meta(self) -> dict[str, Any]:
         return self.documents[META_SCHEMA_FILE]
+
+    @property
+    def has_rules(self) -> bool:
+        return bool(self.rules)
+
+    def rule(self, rule_id: str) -> dict[str, Any] | None:
+        """Look up one rule, or None when this version ships no catalog or lacks the id."""
+        return next((r for r in self.rules if r["id"] == rule_id), None)
+
+    def checkable_rules(self) -> list[dict[str, Any]]:
+        """Rules a validator can enforce by inspecting a document.
+
+        `implementation` rules constrain a library rather than a document, and `advisory` ones
+        constrain nobody, so neither belongs in a validator's coverage figure.
+        """
+        return [
+            r
+            for r in self.rules
+            if r.get("checkable") and r.get("applies_to") == "document" and not r.get("deprecated")
+        ]
 
     @property
     def ui_meta(self) -> dict[str, Any]:
@@ -201,6 +229,21 @@ def _build_registry(documents: dict[str, Any]) -> Registry:
     return Registry(retrieve=retrieve).with_resources(pairs)
 
 
+def _read_rules(directory: Path) -> list[dict[str, Any]]:
+    """Load the optional rule catalog from a version directory.
+
+    A malformed catalog is treated as absent rather than fatal: rule ids are an annotation on
+    findings, so losing them must never stop a schema from being validated.
+    """
+    path = directory / RULES_FILE
+    if not path.is_file():
+        return []
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("rules", [])
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
 def _read_documents(directory: Path, label: str) -> dict[str, Any]:
     documents: dict[str, Any] = {}
     for name in meta_files():
@@ -226,6 +269,7 @@ def load_tracked(version: str) -> MetaBundle:
         origin=str(directory),
         documents=documents,
         registry=_build_registry(documents),
+        rules=_read_rules(directory),
     )
 
 
@@ -244,6 +288,12 @@ def fetch_remote(force: bool = False, timeout: float = 10.0) -> Path:
     for name in meta_files():
         document = http_get_json(base + name, timeout=timeout)
         (target / name).write_text(json.dumps(document, indent=2), encoding="utf-8")
+    try:
+        catalog = http_get_json(base + RULES_FILE, timeout=timeout)
+        (target / RULES_FILE).write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+    except SchemaResolutionError:
+        # Upstream has not published a catalog yet; the bundle is still complete without it.
+        (target / RULES_FILE).unlink(missing_ok=True)
     stamp.write_text(
         json.dumps(
             {
@@ -286,6 +336,7 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
         origin=origin,
         documents=documents,
         registry=_build_registry(documents),
+        rules=_read_rules(target),
     )
 
 

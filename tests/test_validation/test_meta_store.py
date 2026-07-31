@@ -18,6 +18,7 @@ from oold.validation.meta_store import (
     resolve_selection,
     tracked_versions,
 )
+from oold.validation.resolve import SchemaResolutionError
 
 
 def test_at_least_one_version_is_tracked():
@@ -172,7 +173,12 @@ def test_remote_fetch_writes_only_to_the_cache(isolated_cache, monkeypatch, tmp_
     before = {path: path.read_bytes() for path in meta_store.meta_dir().rglob("*.json")}
 
     def fake_get(uri, timeout=10.0):
-        return documents[uri.rsplit("/", 1)[-1]]
+        # Upstream serves the three meta-schemas but not (yet) the optional rule catalog;
+        # a missing file surfaces as a resolution error, the same as a real 404.
+        name = uri.rsplit("/", 1)[-1]
+        if name not in documents:
+            raise SchemaResolutionError(f"could not fetch {uri}: 404")
+        return documents[name]
 
     monkeypatch.setattr(meta_store, "http_get_json", fake_get)
     bundle = meta_store.load_remote(offline=False)
@@ -189,7 +195,14 @@ def test_cached_remote_is_usable_offline(isolated_cache, monkeypatch):
         name: json.loads((meta_store.meta_dir() / latest_version() / name).read_text("utf-8"))
         for name in meta_store.meta_files()
     }
-    monkeypatch.setattr(meta_store, "http_get_json", lambda uri, timeout=10.0: documents[uri.rsplit("/", 1)[-1]])
+
+    def fake_get(uri, timeout=10.0):
+        name = uri.rsplit("/", 1)[-1]
+        if name not in documents:
+            raise SchemaResolutionError(f"could not fetch {uri}: 404")
+        return documents[name]
+
+    monkeypatch.setattr(meta_store, "http_get_json", fake_get)
     meta_store.fetch_remote()
     # Now offline: the cached copy must satisfy the request without any fetch.
     monkeypatch.setattr(

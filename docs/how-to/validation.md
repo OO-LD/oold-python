@@ -45,7 +45,7 @@ Exit code is 0 only when no check failed. Warnings do not fail a run.
 
 | Option | Meaning |
 |---|---|
-| `--meta VERSION` | `latest` (default), a version such as `0.7.0`, `remote`, or `all`. Repeatable. |
+| `--meta VERSION` | `latest` (default), a version such as `0.8.0`, `remote`, or `all`. Repeatable. |
 | `--offline` | Never fetch; use local files and the cache only. |
 | `--verbose` | Show passing checks too, not just problems. |
 | `--json` | Emit the report as JSON. |
@@ -58,15 +58,27 @@ version under `src/oold/validation/meta/<version>/`, so validation works offline
 can be checked against several versions at once.
 
 ```bash
-oold validate ./schemas --meta 0.7.0 --meta remote
+oold validate ./schemas --meta 0.7.0 --meta 0.8.0
 ```
 
 Only two checks depend on the version, `schema.meta` and `lint.pattern`, and only those are
-repeated per version; everything else runs once. Results carry the version they came from:
+repeated per version; everything else runs once. Results carry the version they came from, so a
+difference between releases is visible rather than confusing. This is reproducible against the
+committed fixtures:
 
+```console
+$ oold compliance tests/data/oold/compliance --offline --meta 0.7.0 --meta 0.8.0
+FAIL  tests/data/oold/compliance
+      meta-schema: 0.7.0, 0.8.0
+      138 ok, 2 failed, 0 warning(s), 0 skipped, across 52 target(s)
+
+  FAIL compliance.lint  ... @type: xsd:integer is never selected on the way back ... [0.7.0]
+  FAIL compliance.lint  ... @type: xsd:boolean and xsd:double are rejected ... [0.7.0]
 ```
-FAIL lint.pattern  roundtrip-patterns.json [0.7.0]: expected lint fail, got pass
-```
+
+Both failures are real and expected: 0.8.0 extended the no-coercion rule from `xsd:string` to every
+natively-JSON-encoded datatype, so fixtures written for 0.8.0 assert something 0.7.0's lint cannot
+catch. The `[0.7.0]` tag is what tells you this is a version difference rather than a broken schema.
 
 `remote` fetches the unreleased `main` state into `~/.cache/oold/meta/` (override with
 `OOLD_CACHE_DIR`). It never writes into the tracked history, so a released version cannot change

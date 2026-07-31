@@ -122,14 +122,14 @@
       "urn:uuid:abc": true,
       "relative/path": false,
       "not an iri": false,
-      "https://example.org/ünïcode": true
+      "https://example.org/\u00fcn\u00efcode": true
     },
     "iri-reference": {
       "https://example.org/thing": true,
       "ex:alice": true,
       "Thing.schema.json": true,
       "has\"quote": false,
-      "https://example.org/ünïcode": true,
+      "https://example.org/\u00fcn\u00efcode": true,
       "": true
     }
   }

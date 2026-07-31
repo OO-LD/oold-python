@@ -3,7 +3,14 @@
   "$id": "invalid_meta.schema.json",
   "title": "InvalidMeta",
   "x-oold-uuid": "not-a-uuid",
-  "@context": { "ex": "https://example.org/", "name": "ex:name" },
+  "@context": {
+    "ex": "https://example.org/",
+    "name": "ex:name"
+  },
   "type": "object",
-  "properties": { "name": { "type": "string" } }
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  }
 }

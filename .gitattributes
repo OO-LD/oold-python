@@ -1,0 +1,7 @@
+# Files copied verbatim from the oold-schema repository at a release tag must keep their exact
+# bytes: `src/oold/validation/meta/index.json` records a sha256 for each vendored meta-schema, and
+# the fixtures are refreshed by copying bytes straight out of a tag. With `core.autocrlf=true` -
+# the Windows default - git would rewrite their line endings on checkout, silently breaking those
+# checksums and making every refresh from upstream show a whole-file diff.
+src/oold/validation/meta/0.*/** -text
+tests/data/oold/**             -text

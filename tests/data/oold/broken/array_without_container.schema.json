@@ -4,10 +4,17 @@
   "title": "ArrayWithoutContainer",
   "@context": {
     "ex": "https://example.org/",
-    "tags": { "@id": "ex:tags" }
+    "tags": {
+      "@id": "ex:tags"
+    }
   },
   "type": "object",
   "properties": {
-    "tags": { "type": "array", "items": { "type": "string" } }
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   }
 }

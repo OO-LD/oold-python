@@ -5,8 +5,15 @@
   "@context": {
     "ex": "https://example.org/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "name": { "@id": "ex:name", "@type": "xsd:string" }
+    "name": {
+      "@id": "ex:name",
+      "@type": "xsd:string"
+    }
   },
   "type": "object",
-  "properties": { "name": { "type": "string" } }
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  }
 }

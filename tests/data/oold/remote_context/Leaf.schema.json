@@ -2,7 +2,9 @@
   "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
   "$id": "Leaf.schema.json",
   "title": "Leaf",
-  "x-oold-instance-rdf-type": ["schema:Thing"],
+  "x-oold-instance-rdf-type": [
+    "schema:Thing"
+  ],
   "@context": [
     "../Thing.schema.json",
     {
@@ -12,7 +14,11 @@
   ],
   "type": "object",
   "properties": {
-    "name": { "type": "string" },
-    "nickname": { "type": "string" }
+    "name": {
+      "type": "string"
+    },
+    "nickname": {
+      "type": "string"
+    }
   }
 }

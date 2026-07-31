@@ -22,6 +22,19 @@
         "oold-pattern-lint.schema.json": "1e10d3efee06e590c81757fdf273695ecef6f5128ade5d8dd391c6f28fed7c1b",
         "oold-ui-meta-schema.json": "f584a8f535529369914a196af80adac7b937ffbb3fbb7c03d5ec0ef6d9d6cb7d"
       }
+    },
+    "0.8.0": {
+      "tag": "v0.8.0",
+      "commit": "2a4546a95a6fe30573aa00e5f7f63e4080f979db",
+      "committed": "2026-07-31T07:43:29+02:00",
+      "added": "2026-07-31",
+      "id_base": "https://oo-ld.org/latest/meta/",
+      "notes": "Canonical domain moved to oo-ld.org, and the no-coercion pattern-lint rule was extended from xsd:string to every natively-JSON-encoded datatype (xsd:boolean, xsd:integer, xsd:double, xsd:float).",
+      "sha256": {
+        "oold-meta-schema.json": "b6b11b4bec20f997cb264fb828cd1cb7fd9ebf9bc177474e615c2dc090ff9c90",
+        "oold-pattern-lint.schema.json": "0537e7f7604ce666f666deab30cde90ca09c69a30ca068ea5ed9f8c69a81c6c3",
+        "oold-ui-meta-schema.json": "dd389d13a5e03268d4a4ff845dec7f4f28238f7edbd9fe0992399b37ac358212"
+      }
     }
   }
 }

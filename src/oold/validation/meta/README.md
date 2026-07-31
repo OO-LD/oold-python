@@ -8,6 +8,7 @@ one schema can be checked against several meta-schema versions in a single run.
 meta/
 ├── index.json      provenance: upstream tag, commit, checksums
 ├── 0.7.0/          oold-meta-schema.json, oold-pattern-lint.schema.json, oold-ui-meta-schema.json
+├── 0.8.0/          same three files; `latest` resolves here
 └── <next>/
 ```
 
@@ -34,8 +35,19 @@ Extract from the **tag**, not from the working tree. The two diverge: at the tim
 `main` had already changed all three files, including the canonical `$id` domain.
 
 Then add an entry to `index.json` with the tag, commit, commit date, the `$id` base in use for that
-release, and the checksums. Add `--meta $V` to a test run and confirm the suite still passes:
-`uv run pytest tests/test_validation -q`.
+release, and the checksums.
+
+Finally refresh the fixture slice in `tests/data/oold/` from the **same tag** (see its README), so
+that fixtures and meta-schemas always come from one release, and confirm both still pass:
+
+```bash
+uv run oold validate tests/data/oold --offline --meta all
+make validate && uv run pytest tests/test_validation -q
+```
+
+Keeping the two in step is not cosmetic. A compliance fixture asserts the lint rules of the release
+that introduced them, so a newer fixture set combined with an older meta-schema fails in ways that
+say nothing about the code.
 
 ## Why `id_base` is recorded and not assumed
 

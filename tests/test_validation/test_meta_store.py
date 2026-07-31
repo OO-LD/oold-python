@@ -41,13 +41,25 @@ def test_index_records_provenance_for_every_tracked_version():
 
 
 def test_recorded_checksums_match_the_shipped_files():
-    """The store is curated by hand, so the checksums are what catch a bad copy."""
+    """The store is curated by hand, so the checksums are what catch a bad copy.
+
+    Two things have broken this in practice, and both are worth naming in the failure message
+    because neither is obvious from a hash mismatch: a JSON-formatting pre-commit hook rewriting
+    the file, and git's `core.autocrlf` converting line endings on checkout. `.gitattributes`
+    marks these paths `-text` and `.pre-commit-config.yaml` excludes them; if either is lost,
+    this test is what notices.
+    """
     index = meta_store.load_index()
     for version in tracked_versions():
         recorded = index["versions"][version].get("sha256") or {}
         for name, digest in recorded.items():
             content = (meta_store.meta_dir() / version / name).read_bytes()
-            assert hashlib.sha256(content).hexdigest() == digest, f"{version}/{name} was modified"
+            assert hashlib.sha256(content).hexdigest() == digest, (
+                f"{version}/{name} no longer matches the sha256 recorded in meta/index.json. "
+                "It is a verbatim copy of an oold-schema release tag, so either it was edited, "
+                "a formatting hook rewrote it, or git converted its line endings "
+                "(check .gitattributes marks it -text)."
+            )
 
 
 def test_bundle_self_check_is_clean():
@@ -73,10 +85,31 @@ def test_unknown_version_names_what_is_available():
         load_tracked("9.9.9")
 
 
-def test_selection_expands_and_deduplicates():
+def test_selection_deduplicates_and_keeps_selector_order():
+    """Selectors are honoured in the order given, not re-sorted by version.
+
+    `--meta 0.8.0 --meta 0.7.0` should report in that order, because the caller chose it. So
+    `latest` first then `all` puts the newest first and backfills the rest, which is the
+    documented contract rather than an accident.
+    """
     latest = latest_version()
     bundles = resolve_selection(["latest", "all", latest], offline=True)
-    assert [b.version for b in bundles] == tracked_versions()
+    versions = [b.version for b in bundles]
+    assert versions[0] == latest
+    assert sorted(versions) == sorted(tracked_versions())
+    assert len(versions) == len(set(versions))
+
+
+def test_all_on_its_own_is_in_version_order():
+    assert [b.version for b in resolve_selection(["all"], offline=True)] == tracked_versions()
+
+
+def test_explicit_order_is_preserved():
+    versions = tracked_versions()
+    if len(versions) < 2:
+        pytest.skip("needs at least two tracked versions")
+    reverse = list(reversed(versions))
+    assert [b.version for b in resolve_selection(reverse, offline=True)] == reverse
 
 
 def test_selection_accepts_a_bare_string():

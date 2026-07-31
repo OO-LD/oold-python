@@ -1,8 +1,8 @@
 # OO-LD test fixtures
 
 A snapshot of [oold-schema](https://github.com/OO-LD/oold-schema) `examples/`, taken at tag
-**v0.7.0** - the same release the tracked meta-schemas in `src/oold/validation/meta/0.7.0/` come
-from.
+**v0.8.0** - the same release the newest tracked meta-schemas in
+`src/oold/validation/meta/0.8.0/` come from.
 
 That pairing matters. A compliance fixture asserts the lint rules of the version that introduced
 them, so combining a newer fixture set with an older meta-schema produces failures that say
@@ -10,7 +10,7 @@ nothing about this code. Upstream's current `main` is covered instead by the opt
 (`tests/test_validation/test_parity_live.py`), which validate against `--meta remote`.
 
 ```
-.                     examples/ from v0.7.0, plus compliance/
+.                     examples/ from v0.8.0, plus compliance/
 broken/               deliberately broken schemas: the checks must fail on these
 remote_context/       a schema whose @context chain leaves its directory
 ```

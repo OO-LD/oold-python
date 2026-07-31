@@ -8,7 +8,11 @@
   },
   "type": "object",
   "properties": {
-    "name": { "type": "string" },
-    "orphan": { "type": "string" }
+    "name": {
+      "type": "string"
+    },
+    "orphan": {
+      "type": "string"
+    }
   }
 }

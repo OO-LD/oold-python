@@ -4,8 +4,15 @@
   "title": "UnresolvableContextRef",
   "@context": [
     "NoSuchSchema.schema.json",
-    { "ex": "https://example.org/", "name": "ex:name" }
+    {
+      "ex": "https://example.org/",
+      "name": "ex:name"
+    }
   ],
   "type": "object",
-  "properties": { "name": { "type": "string" } }
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  }
 }

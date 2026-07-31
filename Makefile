@@ -20,6 +20,12 @@ test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
 	@uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
 
+.PHONY: validate
+validate: ## Validate the committed OO-LD fixtures with the built-in validator
+	@echo "🚀 Validating OO-LD schemas: oold validate"
+	@uv run oold validate tests/data/oold --offline
+	@uv run oold compliance tests/data/oold/compliance --offline
+
 .PHONY: benchmark
 benchmark: ## Run performance benchmarks with pytest-benchmark
 	@echo "🚀 Running benchmarks: pytest-benchmark"

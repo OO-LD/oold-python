@@ -1,0 +1,14 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "missing_context_term.schema.json",
+  "title": "MissingContextTerm",
+  "@context": {
+    "ex": "https://example.org/",
+    "name": "ex:name"
+  },
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "orphan": { "type": "string" }
+  }
+}

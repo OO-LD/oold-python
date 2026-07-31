@@ -20,6 +20,7 @@ nav = [
         { "Object Graph Mapping" = "how-to/object-graph-mapping.md" },
         { "Backends" = "how-to/backends.md" },
         { "RDF Export" = "how-to/rdf-export.md" },
+        { "Validation" = "how-to/validation.md" },
         { "BaseController" = "how-to/controller.md" },
     ]},
     { "Architecture" = "architecture.md" },

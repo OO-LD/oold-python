@@ -1,0 +1,136 @@
+{
+  "$comment": "Expected format-assertion outcomes, captured from the reference toolchain: ajv + ajv-formats (full mode) + ajv-formats-draft2019, with validate.mjs iri/iri-reference override applied. Regenerate with scripts described in docs/how-to/validation.md.",
+  "source": "oold-schema scripts/validate.mjs ajv setup",
+  "formats": {
+    "date": {
+      "2026-01-02": true,
+      "2026-13-01": false,
+      "2026-02-30": false,
+      "2026-02-28": true,
+      "not-a-date": false,
+      "2026-1-2": false,
+      "2024-02-29": true,
+      "2026-02-29": false
+    },
+    "date-time": {
+      "2026-01-02T03:04:05Z": true,
+      "2026-01-02 03:04:05Z": true,
+      "2026-01-02T03:04:05+02:00": true,
+      "2026-01-02T25:00:00Z": false,
+      "2026-01-02T03:04:05": false,
+      "2026-12-31T23:59:60Z": true,
+      "2026-02-30T00:00:00Z": false,
+      "2026-01-02t03:04:05z": true,
+      "2026-01-02T03:04:05.123Z": true
+    },
+    "time": {
+      "03:04:05Z": true,
+      "03:04:05": false,
+      "23:59:60Z": true,
+      "25:00:00": false,
+      "23:60:00": false,
+      "12:00:00+02:00": true,
+      "12:00:00+0200": true,
+      "12:00:00.5Z": true
+    },
+    "duration": {
+      "P1DT2H": true,
+      "P1Y": true,
+      "PT1S": true,
+      "P1W": true,
+      "1D": false,
+      "P": false,
+      "PT": false,
+      "P1Y2M3DT4H5M6S": true,
+      "P1YT": false
+    },
+    "email": {
+      "someone@example.org": true,
+      "a.b+c@sub.example.co.uk": true,
+      "not-an-email": false,
+      "a@@b.com": false,
+      "a@b": false,
+      "a@b.c": true,
+      ".a@b.co": false,
+      "a.@b.co": false
+    },
+    "uuid": {
+      "00000000-0000-4000-8000-000000000000": true,
+      "not-a-uuid": false,
+      "00000000000040008000000000000000": false,
+      "urn:uuid:00000000-0000-4000-8000-000000000000": true
+    },
+    "ipv4": {
+      "192.0.2.1": true,
+      "999.0.0.1": false,
+      "1.2.3": false,
+      "0.0.0.0": true
+    },
+    "ipv6": {
+      "2001:db8::1": true,
+      "::1": true,
+      "not::a::v6": false,
+      "fe80::1%eth0": false
+    },
+    "hostname": {
+      "example.org": true,
+      "a-b.example.org": true,
+      "-bad.example.org": false,
+      "example..org": false,
+      "localhost": true,
+      "example.org.": true
+    },
+    "json-pointer": {
+      "/example": true,
+      "": true,
+      "/a~0b": true,
+      "no-slash": false,
+      "/a/b/c": true,
+      "/a~2b": false
+    },
+    "relative-json-pointer": {
+      "1": true,
+      "0/example": true,
+      "0#": true,
+      "x/y": false
+    },
+    "regex": {
+      "^example$": true,
+      "([unclosed": false,
+      "a{2,3}": true
+    },
+    "uri": {
+      "https://example.org/thing": true,
+      "urn:uuid:abc": true,
+      "ex:alice": true,
+      "relative/path": false,
+      "https://exa mple.org": false,
+      "mailto:a@b.co": true,
+      "//example.org/x": false
+    },
+    "uri-reference": {
+      "https://example.org/thing": true,
+      "relative/path": true,
+      "ex:alice": true,
+      "has space": false,
+      "#frag": true,
+      "": true
+    },
+    "iri": {
+      "https://example.org/thing": true,
+      "ex:alice": true,
+      "urn:uuid:abc": true,
+      "relative/path": false,
+      "not an iri": false,
+      "https://example.org/ünïcode": true
+    },
+    "iri-reference": {
+      "https://example.org/thing": true,
+      "ex:alice": true,
+      "Thing.schema.json": true,
+      "has\"quote": false,
+      "https://example.org/ünïcode": true,
+      "": true
+    }
+  }
+}

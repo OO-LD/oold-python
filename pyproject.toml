@@ -39,7 +39,26 @@ Documentation = "https://OO-LD.github.io/oold-python/"
 Repository = "https://github.com/OO-LD/oold-python"
 Download = "https://pypi.org/project/oold/#files"
 
+[project.scripts]
+oold = "oold.cli:main"
+# The JS-compatible name, bound to the same implementation, so `oold-validate <dir>` works the
+# same way as `npx --yes github:OO-LD/oold-schema oold-validate <dir>`.
+oold-validate = "oold.validation.cli:validate"
+
 [project.optional-dependencies]
+# The validator needs a JSON Schema implementation and a CLI framework. pyld and rdflib are
+# already core dependencies, so the whole JSON-LD half of it costs nothing extra.
+validation = [
+    "jsonschema>=4.20",
+    "referencing>=0.30",
+    "click>=8.1",
+]
+mcp = [
+    "mcp>=1.2",
+    "jsonschema>=4.20",
+    "referencing>=0.30",
+    "click>=8.1",
+]
 UI-panel = [
     "panel",
     "jupyter_bokeh",
@@ -73,10 +92,20 @@ all = [
     "traitlets",
     "ipython",
     "nicegui",
+    "jsonschema>=4.20",
+    "referencing>=0.30",
+    "click>=8.1",
+    "mcp>=1.2",
 ]
 
 [dependency-groups]
 dev = [
+    # The validation extras are dev dependencies too, so `make test` and `make check` see them
+    # without `--all-extras`.
+    "jsonschema>=4.20",
+    "referencing>=0.30",
+    "click>=8.1",
+    "mcp>=1.2",
     "pytest",
     "pytest-cov>=7.0.0",
     "pytest-benchmark",
@@ -167,6 +196,11 @@ subclass-of-final-class = "ignore"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov --cov-config=pyproject.toml --cov-report=term-missing"
+markers = [
+    # Opt-in parity tests against a local oold-schema checkout; see
+    # tests/test_validation/test_parity_live.py. They skip unless OOLD_SCHEMA_DIR is set.
+    "parity: compares this port against the reference harness",
+]
 
 [tool.deptry]
 # The anywidget notebook only runs in the browser (pyodide) and imports

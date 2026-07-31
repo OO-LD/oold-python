@@ -1,0 +1,12 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "undefined_prefix.schema.json",
+  "title": "UndefinedPrefix",
+  "@context": {
+    "latitude": "schema:latitude"
+  },
+  "type": "object",
+  "properties": {
+    "latitude": { "type": "number" }
+  }
+}

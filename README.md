@@ -238,6 +238,29 @@ loaded = MyModel["ex:foo"]  # resolves via registered backend
 
 Custom backends implement the `Backend` interface (`resolve_iris`, `store_json_dicts`).
 
+### Validation
+
+Check that an OO-LD schema is well formed, and that its `@context` actually carries every
+declared property into RDF. A property declared in `properties` but missing from `@context` is
+neither a JSON Schema error nor a JSON-LD error - it just quietly disappears, and the data loses
+meaning.
+
+```bash
+pip install "oold[validation]"
+
+oold validate Person.schema.json          # one schema
+oold validate ./schemas/                  # a whole directory
+oold validate-instance doc.instance.json  # a document against the schema it names
+```
+
+Exit code is 0 only when every check passes, so it drops straight into CI. The same pipeline is
+available as a Python API and as an MCP server (`oold[mcp]`).
+
+It is a native port of the reference harness in
+[oold-schema](https://github.com/OO-LD/oold-schema), verified to agree with it on verdicts, and
+it validates against versioned meta-schemas - a released version, the unreleased upstream state,
+or several at once. See [docs/how-to/validation.md](docs/how-to/validation.md).
+
 ## Development
 
 This project uses [uv](https://docs.astral.sh/uv/) and `make`. Clone and set up:

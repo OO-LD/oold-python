@@ -57,6 +57,30 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  validate-schemas:
+    # Runs the OO-LD validator over the committed fixtures, offline, so a regression in the
+    # validation pipeline fails CI even when the unit tests still pass.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Validate the committed OO-LD fixtures
+        run: make validate
+
+      - name: Check parity against the reference harness
+        run: |
+          # oold-schema owns the reference implementation. Comparing against its current main
+          # catches drift that the committed fixture snapshot cannot see.
+          git clone --depth 1 https://github.com/OO-LD/oold-schema.git /tmp/oold-schema
+          npm --prefix /tmp/oold-schema install --no-audit --no-fund
+          OOLD_SCHEMA_DIR=/tmp/oold-schema uv run python -m pytest \
+            tests/test_validation/test_parity_live.py -v --no-cov
+        continue-on-error: true
+
   check-docs:
     runs-on: ubuntu-latest
     steps:

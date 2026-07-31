@@ -106,6 +106,18 @@ Backends are registered per IRI prefix via `set_resolver` / `set_backend`, so mu
 
 `oold.ui` contains optional integrations for [Panel](https://panel.holoviz.org/), [NiceGUI](https://nicegui.io/), and [Jupyter anywidget](https://anywidget.dev/). These are not installed by default.
 
+### Validation Layer (optional)
+
+`oold.validation` checks that a schema is well formed and that its `@context` actually carries
+every declared property into RDF. It is a native port of the reference harness in
+[oold-schema](https://github.com/OO-LD/oold-schema), and reuses `pyld` from the serialization
+layer, so the JSON-LD half of it adds no dependencies.
+
+One pipeline backs three surfaces - the library API, the `oold validate` CLI, and an MCP server -
+so there is a single implementation to keep correct. The meta-schemas it validates against are
+versioned: a hand-curated history ships in the package, and a schema can be checked against
+several versions in one run. See [Validation](how-to/validation.md).
+
 ---
 
 ## Data flow

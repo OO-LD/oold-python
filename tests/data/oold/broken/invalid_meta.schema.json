@@ -1,0 +1,9 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "invalid_meta.schema.json",
+  "title": "InvalidMeta",
+  "x-oold-uuid": "not-a-uuid",
+  "@context": { "ex": "https://example.org/", "name": "ex:name" },
+  "type": "object",
+  "properties": { "name": { "type": "string" } }
+}

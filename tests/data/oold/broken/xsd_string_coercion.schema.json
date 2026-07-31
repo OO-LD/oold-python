@@ -1,0 +1,12 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "xsd_string_coercion.schema.json",
+  "title": "XsdStringCoercion",
+  "@context": {
+    "ex": "https://example.org/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "name": { "@id": "ex:name", "@type": "xsd:string" }
+  },
+  "type": "object",
+  "properties": { "name": { "type": "string" } }
+}

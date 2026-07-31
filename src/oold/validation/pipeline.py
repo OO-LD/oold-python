@@ -32,6 +32,7 @@ from .predicates import check_predicates
 from .report import FAIL, OK, SKIP, WARN, Report
 from .resolve import Resolver, SchemaResolutionError, bound_schema
 from .roundtrip import roundtrip
+from .rule_checks import RULE_CHECK_MAP, ContextView, run_rule_checks
 from .schema_checks import check_usable_as_validator, validate_against_meta
 
 SCHEMA_SUFFIX = ".schema.json"
@@ -48,6 +49,9 @@ CHECK_RULES: dict[str, str] = {
     "lint.container": "OOLD-RT-002",  # a strict array declares @container @set/@list
     "lint.iri-format": "OOLD-EXT-006",  # an IRI-valued property constrains its lexical form
     "context.predicates": "OOLD-EXT-007",  # a compact-IRI prefix is defined in the @context
+    # Checks that each enforce exactly one rule live in rule_checks.py and declare their own
+    # mapping, so adding a rule check cannot forget to register it here.
+    **RULE_CHECK_MAP,
 }
 
 #: Why a schema's JSON-LD checks were skipped. Shared so the message is identical everywhere.
@@ -381,6 +385,8 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
         run.add("context.predicates", name, SKIP, "schema declares no @context")
         return
 
+    _run_rule_checks(run, name, raw, ContextView(terms=context.terms(), entries=list(context.context)))
+
     id_key, type_key = find_alias_keys(context.terms())
     declared = set(collect_composed_properties(schema)) | {id_key, type_key}
     result = check_predicates(sample, context.as_jsonld(), declared_properties=declared)
@@ -414,6 +420,22 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
 
 
 # ---------------------------------------------------------------------------- instances
+
+
+def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], context: ContextView) -> None:
+    """Report the narrow, single-rule checks for one schema.
+
+    A passing check is still recorded, so `--verbose` shows which requirements were verified and
+    the counts line up with what `oold rules list` claims is enforced.
+    """
+    for finding in run_rule_checks(raw, context):
+        run.add(
+            finding.check_id,
+            name,
+            finding.status,
+            finding.message,
+            finding.detail,
+        )
 
 
 def _check_instance_file(run: _Run, name: str, instance: Any = None) -> None:

@@ -142,6 +142,28 @@ which resolves every mapping against the current upstream catalog.
 | `compliance.*`, `coverage.vocab` | Fixture suites with exact expected outcomes, plus a cross-check that every meta-schema keyword has a test. |
 | `coverage.rules` | *(warning)* Which checkable rules no check enforces yet. |
 
+### Single-rule checks
+
+Alongside the broad checks above, the `rule.*` family each enforce exactly one normative
+statement and cite it. A MUST fails the run, a SHOULD warns.
+
+| Check | Rule | Asserts |
+|---|---|---|
+| `rule.id` | `OOLD-VER-001` | The schema declares a `$id`. |
+| `rule.id-fragment` | `OOLD-CMP-005` | That `$id` carries no non-empty fragment. |
+| `rule.range-ref` | `OOLD-EXT-005` | References inside `x-oold-range` use `x-oold-ref`, never `$ref`. |
+| `rule.instance-type` | `OOLD-INS-002` | A pinned `type` agrees with `x-oold-instance-rdf-type`. |
+| `rule.free-text-iri` | `OOLD-INS-009` | A property whose range mixes free text with references is not coerced with `@type: "@id"`. |
+| `rule.closed-object` | `OOLD-INS-005` | A schema closing its objects still permits `$schema` and `@context`. |
+| `rule.version` | `OOLD-VER-002` | *(warning)* The schema states `x-oold-version`. |
+| `rule.id-alias` | `OOLD-INS-007` | *(warning)* `@id` is reachable through an alias such as `id`. |
+| `rule.dialect` | `OOLD-EXT-002` | *(warning)* `$schema` names the OO-LD dialect meta-schema. |
+| `rule.processing-mode` | `OOLD-EXT-001` | *(warning)* The context declares `"@version": 1.1` as a JSON number. |
+
+These judge the **resolved** context, not the schema's literal `@context`. OO-LD contexts inherit,
+so a subclass gets `@version` and the `id` alias from its parent; checking the literal form would
+report violations that are not real.
+
 ### Cyclic scoped contexts
 
 When a schema's `@context` references form a cycle - a type whose scoped context embeds itself -

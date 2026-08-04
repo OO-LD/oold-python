@@ -70,6 +70,75 @@ uv run zensical serve
 uv run zensical build -s
 ```
 
+## Translating a specification rule
+
+The OO-LD specification numbers each of its normative statements (`OOLD-RT-002`, `OOLD-INS-004`,
+...) and publishes them as `oold-rules.json`, which this repository vendors per meta-schema
+version. When oold-schema adds a rule, its `make check` prints a pointer back to this section,
+because a new rule is the moment the validator falls behind the specification.
+
+Not every rule becomes a check, so start by reading it:
+
+```bash
+uv run oold rules explain OOLD-RT-002
+uv run oold rules list --unchecked        # everything still waiting for a check
+```
+
+`applies_to` decides whether there is anything to do here:
+
+| `applies_to` | Meaning | Action |
+| --- | --- | --- |
+| `document` + `checkable: true` | Decidable by looking at a schema or instance | Add a check, as below |
+| `document`, not `checkable` | Binds documents but needs human judgement | Nothing; it stays listed as unchecked |
+| `implementation` | Constrains what the library *does*, which no validator can see | A test against the library, not a `RuleCheck` |
+| `advisory` | Guidance only | Nothing |
+
+To add a check, write the predicate and append a `RuleCheck` to `RULE_CHECKS` in
+`src/oold/validation/rule_checks.py`, alongside the existing entries:
+
+```python
+def _missing_id(schema: dict[str, Any], context: ContextView) -> list[str]:
+    if not schema.get("$id"):
+        return ["schema declares no $id, so it has no global identifier"]
+    return []
+
+
+RULE_CHECKS = [
+    RuleCheck("rule.id", "OOLD-VER-001", "a schema has a $id", _missing_id),
+    ...
+]
+```
+
+The four fields are the check id, the rule it enforces, a short description, and the predicate.
+Use a `rule.*` check id: `lint.*`, `schema.*` and `roundtrip.*` are the checks carried over from
+the reference harness, and several of them already cite a rule.
+
+The predicate returns a list of problem strings, empty when the schema conforms. Three things
+about it are easy to get wrong:
+
+- **Judge the resolved context, not the literal one.** `ContextView` is what the term definitions
+  mean after remote contexts and prefixes are applied. Reading `schema["@context"]` directly will
+  report violations for schemas that are perfectly correct.
+- **Do not set a severity.** It comes from the rule's own `level` in the catalogue, so a `MUST`
+  fails and a `SHOULD` warns without the check deciding anything. That is what lets one code base
+  validate against several specification versions.
+- **Prefer skipping to guessing.** A rule absent from the selected version's catalogue is skipped
+  automatically. If a rule is only partially decidable, check the part you are sure of; a false
+  positive costs far more than a missed finding, because it teaches people to ignore the output.
+
+Then add tests to `tests/test_validation/test_rule_checks.py` - one schema that conforms and one
+that violates. A check that only ever sees valid input is not known to fire at all.
+
+Finally, confirm the gap actually closed:
+
+```bash
+uv run oold rules list --unchecked        # the rule should be gone from this list
+make validate                             # coverage.rules reports one fewer unchecked rule
+```
+
+`coverage.rules` warns rather than fails, deliberately: the specification and this validator
+release on separate schedules, and a spec that has moved ahead should not break this build.
+
 ## Commit messages (Conventional Commits)
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/).

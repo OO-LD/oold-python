@@ -3,5 +3,5 @@
 # the fixtures are refreshed by copying bytes straight out of a tag. With `core.autocrlf=true` -
 # the Windows default - git would rewrite their line endings on checkout, silently breaking those
 # checksums and making every refresh from upstream show a whole-file diff.
-src/oold/validation/meta/0.*/** -text
+src/oold/validation/meta/*/**  -text
 tests/data/oold/**             -text

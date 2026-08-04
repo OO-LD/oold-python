@@ -61,8 +61,8 @@ can be checked against several versions at once.
 oold validate ./schemas --meta 0.7.0 --meta 0.8.0
 ```
 
-Only two checks depend on the version, `schema.meta` and `lint.pattern`, and only those are
-repeated per version; everything else runs once. Results carry the version they came from, so a
+Three families depend on the version - `schema.meta`, `lint.pattern` and the per-rule `rule.*`
+checks - and only those are repeated per version; everything else runs once. Results carry the version they came from, so a
 difference between releases is visible rather than confusing. This is reproducible against the
 committed fixtures:
 
@@ -104,10 +104,22 @@ oold rules list --unchecked        # checkable rules no check enforces yet
 oold rules explain OOLD-RT-002     # level, binding, spec text and link
 ```
 
-The catalog was introduced upstream after 0.8.0, so no tracked version ships one yet; use
-`--meta remote` until a release includes it. A version without a catalog is fully supported: it
-validates exactly as before, findings simply carry no citation, and `coverage.rules` reports
-`skip`.
+The catalogue arrived in `1.0.0-rc.1`. Older tracked versions predate it and, being released
+tags, can never gain one. That is fully supported, and has a deliberate consequence:
+
+| The selected version | What happens |
+|---|---|
+| ships a catalogue | Findings cite their rule; the `rule.*` checks run, with **severity taken from the catalogue** |
+| ships none | Findings carry no citation; the `rule.*` checks are **skipped**, and `coverage.rules` reports `skip` |
+
+Skipping rather than guessing is the point. Each `rule.*` check enforces one statement, and a
+version that never stated it must not be judged against it - the same class of false positive as
+judging a schema on its literal rather than its resolved `@context`.
+
+The same gating applies within a catalogue: a rule absent from that version, or marked
+`deprecated`, is skipped with the reason given. So upstream deprecating a rule stops the
+corresponding check as soon as the new version is vendored, with no code change here. Severity
+follows too - relaxing a MUST to a SHOULD upstream turns a failure into a warning by itself.
 
 Each rule records **who it binds**, which decides what can enforce it:
 
@@ -129,7 +141,7 @@ which resolves every mapping against the current upstream catalog.
 |---|---|
 | `schema.meta` | The schema validates against the OO-LD meta-schema. |
 | `schema.refs` | Its `$ref` composition resolves. |
-| `lint.pattern` | No term coerces a literal to a datatype JSON encodes natively (`xsd:string`, `xsd:boolean`, `xsd:integer`, `xsd:double`, `xsd:float`). None of those survive a round-trip. |
+| `lint.pattern` | No term coerces a literal to a datatype JSON-LD produces by default from a native JSON value. Which datatypes those are is the meta-schema's business, not this package's: `1.0.0-rc.1` lists `xsd:string`, `xsd:boolean`, `xsd:integer` and `xsd:double`, having moved `xsd:float` out. |
 | `lint.container` | A strictly `type: array` property declares `@container: @set` or `@list`, or a single-element array returns as a scalar. |
 | `lint.iri-format` | *(warning)* A bare-IRI-string reference declares an `iri-reference` or stricter `uri*` format. |
 | `generate.satisfiable` | A generated instance validates against its own schema, catching unsatisfiable schemas. |
@@ -141,6 +153,7 @@ which resolves every mapping against the current upstream catalog.
 | `roundtrip.instance` | It round-trips through RDF unchanged. |
 | `compliance.*`, `coverage.vocab` | Fixture suites with exact expected outcomes, plus a cross-check that every meta-schema keyword has a test. |
 | `coverage.rules` | *(warning)* Which checkable rules no check enforces yet. |
+| `rule.checks` | *(skip)* Recorded when the selected meta version ships no catalogue, so the per-rule checks did not run. |
 
 ### Single-rule checks
 

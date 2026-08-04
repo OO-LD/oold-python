@@ -423,19 +423,41 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
 
 
 def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], context: ContextView) -> None:
-    """Report the narrow, single-rule checks for one schema.
+    """Report the narrow, single-rule checks for one schema, per meta-schema version.
 
-    A passing check is still recorded, so `--verbose` shows which requirements were verified and
-    the counts line up with what `oold rules list` claims is enforced.
+    These are the only checks whose *applicability* depends on the version: each enforces one
+    statement, and a version that never stated it must not be judged against it. So they run once
+    per selected version, driven by that version's catalogue - which also supplies the severity,
+    so a MUST relaxed to a SHOULD upstream changes the outcome with no code change here.
+
+    A version shipping no catalogue skips them entirely rather than guessing. Running blind would
+    assert requirements that version may never have stated, which is the same false-positive class
+    as judging a schema on its literal rather than resolved `@context`.
+
+    A passing check is still recorded, so `--verbose` shows what was verified and the counts line
+    up with what `oold rules list` claims is enforced.
     """
-    for finding in run_rule_checks(raw, context):
-        run.add(
-            finding.check_id,
-            name,
-            finding.status,
-            finding.message,
-            finding.detail,
-        )
+    for bundle in run.bundles:
+        if not bundle.has_rules:
+            run.add(
+                "rule.checks",
+                name,
+                SKIP,
+                f"meta-schema {bundle.version} ships no rule catalogue, so per-rule checks "
+                "cannot be attributed to a stated requirement",
+                meta_version=bundle.version,
+            )
+            continue
+        catalog = {r["id"]: r for r in bundle.rules}
+        for finding in run_rule_checks(raw, context, catalog):
+            run.add(
+                finding.check_id,
+                name,
+                finding.status,
+                finding.message,
+                finding.detail,
+                bundle.version,
+            )
 
 
 def _check_instance_file(run: _Run, name: str, instance: Any = None) -> None:

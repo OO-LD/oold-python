@@ -35,6 +35,26 @@
         "oold-pattern-lint.schema.json": "0537e7f7604ce666f666deab30cde90ca09c69a30ca068ea5ed9f8c69a81c6c3",
         "oold-ui-meta-schema.json": "dd389d13a5e03268d4a4ff845dec7f4f28238f7edbd9fe0992399b37ac358212"
       }
+    },
+    "1.0.0-rc.1": {
+      "tag": "v1.0.0-rc.1",
+      "commit": "4cb3abc5163e34abb1ca7a2aa46d85324731c107",
+      "committed": "2026-08-03T07:46:50+02:00",
+      "added": "2026-08-04",
+      "id_base": "https://oo-ld.org/latest/meta/",
+      "prerelease": true,
+      "notes": "First version to ship oold-rules.json, the catalogue of normative statements. The three meta-schemas are verbatim from the v1.0.0-rc.1 tag; the catalogue is not yet released and comes from the oold-schema branch feat/rule-catalog-rc1 (f56818f). Refresh it from the tag once that branch is merged and a release ships it.",
+      "rules_source": {
+        "branch": "feat/rule-catalog-rc1",
+        "commit": "f56818f",
+        "released": false
+      },
+      "sha256": {
+        "oold-meta-schema.json": "cad3151c6bf0ac3e74acd46a4fee59b9287a551a9f62aa68aa7e2a718f360dbc",
+        "oold-pattern-lint.schema.json": "d89fce19cd2fd42fa740d92968fcf61a1764ea25e741ed5cd4e72040a45c9a86",
+        "oold-ui-meta-schema.json": "dd389d13a5e03268d4a4ff845dec7f4f28238f7edbd9fe0992399b37ac358212",
+        "oold-rules.json": "befaf98f6bb0e3e9f26c8961800a36ba996e7d669e97388b564137b390aa6da0"
+      }
     }
   }
 }

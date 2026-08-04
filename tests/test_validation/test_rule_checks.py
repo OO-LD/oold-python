@@ -9,34 +9,63 @@ from __future__ import annotations
 
 import pytest
 
-from oold.validation.rule_checks import RULE_CHECKS, ContextView, run_rule_checks
+from oold.validation.meta_store import latest_version, load_tracked
+from oold.validation.rule_checks import RULE_CHECKS, ContextView, run_rule_checks, severity
+
+#: The catalogue actually shipped for the newest tracked version. Severity is read from it rather
+#: than hardcoded here, so if upstream relaxes a MUST to a SHOULD these tests report the change
+#: instead of silently disagreeing with the specification.
+CATALOG = {r["id"]: r for r in load_tracked(latest_version()).rules}
+
+
+def _findings(schema: dict, context: ContextView | None = None):
+    return {f.check_id: f for f in run_rule_checks(schema, context or ContextView(), CATALOG)}
 
 
 def outcome(check_id: str, schema: dict, context: ContextView | None = None) -> str:
-    findings = {f.check_id: f for f in run_rule_checks(schema, context or ContextView())}
-    return findings[check_id].status
+    return _findings(schema, context)[check_id].status
 
 
 def message(check_id: str, schema: dict, context: ContextView | None = None) -> str:
-    findings = {f.check_id: f for f in run_rule_checks(schema, context or ContextView())}
-    return findings[check_id].message
+    return _findings(schema, context)[check_id].message
 
 
 # ------------------------------------------------------------------ registry
 
 
-def test_every_check_declares_a_rule_and_a_level():
+def test_every_check_names_a_rule_that_exists():
     for check in RULE_CHECKS:
         assert check.rule.startswith("OOLD-"), check.check_id
         assert check.check_id.startswith("rule."), check.check_id
-        assert check.level in ("fail", "warn")
+        assert check.rule in CATALOG, f"{check.check_id} cites {check.rule}, absent from the catalogue"
 
 
-def test_a_must_fails_and_a_should_only_warns():
-    """The level comes from the specification, not from taste."""
-    levels = {c.rule: c.level for c in RULE_CHECKS}
-    assert levels["OOLD-VER-001"] == "fail", "a MUST"
-    assert levels["OOLD-VER-002"] == "warn", "a SHOULD"
+def test_severity_is_read_from_the_specification_not_hardcoded():
+    """A MUST fails and a SHOULD warns because the catalogue says so.
+
+    Nothing in this package repeats the level, so upstream relaxing a MUST changes the outcome
+    with no code change here.
+    """
+    assert severity(CATALOG["OOLD-VER-001"]) == "fail", "OOLD-VER-001 is a MUST"
+    assert severity(CATALOG["OOLD-VER-002"]) == "warn", "OOLD-VER-002 is a SHOULD"
+    assert severity(CATALOG["OOLD-RT-001"]) == "fail", "MUST NOT is also a failure"
+
+
+def test_a_rule_absent_from_the_catalogue_is_skipped():
+    """A version that never stated a requirement must not be judged against it."""
+    without = {k: v for k, v in CATALOG.items() if k != "OOLD-VER-001"}
+    findings = {f.check_id: f for f in run_rule_checks({}, ContextView(), without)}
+    assert findings["rule.id"].status == "skip"
+    assert "not stated" in findings["rule.id"].message
+
+
+def test_a_deprecated_rule_is_skipped():
+    retired = dict(CATALOG)
+    retired["OOLD-VER-001"] = {**retired["OOLD-VER-001"], "deprecated": True, "superseded_by": ["OOLD-VER-009"]}
+    findings = {f.check_id: f for f in run_rule_checks({}, ContextView(), retired)}
+    assert findings["rule.id"].status == "skip"
+    assert "deprecated" in findings["rule.id"].message
+    assert "OOLD-VER-009" in findings["rule.id"].message
 
 
 # ------------------------------------------------------------------ OOLD-VER-001 / CMP-005

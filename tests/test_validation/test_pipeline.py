@@ -108,10 +108,21 @@ def test_missing_context_term_names_the_orphan_property(broken_dir):
 
 
 def test_only_version_dependent_checks_are_tagged_with_a_version(data_dir):
-    """Fanning every check across versions would multiply the report for no information."""
+    """Fanning every check across versions would multiply the report for no information.
+
+    Three families legitimately depend on the version: the two driven by a meta-schema, and the
+    per-rule checks, whose applicability and severity come from that version's catalogue.
+    Everything else - $ref resolution, generation, round-trip - runs once.
+    """
     report = validate_directory(data_dir, OFFLINE)
     tagged = {c.id for c in report.checks if c.meta_version}
-    assert tagged == {"schema.meta", "lint.pattern"}
+    untagged = {c.id for c in report.checks if not c.meta_version}
+
+    assert {"schema.meta", "lint.pattern"} <= tagged
+    assert all(c in {"schema.meta", "lint.pattern"} or c.startswith("rule.") for c in tagged), tagged
+    assert not any(c.startswith("rule.") for c in untagged), untagged
+    for once in ("schema.refs", "generate.satisfiable", "roundtrip.generated"):
+        assert once in untagged
 
 
 def test_multiple_versions_only_repeat_the_dependent_checks(data_dir, monkeypatch):

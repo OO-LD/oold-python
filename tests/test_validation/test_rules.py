@@ -110,13 +110,25 @@ def catalog_version(tmp_path, monkeypatch):
 # ------------------------------------------------------------------ loading
 
 
+#: Tracked versions predating the catalogue. Released tags are immutable, so these keep
+#: exercising the no-catalogue path forever.
+WITHOUT_CATALOG = [v for v in meta_store.tracked_versions() if not load_tracked(v).has_rules]
+
+
+def test_some_tracked_version_ships_a_catalog():
+    assert any(load_tracked(v).has_rules for v in meta_store.tracked_versions()), (
+        "no tracked version ships oold-rules.json, so the catalogue paths are untested"
+    )
+
+
 def test_a_version_without_a_catalog_still_loads():
-    """The catalog postdates 0.8.0, so every tracked version must work without one."""
-    for version in meta_store.tracked_versions():
+    """The catalogue postdates 0.8.0, and those tags can never gain one."""
+    assert WITHOUT_CATALOG, "expected at least one pre-catalogue version to remain tracked"
+    for version in WITHOUT_CATALOG:
         bundle = load_tracked(version)
-        assert bundle.has_rules is False
         assert bundle.rules == []
         assert bundle.rule("OOLD-RT-002") is None
+        assert bundle.meta_validator().is_valid({"type": "object"}), "still usable"
 
 
 def test_catalog_is_loaded_when_present(catalog_version):
@@ -154,9 +166,29 @@ def test_every_mapped_rule_id_is_well_formed():
 def test_findings_carry_no_rule_when_the_version_has_no_catalog(data_dir):
     from oold.validation import Options, validate_schema
 
-    report = validate_schema(data_dir / "Thing.schema.json", Options(meta=("latest",), offline=True))
+    report = validate_schema(data_dir / "Thing.schema.json", Options(meta=(WITHOUT_CATALOG[-1],), offline=True))
     assert report.passed
     assert all(c.rule is None for c in report.checks)
+
+
+def test_per_rule_checks_are_skipped_without_a_catalog(data_dir):
+    """Running them blind would assert requirements the version may never have stated."""
+    from oold.validation import Options, validate_schema
+
+    report = validate_schema(data_dir / "Thing.schema.json", Options(meta=(WITHOUT_CATALOG[-1],), offline=True))
+    skipped = [c for c in report.checks if c.id == "rule.checks"]
+    assert skipped and skipped[0].status == "skip"
+    assert "no rule catalogue" in skipped[0].message
+    assert not [c for c in report.checks if c.id.startswith("rule.") and c.id != "rule.checks"]
+
+
+def test_per_rule_checks_run_when_a_catalog_is_present(data_dir):
+    from oold.validation import Options, validate_schema
+
+    report = validate_schema(data_dir / "Thing.schema.json", Options(meta=("latest",), offline=True))
+    ran = [c for c in report.checks if c.id.startswith("rule.") and c.id != "rule.checks"]
+    assert ran, "a version with a catalogue should run the per-rule checks"
+    assert all(c.rule for c in ran), "each cites the rule it enforces"
 
 
 def test_findings_cite_a_rule_when_the_catalog_has_it(catalog_version, broken_dir):
@@ -191,7 +223,7 @@ def test_rule_appears_in_the_serialised_report(catalog_version, broken_dir):
 def test_coverage_is_skipped_when_the_version_ships_no_catalog(compliance_dir):
     from oold.validation import Options, run_compliance
 
-    report = run_compliance(compliance_dir, Options(meta=("latest",), offline=True))
+    report = run_compliance(compliance_dir, Options(meta=(WITHOUT_CATALOG[-1],), offline=True))
     coverage = [c for c in report.checks if c.id == "coverage.rules"]
     assert coverage and coverage[0].status == "skip"
 
@@ -270,7 +302,7 @@ def test_rules_explain_unknown_id_suggests_listing(run, catalog_version):
 
 def test_rules_command_explains_a_missing_catalog(run):
     """The common case today: no released version ships one yet."""
-    result = run("rules", "list", "--meta", meta_store.latest_version(), "--offline")
+    result = run("rules", "list", "--meta", WITHOUT_CATALOG[-1], "--offline")
     assert result.exit_code != 0
     assert "no rule catalog" in result.output
     assert "remote" in result.output, "the message points at where a catalog can be found"

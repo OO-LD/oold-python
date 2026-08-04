@@ -33,6 +33,32 @@ def test_versions_sort_numerically_not_lexically():
     assert meta_store._version_key("1.0.0") > meta_store._version_key("0.99.0")
 
 
+def test_a_pre_release_sorts_before_its_own_release():
+    """`latest` must never resolve to a release candidate over the release itself.
+
+    Splitting on "." alone put `1.0.0-rc.1` *after* `1.0.0`, because the chunk "0-rc" is not a
+    digit and fell to the string branch. Vendoring both would then have made every default run
+    validate against the candidate.
+    """
+    k = meta_store._version_key
+    assert k("1.0.0-rc.1") < k("1.0.0")
+    assert k("1.0.0-rc.1") < k("1.0.0-rc.2")
+    assert k("0.9.0") < k("1.0.0-rc.1")
+    assert k("1.0.0") < k("2.0.0-alpha.1")
+
+
+def test_full_ordering_including_pre_releases():
+    unsorted = ["1.0.0", "0.7.0", "1.0.0-rc.2", "0.10.0", "1.0.0-rc.1", "0.9.0"]
+    assert sorted(unsorted, key=meta_store._version_key) == [
+        "0.7.0",
+        "0.9.0",
+        "0.10.0",
+        "1.0.0-rc.1",
+        "1.0.0-rc.2",
+        "1.0.0",
+    ]
+
+
 def test_index_records_provenance_for_every_tracked_version():
     index = meta_store.load_index()
     for version in tracked_versions():
@@ -60,6 +86,24 @@ def test_recorded_checksums_match_the_shipped_files():
                 "It is a verbatim copy of an oold-schema release tag, so either it was edited, "
                 "a formatting hook rewrote it, or git converted its line endings "
                 "(check .gitattributes marks it -text)."
+            )
+
+
+def test_the_vendored_files_are_stored_with_unix_line_endings():
+    """Recorded checksums are of LF bytes, so a CRLF copy passes here and fails on Linux.
+
+    The checksum test above compares against the working tree. On Windows with `core.autocrlf`
+    that hides the very mistake it exists to catch: a file committed with CRLF hashes one way in
+    a Windows checkout and another in a Linux one, so the suite is green locally and red in CI.
+    Asserting the bytes directly is platform-independent - the file either has CRLF in it or it
+    does not - which makes this the check that actually travels.
+    """
+    for version in tracked_versions():
+        for path in sorted((meta_store.meta_dir() / version).glob("*.json")):
+            assert b"\r\n" not in path.read_bytes(), (
+                f"{version}/{path.name} contains CRLF. Vendored files are copied verbatim from an "
+                "oold-schema tag and must stay LF, because meta/index.json records a sha256 of "
+                "their bytes. Convert it back to LF and re-check the recorded digest."
             )
 
 

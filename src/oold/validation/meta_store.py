@@ -94,12 +94,23 @@ def remote_base_url() -> str:
     return str(base)
 
 
+def _chunks(text: str) -> tuple:
+    """Dotted parts, numeric where possible, so 0.10.0 orders after 0.9.0."""
+    return tuple((0, int(c)) if c.isdigit() else (1, c) for c in text.split(".") if c)
+
+
 def _version_key(version: str) -> tuple:
-    """Sort key that orders 0.10.0 after 0.9.0 rather than before it."""
-    parts: list[Any] = []
-    for chunk in version.split("."):
-        parts.append((0, int(chunk)) if chunk.isdigit() else (1, chunk))
-    return tuple(parts)
+    """Sort key over version directory names, deciding `latest` and the order of ``--meta all``.
+
+    Two things it has to get right. Numeric ordering, so ``0.10.0`` follows ``0.9.0`` rather than
+    preceding it lexically. And pre-releases: ``1.0.0-rc.1`` sorts *before* ``1.0.0``, because a
+    release candidate is not the release. Splitting on ``.`` alone put the candidate after its own
+    release, so vendoring both would have made ``latest`` resolve to the candidate and every
+    default run validate against an RC.
+    """
+    release, _, pre = version.partition("-")
+    # Absence of a pre-release sorts above any pre-release of the same release.
+    return (_chunks(release), (1,) if not pre else (0, _chunks(pre)))
 
 
 def tracked_versions() -> list[str]:

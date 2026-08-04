@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .frame import collect_composed_properties, instance_rdf_types
-from .report import FAIL, OK, WARN, Status
+from .report import FAIL, OK, SKIP, WARN, Status
 
 #: A `$schema` naming the OO-LD dialect, on either canonical domain. The domain moved from
 #: oo-ld.github.io to oo-ld.org, and released copies stamp a version in place of `latest`, so the
@@ -61,22 +61,45 @@ class ContextView:
         return None
 
 
+#: RFC 2119 levels that make a violation a failure. Everything else is advice, so it warns.
+_MUST_LEVELS = frozenset({"MUST", "MUST NOT", "SHALL", "SHALL NOT", "REQUIRED"})
+
+#: Used only when the meta version in use ships no catalogue to read the level from.
+DEFAULT_LEVEL: Status = FAIL
+
+
+def severity(rule: dict[str, Any] | None, fallback: Status = DEFAULT_LEVEL) -> Status:
+    """How hard a violation of this rule should land, taken from the specification.
+
+    The level is the specification's own, not a taste judgement made here, so relaxing a MUST to
+    a SHOULD upstream changes the validator's behaviour with no code change. Without a catalogue
+    there is nothing to read, and the caller's fallback applies.
+    """
+    if not rule:
+        return fallback
+    return FAIL if rule.get("level") in _MUST_LEVELS else WARN
+
+
 @dataclass
 class RuleCheck:
     """A check that enforces exactly one rule."""
 
     check_id: str
     rule: str
-    #: FAIL for a MUST, WARN for a SHOULD. The specification's level, not a taste judgement.
-    level: Status
     describe: str
     run: Callable[[dict[str, Any], ContextView], list[str]]
 
-    def __call__(self, schema: dict[str, Any], context: ContextView) -> RuleFinding:
+    def __call__(
+        self,
+        schema: dict[str, Any],
+        context: ContextView,
+        rule: dict[str, Any] | None = None,
+    ) -> RuleFinding:
+        """Apply the check, taking its severity from ``rule`` when a catalogue supplied one."""
         problems = self.run(schema, context)
         if not problems:
             return RuleFinding(self.check_id, self.rule, OK)
-        return RuleFinding(self.check_id, self.rule, self.level, "; ".join(problems), {"problems": problems})
+        return RuleFinding(self.check_id, self.rule, severity(rule), "; ".join(problems), {"problems": problems})
 
 
 # ---------------------------------------------------------------------------- individual rules
@@ -258,42 +281,76 @@ def _processing_mode_not_declared(schema: dict[str, Any], context: ContextView) 
 #: Every rule this package enforces beyond the ported general-workflow checks. Order is the order
 #: findings are reported in.
 RULE_CHECKS: list[RuleCheck] = [
-    RuleCheck("rule.id", "OOLD-VER-001", FAIL, "a schema has a $id", _missing_id),
-    RuleCheck("rule.id-fragment", "OOLD-CMP-005", FAIL, "a $id has no non-empty fragment", _id_has_fragment),
-    RuleCheck("rule.range-ref", "OOLD-EXT-005", FAIL, "x-oold-range references use x-oold-ref", _range_uses_ref),
+    RuleCheck("rule.id", "OOLD-VER-001", "a schema has a $id", _missing_id),
+    RuleCheck("rule.id-fragment", "OOLD-CMP-005", "a $id has no non-empty fragment", _id_has_fragment),
+    RuleCheck("rule.range-ref", "OOLD-EXT-005", "x-oold-range references use x-oold-ref", _range_uses_ref),
     RuleCheck(
         "rule.instance-type",
         "OOLD-INS-002",
-        FAIL,
         "a pinned type agrees with x-oold-instance-rdf-type",
         _inline_type_disagrees,
     ),
     RuleCheck(
         "rule.free-text-iri",
         "OOLD-INS-009",
-        FAIL,
         "a free-text range is not coerced to @id",
         _free_text_range_coerced_to_iri,
     ),
     RuleCheck(
         "rule.closed-object",
         "OOLD-INS-005",
-        FAIL,
         "a closed object still permits $schema and @context",
         _closed_object_rejects_metadata,
     ),
-    RuleCheck("rule.version", "OOLD-VER-002", WARN, "a schema states x-oold-version", _missing_version),
-    RuleCheck("rule.id-alias", "OOLD-INS-007", WARN, "@id is exposed through an alias", _id_not_aliased),
-    RuleCheck("rule.dialect", "OOLD-EXT-002", WARN, "a schema declares the OO-LD dialect", _dialect_not_declared),
-    RuleCheck(
-        "rule.processing-mode", "OOLD-EXT-001", WARN, "a context declares @version 1.1", _processing_mode_not_declared
-    ),
+    RuleCheck("rule.version", "OOLD-VER-002", "a schema states x-oold-version", _missing_version),
+    RuleCheck("rule.id-alias", "OOLD-INS-007", "@id is exposed through an alias", _id_not_aliased),
+    RuleCheck("rule.dialect", "OOLD-EXT-002", "a schema declares the OO-LD dialect", _dialect_not_declared),
+    RuleCheck("rule.processing-mode", "OOLD-EXT-001", "a context declares @version 1.1", _processing_mode_not_declared),
 ]
 
 #: check id -> rule id, for the pipeline's citation mapping and coverage figure.
 RULE_CHECK_MAP: dict[str, str] = {c.check_id: c.rule for c in RULE_CHECKS}
 
 
-def run_rule_checks(schema: dict[str, Any], context: ContextView) -> list[RuleFinding]:
-    """Apply every rule check to one schema, against its resolved context."""
-    return [check(schema, context) for check in RULE_CHECKS]
+def run_rule_checks(
+    schema: dict[str, Any],
+    context: ContextView,
+    catalog: dict[str, dict[str, Any]] | None = None,
+) -> list[RuleFinding]:
+    """Apply the rule checks that the selected specification version actually states.
+
+    ``catalog`` maps rule id to its catalogue entry for the meta version in use. When given, a
+    check whose rule is absent from it is **skipped**: that version never stated the requirement,
+    and enforcing it would report a violation of something the target does not require. A
+    deprecated rule is skipped for the same reason from the other end.
+
+    When ``catalog`` is None the version ships no catalogue at all, and the caller decides
+    whether to run the checks blind or skip them.
+    """
+    findings: list[RuleFinding] = []
+    for check in RULE_CHECKS:
+        rule = (catalog or {}).get(check.rule)
+        if catalog is not None:
+            if rule is None:
+                findings.append(
+                    RuleFinding(
+                        check.check_id,
+                        check.rule,
+                        SKIP,
+                        f"{check.rule} is not stated by this meta-schema version",
+                    )
+                )
+                continue
+            if rule.get("deprecated"):
+                superseded = ", ".join(rule.get("superseded_by") or []) or "nothing"
+                findings.append(
+                    RuleFinding(
+                        check.check_id,
+                        check.rule,
+                        SKIP,
+                        f"{check.rule} is deprecated in this version (superseded by {superseded})",
+                    )
+                )
+                continue
+        findings.append(check(schema, context, rule))
+    return findings

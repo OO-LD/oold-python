@@ -202,6 +202,38 @@ no edit at all: its rule is now deprecated in the new catalogue, so it self-gate
 for older versions, and is reported as skipped with the id that superseded it. Nothing needs to
 know which version is "current".
 
+### Which ids the registry must cover
+
+Every id the validator can emit, with one documented exception. The first draft of this spec left
+the set implicit, which was a real defect: it forced the count to be reverse-engineered, and the
+resulting registry missed six live ids.
+
+Two families need explicit treatment:
+
+**`compliance.<kind>` is one family entry, not one entry per kind.** The id is built as
+`f"compliance.{case.kind}"`, so it derives from *fixture data* rather than from code: a new case
+kind in `examples/compliance/*.json` mints a new id without any change here. Enumerating them
+statically would reintroduce exactly the hand-syncing this design exists to remove, and the
+registry would go stale silently the next time upstream adds a kind.
+
+So the registry carries a single entry with id `compliance.*`, and the drift tests normalise any
+`compliance.<kind>` to it before comparing. This is the only special case, and it is justified by
+the id being data-derived. `compliance.suite` is a literal id and gets an ordinary entry.
+
+**`rule.checks` and `meta.self-check` are ordinary entries.** Both are literal ids that reach
+users. `rule.checks` in particular is what a user sees under `--meta 0.7.0`, reporting that the
+whole per-rule family was skipped for want of a catalogue.
+
+### A known gap this surfaces
+
+`lint.iri-format` is emitted only when it finds a problem, with no `else` branch
+(`pipeline.py:222`), and **no fixture triggers it**. It has therefore never been observed to fire.
+Drift test 2 will fail on it, correctly, the first time it runs.
+
+Fixing that means adding a fixture that violates the rule, which is worth doing on its own merits:
+an untriggered check is not known to work. Confirm first whether the addition affects the parity
+corpus, since the reference harness runs over the same directory.
+
 ### The command
 
 Mirrors `oold rules`, which already exists, so there is one idiom to learn:
@@ -313,8 +345,14 @@ The parity run is the load-bearing one: this change must be invisible to verdict
 Then confirm the drift tests actually fail, rather than trusting them: add a check id without
 registering it, and delete a registry entry for a live check. Both must fail naming the id.
 
-Because `rule_checks.py` disappears, `git grep -n 'rule_checks\|RULE_CHECKS\|RULE_CHECK_MAP\|CHECK_RULES'`
-must come back empty when the change is done. Any survivor is a mapping that was meant to die.
+The deleted mappings must leave no trace. Match on the symbols themselves, not on the substring
+`rule_checks`, which survives legitimately inside the `run_rule_checks()` driver:
+
+```bash
+git grep -nE '\b(RuleCheck|RULE_CHECKS|RULE_CHECK_MAP|CHECK_RULES)\b|from \.rule_checks'
+```
+
+That must come back empty. Any survivor is a mapping that was meant to die.
 
 ## Risks
 

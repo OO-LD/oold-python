@@ -69,13 +69,14 @@ A registry of check metadata, and a CLI to read it.
 class CheckInfo:
     id: str                       # "lint.container"
     summary: str                  # one line: what it verifies
-    rule: str | None              # the OO-LD rule it enforces, when there is one
-    default_status: Status        # FAIL or WARN when it reports a problem
-    per_version: bool             # emits once per selected meta-schema version
-    detects: Callable | None      # the function implementing detection
+    rule: str | None = None       # the OO-LD rule it enforces, when there is one
+    default_status: Status = FAIL # status when it reports a problem and no rule applies
+    per_version: bool = False     # emits once per selected meta-schema version
+    detects: Callable | None = None  # the function implementing detection
+    run: Predicate | None = None  # executable predicate, for self-contained checks
 ```
 
-Three fields deserve comment.
+Four fields deserve comment.
 
 `detects` holds **the function object, never a string path**. This is the difference between
 metadata that rots and metadata that cannot. A hand-typed `"pattern_lint.array_properties_..."`
@@ -91,18 +92,45 @@ per selected meta-schema version, so one id can produce several report lines.
 severity comes from the rule's `level` in the catalogue, and this field records only what happens
 when no catalogue applies.
 
-### Where entries come from
+`run` is what lets this be **one** structure rather than two. The ten `rule.*` checks are
+self-contained predicates over an already-resolved context, so the registry can execute them
+directly. The other fourteen are driven by the pipeline phases and leave `run` empty. Where `run`
+is set it is also the detection site, so `detects` defaults to it and is never written twice.
 
-The registry has 24 entries and **10 of them are generated**, not authored:
+### One structure, not four
 
-* the `rule.*` family already exists as `RULE_CHECKS` in `rule_checks.py`, whose entries carry
-  `check_id`, `rule`, `describe` and the predicate. `CheckInfo` records are derived from them
-  directly, so adding a rule check keeps requiring exactly one edit, in one place;
-* the remaining 14 phase checks are authored, one line each, next to the existing `CHECK_RULES`
-  table in `pipeline.py` that this replaces.
+Today the same information is spread across four places:
 
-`CHECK_RULES` and `RULE_CHECK_MAP` become views over the registry rather than separate tables, so
-the check-to-rule mapping stops existing in two places.
+| Today | Holds | Fate |
+| --- | --- | --- |
+| `RuleCheck` (`rule_checks.py`) | id, rule, description, predicate for 10 checks | Absorbed into `CheckInfo` |
+| `RULE_CHECKS` | the 10 entries | Becomes `[c for c in CHECKS if c.run]` |
+| `RULE_CHECK_MAP` | `{check_id: rule}` for those 10 | Deleted; it is `c.rule` |
+| `CHECK_RULES` (`pipeline.py`) | 4 hand-written pairs plus the above | Deleted; it is `c.rule` |
+
+All four collapse into a single `CHECKS: tuple[CheckInfo, ...]` in `check_registry.py`. There are
+no derived mappings to keep in step, because there is nothing to derive from: the rule id is a
+field on the check, looked up directly.
+
+This answers the maintenance objection that motivated the design. Adding a rule check is still one
+edit in one place, as it is today, and it now also registers the check for `oold checks` instead
+of requiring a second entry somewhere else.
+
+### Where the code lives
+
+`check_registry.py` holds `CheckInfo`, `ContextView`, the ten predicates, `CHECKS`, `severity()`
+and the driver that executes the runnable entries. `rule_checks.py` is **deleted**; its contents
+move here, which is what makes this a single file rather than a registry plus a satellite.
+
+The fourteen phase checks keep their detection where it already is, in `pattern_lint.py`,
+`roundtrip.py`, `context_graph.py` and friends, because those are substantial algorithms rather
+than five-line predicates. The registry references them for `detects`.
+
+The import direction is one-way and verified acyclic: `check_registry` imports the detection
+modules, none of which import it or each other in a cycle, and `pipeline` imports
+`check_registry`. Expected size is roughly 430 lines, most of it the predicates that already
+exist. If that ever feels too large, the predicates can move back out without changing the
+structure, since the registry holds references either way.
 
 ### The command
 
@@ -119,9 +147,12 @@ lint.container   FAIL by default
 
   rule       OOLD-RT-002   (stated by 1.0.0-rc.1; absent from 0.7.0, 0.8.0)
   detected   pattern_lint.array_properties_missing_container   (pattern_lint.py:112)
-  reported   pipeline.py, search for "lint.container"
   per version no
 ```
+
+The emitting site is deliberately not shown. It is findable by searching for the check id, which
+already works, and printing it would mean either a second maintained field or a stack walk at
+report time.
 
 `--unmapped` lists the checks that enforce no rule, which is the mirror image of
 `oold rules list --unchecked` and makes the boundary between the two identifier systems visible.
@@ -147,7 +178,9 @@ have been compared against itself; this is compared against what the validator a
 * **No change to verdicts.** Parity with the reference harness must hold unchanged. This adds
   metadata and a read-only command.
 * **No change to the JSON report shape.** Consumers are unaffected.
-* **No restructuring of `pipeline.py`.** See below.
+* **No restructuring of the pipeline phases.** `pipeline.py` loses the `CHECK_RULES` table and
+  reads the registry instead, but its control flow, phase functions and short-circuits are
+  untouched. See below for why the tempting larger version is not attempted.
 * **No stability guard or append-only policy for check ids**, per the decision recorded above.
 
 ## Relationship to per-check functions
@@ -166,8 +199,8 @@ predicates:
   cyclic context, FAIL for a processing error, FAIL for a shape mismatch, and OK, from five
   places. A predicate returning a list of problems cannot express a skip.
 
-`rule_checks.py` works as a flat registry precisely because its ten checks are independent
-predicates over an already-resolved `ContextView`; the phase checks are the work that produces it.
+The ten `rule.*` checks work as a flat registry precisely because they are independent predicates
+over an already-resolved `ContextView`; the phase checks are the work that produces it.
 Adopting that shape everywhere therefore means designing an explicit dependency graph and a
 fan-out mechanism, which is a redesign of execution semantics on code pinned by parity.
 
@@ -179,10 +212,12 @@ gain a `run=` callable one at a time, and phase functions shrink as checks move 
 
 | File | Change |
 | --- | --- |
-| `src/oold/validation/registry.py` | New. `CheckInfo`, the 14 authored entries, derivation of the 10 from `RULE_CHECKS`, lookup helpers |
-| `src/oold/validation/pipeline.py` | `CHECK_RULES` becomes a view over the registry |
+| `src/oold/validation/check_registry.py` | New. `CheckInfo`, `ContextView`, the ten predicates, all 24 `CHECKS` entries, `severity()`, the driver, lookup helpers |
+| `src/oold/validation/rule_checks.py` | **Deleted.** Contents move into `check_registry.py` |
+| `src/oold/validation/pipeline.py` | `CHECK_RULES` deleted; reads `CheckInfo.rule` directly |
 | `src/oold/validation/cli.py` | `oold checks list` / `oold checks explain` |
-| `tests/test_validation/test_registry.py` | New. The three drift tests |
+| `tests/test_validation/test_rule_checks.py` | Imports move to `check_registry`; otherwise unchanged, so the ten predicates keep their existing coverage |
+| `tests/test_validation/test_check_registry.py` | New. The three drift tests |
 | `docs/how-to/validation.md` | Document the two identifier systems and the new command |
 | `CONTRIBUTING.md` | Registering a check, in the existing rule-translation section |
 | `CLAUDE.md` | Correct the "check ids are a public interface" section, which overstates the case and predates this decision |
@@ -203,6 +238,9 @@ The parity run is the load-bearing one: this change must be invisible to verdict
 
 Then confirm the drift tests actually fail, rather than trusting them: add a check id without
 registering it, and delete a registry entry for a live check. Both must fail naming the id.
+
+Because `rule_checks.py` disappears, `git grep -n 'rule_checks\|RULE_CHECKS\|RULE_CHECK_MAP\|CHECK_RULES'`
+must come back empty when the change is done. Any survivor is a mapping that was meant to die.
 
 ## Risks
 

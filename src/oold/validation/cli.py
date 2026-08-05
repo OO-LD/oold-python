@@ -10,6 +10,7 @@ Exit code is 0 only when no check failed. Warnings do not fail a run, matching t
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -325,6 +326,135 @@ def _rules_bundle(meta, offline: bool):
     )
 
 
+@click.group("checks")
+def checks_group() -> None:
+    """Look up the checks this validator can run.
+
+    Check ids (``lint.container``, ``rule.id-fragment``) name which check produced a finding;
+    rule ids (``OOLD-RT-002``, see ``oold rules``) name the specification requirement it
+    enforces, when it enforces one at all. The two are not peers: see
+    ``specs/2026-08-04-check-registry-design.md`` for why.
+    """
+
+
+@checks_group.command("list")
+@click.option("--prefix", help="Only checks whose id starts with this, e.g. lint.")
+@click.option(
+    "--unmapped",
+    is_flag=True,
+    help="Only checks that enforce no specification rule, the mirror of `oold rules list --unchecked`.",
+)
+@_json_option
+def checks_list(prefix: str | None, unmapped: bool, as_json: bool) -> None:
+    """List the checks this validator can run."""
+    from .check_registry import CHECKS
+
+    checks = CHECKS
+    if prefix:
+        checks = [c for c in checks if c.id.startswith(prefix)]
+    if unmapped:
+        checks = [c for c in checks if not c.rule]
+
+    if as_json:
+        click.echo(json.dumps([_check_summary(c) for c in checks], indent=2))
+        return
+    if not checks:
+        click.echo("no checks match")
+        return
+
+    for check in checks:
+        rule = check.rule or "-"
+        # The id is padded before styling: ANSI escape codes count towards an f-string field
+        # width, so padding a styled string misaligns the columns that follow it.
+        click.echo(
+            f"{click.style(check.id.ljust(24), fg='blue')} {check.default_status.upper():<6} {rule:<16} {check.summary}"
+        )
+    click.echo()
+    click.echo(f"  {len(checks)} check(s); the column before the summary is the rule each enforces, if any")
+
+
+@checks_group.command("explain")
+@click.argument("check_id")
+@_json_option
+def checks_explain(check_id: str, as_json: bool) -> None:
+    """Show one check in full: what it verifies, the rule it enforces, and where it is detected."""
+    from .check_registry import info
+
+    check = info(check_id)
+    if check is None:
+        raise click.ClickException(
+            f"{check_id} is not a registered check. Try `oold checks list` to see what is available."
+        )
+
+    if as_json:
+        click.echo(json.dumps(_check_summary(check, full=True), indent=2))
+        return
+
+    click.echo(click.style(check.id, fg="blue", bold=True) + f"  {check.default_status.upper()} by default")
+    click.echo(f"  {check.summary}")
+    click.echo()
+    if check.rule:
+        click.echo(f"  rule       {check.rule}   ({_rule_version_summary(check.rule)})")
+    else:
+        click.echo("  rule       none; this check enforces no single specification requirement")
+    click.echo(f"  detected   {_detection_site(check)}")
+    click.echo(f"  per version {'yes' if check.per_version else 'no'}")
+
+
+def _check_summary(check, full: bool = False) -> dict:
+    payload = {
+        "id": check.id,
+        "summary": check.summary,
+        "rule": check.rule,
+        "default_status": check.default_status,
+        "per_version": check.per_version,
+        "predates_catalog": check.predates_catalog,
+    }
+    if full:
+        payload["detection_site"] = _detection_site(check)
+        if check.rule:
+            payload["rule_versions"] = _rule_version_summary(check.rule)
+    return payload
+
+
+def _detection_site(check) -> str:
+    """Where ``check``'s verdict is decided, derived from ``detects``/``run`` with `inspect`.
+
+    Never the emitting site: that is what names the check id and reports the finding, which is
+    findable by grepping the id and would otherwise be a second, unmaintained field to keep in
+    step (see ``specs/2026-08-04-check-registry-design.md``, "The command").
+    """
+    fn = check.detects or check.run
+    if fn is None:
+        return "no single detection site; see the check's own module for its implementation"
+    module = (getattr(fn, "__module__", "") or "").rsplit(".", 1)[-1]
+    qualname = getattr(fn, "__qualname__", getattr(fn, "__name__", repr(fn)))
+    label = f"{module}.{qualname}" if module else qualname
+    try:
+        source_file = Path(inspect.getsourcefile(fn) or inspect.getfile(fn)).name
+        _, lineno = inspect.getsourcelines(fn)
+    except (OSError, TypeError):
+        return label
+    return f"{label}   ({source_file}:{lineno})"
+
+
+def _rule_version_summary(rule_id: str) -> str:
+    """Which tracked meta-schema versions state ``rule_id``, and which do not."""
+    from .meta_store import load_tracked, tracked_versions
+
+    stated, absent = [], []
+    for version in tracked_versions():
+        bundle = load_tracked(version)
+        (stated if bundle.rule(rule_id) else absent).append(version)
+
+    parts = []
+    if stated:
+        parts.append(f"stated by {', '.join(stated)}")
+    if absent:
+        parts.append(f"absent from {', '.join(absent)}")
+    return "; ".join(parts) if parts else "not found in any tracked version"
+
+
 @click.group()
 @click.version_option(package_name="oold")
 def main() -> None:
@@ -336,6 +466,7 @@ main.add_command(validate_instance_command)
 main.add_command(compliance_command)
 main.add_command(meta_group)
 main.add_command(rules_group)
+main.add_command(checks_group)
 
 
 if __name__ == "__main__":

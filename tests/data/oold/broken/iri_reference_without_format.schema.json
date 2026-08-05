@@ -1,0 +1,20 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "iri_reference_without_format.schema.json",
+  "title": "IriReferenceWithoutFormat",
+  "@context": {
+    "ex": "https://example.org/",
+    "works_for": {
+      "@id": "ex:worksFor",
+      "@type": "@id"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "works_for": {
+      "type": "string",
+      "description": "Organization the entity works for (IRI reference), missing its format",
+      "x-oold-range": "ex:Organization"
+    }
+  }
+}

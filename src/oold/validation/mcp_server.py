@@ -303,6 +303,47 @@ def list_oold_rules(
 
 
 @mcp.tool()
+def list_oold_checks(
+    prefix: str | None = None,
+    unmapped_only: bool = False,
+) -> dict[str, Any]:
+    """List the checks this validator can run, mirroring list_oold_rules for check ids.
+
+    A finding cites two identifiers: the check id (e.g. lint.container) names which check in this
+    validator produced it, the rule id (e.g. OOLD-RT-002, see list_oold_rules) names the
+    specification requirement it enforces, when it enforces one at all. Use unmapped_only to see
+    the checks that enforce no rule - these are this validator's own methodology (satisfiability,
+    round-trip, self-tests about the fixture suite) rather than a numbered requirement.
+
+    Args:
+        prefix: Only checks whose id starts with this, e.g. "lint.".
+        unmapped_only: Only checks that enforce no specification rule.
+    """
+    from .check_registry import CHECKS
+
+    checks = CHECKS
+    if prefix:
+        checks = [c for c in checks if c.id.startswith(prefix)]
+    if unmapped_only:
+        checks = [c for c in checks if not c.rule]
+
+    return {
+        "count": len(checks),
+        "checks": [
+            {
+                "id": c.id,
+                "summary": c.summary,
+                "rule": c.rule,
+                "default_status": c.default_status,
+                "per_version": c.per_version,
+                "predates_catalog": c.predates_catalog,
+            }
+            for c in checks
+        ],
+    }
+
+
+@mcp.tool()
 def list_meta_versions() -> dict[str, Any]:
     """List the tracked meta-schema versions, which one is `latest`, and the remote cache state.
 

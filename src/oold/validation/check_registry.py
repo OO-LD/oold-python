@@ -3,16 +3,17 @@
 Two identifier systems appear in a finding: the check id (``lint.container``) names which check
 in this package produced it, and the rule id (``OOLD-RT-002``) names the normative statement it
 enforces, when there is one. Rule ids come from the specification and are permanent; check ids
-are implementation-defined and follow this package's structure. A finding cites both, because ten
-of the twenty-four checks enforce no rule at all - `schema.meta` is definitional,
+are implementation-defined and follow this package's structure. A finding cites both, because
+fourteen of the twenty-eight checks enforce no rule at all - `schema.meta` is definitional,
 `generate.satisfiable`, `variants` and the `roundtrip.*` checks are this validator's methodology,
-and `coverage.*` are self-tests about the fixture suite - and for those the check id is the only
-identifier a user has.
+`coverage.*` are self-tests about the fixture suite, `meta.self-check` and `rule.checks` report on
+the run itself rather than on a schema, and `compliance.suite`/`compliance.*` are the deterministic
+fixture suite's own outcomes - and for those the check id is the only identifier a user has.
 
 This module holds two things that used to live apart. The ten ``rule.*`` checks each enforce
 exactly one normative statement and are narrow enough to be self-contained predicates over an
 already-resolved :class:`ContextView`, so they are declared here and executed by
-:func:`run_rule_checks`. The other fourteen checks are driven by the phases in ``pipeline.py`` and
+:func:`run_rule_checks`. The other eighteen checks are driven by the phases in ``pipeline.py`` and
 leave :attr:`CheckInfo.run` empty; this module only records their metadata; ``detects`` points at
 the function that actually decides the verdict, where one function is clearly responsible.
 
@@ -28,10 +29,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .compliance import vocabulary_coverage
+from .compliance import run_suite, vocabulary_coverage
 from .frame import collect_composed_properties, instance_rdf_types
 from .generate import generate
 from .instance_checks import roundtrip_instance, validate_instance
+from .meta_store import MetaBundle
 from .pattern_lint import array_properties_missing_container, iri_references_missing_format
 from .pattern_lint import lint as _lint_pattern
 from .predicates import check_predicates
@@ -287,6 +289,14 @@ class CheckInfo:
     ``default_status`` is what a violation reports when no rule applies: either the check enforces
     none, or the meta version in use ships no catalogue to read a level from. Where a rule and a
     catalogue are both available, severity comes from the rule's level instead (:func:`severity`).
+
+    ``predates_catalog`` matters only when ``rule`` is set. Wherever a catalogue is available for
+    the selected version, both values behave identically: the check runs only if the catalogue
+    states the rule and has not deprecated it (see :func:`catalog_gate`). They differ only when a
+    version ships no catalogue at all (0.7.0, 0.8.0): ``False``, the default, skips the check,
+    because a rule minted after the catalogue cannot be attributed to a version that predates it.
+    ``True`` runs it anyway, for the four checks whose requirement is older than the catalogue
+    itself and would otherwise silently stop being enforced on those versions.
     """
 
     id: str
@@ -296,9 +306,17 @@ class CheckInfo:
     per_version: bool = False
     detects: Callable[..., Any] | None = None
     run: Predicate | None = None
+    predates_catalog: bool = False
 
 
 CHECKS: tuple[CheckInfo, ...] = (
+    # -------------------------------------------------------------- run setup
+    CheckInfo(
+        "meta.self-check",
+        "the vendored meta-schema documents for one version are themselves well-formed",
+        per_version=True,
+        detects=MetaBundle.self_check,
+    ),
     # -------------------------------------------------------------- schema well-formedness
     CheckInfo(
         "schema.meta",
@@ -320,12 +338,14 @@ CHECKS: tuple[CheckInfo, ...] = (
         rule="OOLD-RT-001",
         per_version=True,
         detects=_lint_pattern,
+        predates_catalog=True,
     ),
     CheckInfo(
         "lint.container",
         "a strictly array-typed property declares @container @set or @list",
         rule="OOLD-RT-002",
         detects=array_properties_missing_container,
+        predates_catalog=True,
     ),
     CheckInfo(
         "lint.iri-format",
@@ -333,6 +353,7 @@ CHECKS: tuple[CheckInfo, ...] = (
         rule="OOLD-EXT-006",
         default_status=WARN,
         detects=iri_references_missing_format,
+        predates_catalog=True,
     ),
     # -------------------------------------------------------------- generation and round-trip
     CheckInfo(
@@ -359,6 +380,7 @@ CHECKS: tuple[CheckInfo, ...] = (
         "every declared property produces a grounded predicate",
         rule="OOLD-EXT-007",
         detects=check_predicates,
+        predates_catalog=True,
     ),
     CheckInfo(
         "variants",
@@ -380,6 +402,22 @@ CHECKS: tuple[CheckInfo, ...] = (
     ),
     # -------------------------------------------------------------- compliance-suite self-checks
     CheckInfo(
+        "compliance.suite",
+        "the compliance suite's own fixture files are readable and well-shaped",
+        per_version=True,
+        detects=run_suite,
+    ),
+    CheckInfo(
+        "compliance.*",
+        "one compliance-suite case produced the outcome its fixture expects",
+        per_version=True,
+        # One id per fixture "kind" (vocab, lint, validate, rdf, roundtrip, error, ...), built as
+        # f"compliance.{case.kind}" from data in the fixture files rather than from code, so there
+        # is no single detection site and no fixed set of kinds to enumerate. This entry stands
+        # for the whole family; see the module docstring in `compliance.py`.
+        detects=None,
+    ),
+    CheckInfo(
         "coverage.vocab",
         "every keyword the meta-schemas define has a well-formedness test",
         per_version=True,
@@ -395,6 +433,16 @@ CHECKS: tuple[CheckInfo, ...] = (
         detects=None,
     ),
     # -------------------------------------------------------------- single-rule checks
+    CheckInfo(
+        "rule.checks",
+        "the rule.* family as a whole, reported once when the selected meta-schema version ships "
+        "no rule catalogue to attribute individual findings to",
+        per_version=True,
+        default_status=SKIP,
+        # Decided inline in pipeline.py's `_run_rule_checks`, which substitutes this one finding
+        # for the whole family rather than calling any of the ten predicates below.
+        detects=None,
+    ),
     CheckInfo(
         "rule.id",
         "a schema has a $id",
@@ -487,6 +535,50 @@ def rule_map() -> dict[str, str]:
 _BY_ID: dict[str, CheckInfo] = {c.id: c for c in CHECKS}
 
 
+def catalog_gate(check: CheckInfo, catalog: dict[str, dict[str, Any]] | None) -> RuleFinding | None:
+    """Whether ``check`` must be skipped against ``catalog``, or None to mean "run it".
+
+    This is the one place the presence/deprecation gating lives, shared by the ten self-contained
+    ``rule.*`` predicates (via :func:`run_rule_checks`) and the four checks that predate the
+    catalogue, applied directly in ``pipeline.py``. A check with no ``rule`` is never gated: the
+    question only makes sense for a check that names a normative statement.
+
+    ``catalog`` maps rule id to its catalogue entry for the meta version in use, or is None when
+    that version ships no catalogue at all. Wherever a catalogue *is* present the two outcomes are
+    identical regardless of :attr:`CheckInfo.predates_catalog`: skip if the rule is absent or
+    deprecated, run otherwise. The field only changes what happens with no catalogue at all, which
+    is the one thing a pre-catalogue version cannot state either way.
+    """
+    if check.rule is None:
+        return None
+    if catalog is None:
+        if check.predates_catalog:
+            return None
+        return RuleFinding(
+            check.id,
+            check.rule,
+            SKIP,
+            f"{check.rule} cannot be attributed to this meta-schema version, which ships no rule catalogue",
+        )
+    rule = catalog.get(check.rule)
+    if rule is None:
+        return RuleFinding(
+            check.id,
+            check.rule,
+            SKIP,
+            f"{check.rule} is not stated by this meta-schema version",
+        )
+    if rule.get("deprecated"):
+        superseded = ", ".join(rule.get("superseded_by") or []) or "nothing"
+        return RuleFinding(
+            check.id,
+            check.rule,
+            SKIP,
+            f"{check.rule} is deprecated in this version (superseded by {superseded})",
+        )
+    return None
+
+
 def run_rule_checks(
     schema: dict[str, Any],
     context: ContextView,
@@ -497,36 +589,20 @@ def run_rule_checks(
     ``catalog`` maps rule id to its catalogue entry for the meta version in use. When given, a
     check whose rule is absent from it is **skipped**: that version never stated the requirement,
     and enforcing it would report a violation of something the target does not require. A
-    deprecated rule is skipped for the same reason from the other end.
+    deprecated rule is skipped for the same reason from the other end. See :func:`catalog_gate`.
 
-    When ``catalog`` is None the version ships no catalogue at all, and the caller decides
-    whether to run the checks blind or skip them.
+    When ``catalog`` is None the version ships no catalogue at all, and every one of these ten
+    checks skips: none of them predates the catalogue (:attr:`CheckInfo.predates_catalog` is
+    False for all of them), so there is nothing pre-catalogue evidence could attribute the rule
+    to.
     """
     findings: list[RuleFinding] = []
     for check in (c for c in CHECKS if c.run):
+        gate = catalog_gate(check, catalog)
+        if gate is not None:
+            findings.append(gate)
+            continue
         rule = (catalog or {}).get(check.rule)
-        if catalog is not None:
-            if rule is None:
-                findings.append(
-                    RuleFinding(
-                        check.id,
-                        check.rule,
-                        SKIP,
-                        f"{check.rule} is not stated by this meta-schema version",
-                    )
-                )
-                continue
-            if rule.get("deprecated"):
-                superseded = ", ".join(rule.get("superseded_by") or []) or "nothing"
-                findings.append(
-                    RuleFinding(
-                        check.id,
-                        check.rule,
-                        SKIP,
-                        f"{check.rule} is deprecated in this version (superseded by {superseded})",
-                    )
-                )
-                continue
         problems = check.run(schema, context)
         if not problems:
             findings.append(RuleFinding(check.id, check.rule, OK))

@@ -17,7 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .check_registry import ContextView, rule_map, run_rule_checks
+from .check_registry import ContextView, RuleFinding, catalog_gate, rule_map, run_rule_checks
+from .check_registry import info as _check_info
 from .check_registry import rule_for as _rule_for_check
 from .compliance import run_suite, vocabulary_coverage
 from .context_graph import cyclic_scoped_contexts
@@ -104,6 +105,22 @@ class _Run:
             return None
         return rule_id if any(b.rule(rule_id) for b in self.bundles) else None
 
+    def catalog_gate(self, check_id: str, bundle: MetaBundle) -> RuleFinding | None:
+        """The skip verdict for `check_id` against one meta-schema version, or None to run it.
+
+        Delegates to `check_registry.catalog_gate`, the single place the presence/deprecation
+        gating lives - `run_rule_checks` applies the same function to the ten self-contained
+        `rule.*` checks. This is what lets `lint.pattern`, `lint.container`, `lint.iri-format`
+        and `context.predicates` (the four checks older than the catalogue,
+        `CheckInfo.predates_catalog`) keep running against a version that ships no catalogue at
+        all, while still standing down once a later catalogue deprecates or drops their rule.
+        """
+        check = _check_info(check_id)
+        if check is None:
+            return None
+        catalog = {r["id"]: r for r in bundle.rules} if bundle.has_rules else None
+        return catalog_gate(check, catalog)
+
 
 # ---------------------------------------------------------------------------- setup
 
@@ -188,7 +205,10 @@ def _check_schema(run: _Run, name: str) -> None:
     for bundle in run.bundles:
         result = lint(raw, bundle)
         first = first or result
-        if result.schema_errors:
+        gate = run.catalog_gate("lint.pattern", bundle)
+        if gate is not None:
+            run.add("lint.pattern", name, gate.status, gate.message, meta_version=bundle.version)
+        elif result.schema_errors:
             run.add(
                 "lint.pattern",
                 name,
@@ -202,8 +222,12 @@ def _check_schema(run: _Run, name: str) -> None:
 
     if first is not None:
         # These two correlate `properties` with `@context`, so no meta-schema version can
-        # express them and they are reported once rather than per version.
-        if first.missing_container:
+        # express them and they are reported once rather than per version, gated against the
+        # first selected bundle - the same one `first` was computed from.
+        gate = run.catalog_gate("lint.container", run.bundles[0])
+        if gate is not None:
+            run.add("lint.container", name, gate.status, gate.message)
+        elif first.missing_container:
             joined = ", ".join(first.missing_container)
             plural = "ies" if len(first.missing_container) > 1 else "y"
             run.add(
@@ -216,7 +240,10 @@ def _check_schema(run: _Run, name: str) -> None:
         else:
             run.add("lint.container", name, OK)
 
-        if first.missing_iri_format:
+        gate = run.catalog_gate("lint.iri-format", run.bundles[0])
+        if gate is not None:
+            run.add("lint.iri-format", name, gate.status, gate.message)
+        elif first.missing_iri_format:
             joined = ", ".join(first.missing_iri_format)
             plural = "ies" if len(first.missing_iri_format) > 1 else "y"
             run.add(
@@ -371,6 +398,11 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
         return
 
     _run_rule_checks(run, name, raw, ContextView(terms=context.terms(), entries=list(context.context)))
+
+    gate = run.catalog_gate("context.predicates", run.bundles[0])
+    if gate is not None:
+        run.add("context.predicates", name, gate.status, gate.message)
+        return
 
     id_key, type_key = find_alias_keys(context.terms())
     declared = set(collect_composed_properties(schema)) | {id_key, type_key}

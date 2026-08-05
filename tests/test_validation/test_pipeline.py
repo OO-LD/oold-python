@@ -71,22 +71,25 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
 
 
 @pytest.mark.parametrize(
-    "fixture,check_id",
+    "fixture,check_id,status",
     [
-        ("invalid_meta.schema.json", "schema.meta"),
-        ("missing_context_term.schema.json", "roundtrip.generated"),
-        ("undefined_prefix.schema.json", "context.predicates"),
-        ("unresolvable_context_ref.schema.json", "context.predicates"),
-        ("xsd_string_coercion.schema.json", "lint.pattern"),
-        ("array_without_container.schema.json", "lint.container"),
+        ("invalid_meta.schema.json", "schema.meta", FAIL),
+        ("missing_context_term.schema.json", "roundtrip.generated", FAIL),
+        ("undefined_prefix.schema.json", "context.predicates", FAIL),
+        ("unresolvable_context_ref.schema.json", "context.predicates", FAIL),
+        ("xsd_string_coercion.schema.json", "lint.pattern", FAIL),
+        ("array_without_container.schema.json", "lint.container", FAIL),
+        # lint.iri-format only ever warns, so this one does not make the report fail overall.
+        ("iri_reference_without_format.schema.json", "lint.iri-format", WARN),
     ],
 )
-def test_each_broken_fixture_fails_the_check_it_targets(broken_dir, fixture, check_id):
+def test_each_broken_fixture_fails_the_check_it_targets(broken_dir, fixture, check_id, status):
     """Proves the checks fire, rather than only that valid input passes."""
     report = validate_schema(broken_dir / fixture, OFFLINE)
-    assert not report.passed, f"{fixture} was expected to fail"
-    assert check_id in _ids(report, FAIL), (
-        f"{fixture} failed, but not on {check_id}: {[(c.id, c.message) for c in report.failures()]}"
+    if status == FAIL:
+        assert not report.passed, f"{fixture} was expected to fail"
+    assert check_id in _ids(report, status), (
+        f"{fixture}: expected {check_id} at {status}, got: {[(c.id, c.status, c.message) for c in report.checks]}"
     )
 
 

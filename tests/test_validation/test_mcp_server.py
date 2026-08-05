@@ -24,6 +24,7 @@ EXPECTED_TOOLS = {
     "check_context_mapping",
     "list_meta_versions",
     "list_oold_rules",
+    "list_oold_checks",
 }
 
 

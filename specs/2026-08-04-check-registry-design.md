@@ -74,7 +74,7 @@ class CheckInfo:
     per_version: bool = False     # emits once per selected meta-schema version
     detects: Callable | None = None  # the function implementing detection
     run: Predicate | None = None  # executable predicate, for self-contained checks
-    requires_rule: bool = False   # skip where the version's catalogue omits `rule`
+    predates_catalog: bool = False  # the requirement is older than the catalogue
 ```
 
 Four fields deserve comment.
@@ -145,20 +145,29 @@ check is skipped with a message saying so. This is already how the ten `rule.*` 
 it means adding a check for a new rule needs **no backward-compatibility code at all**. Older
 versions skip it because their catalogue does not mention it.
 
-One field extends that to every check:
+One field extends that to every check that names a rule:
 
 ```python
-requires_rule: bool = False
+predates_catalog: bool = False
 ```
 
-| Value | Meaning | Used by |
-| --- | --- | --- |
-| `True` | Run only where the catalogue states `rule` and has not deprecated it. Skip otherwise, including when the version ships no catalogue | Every check written for a catalogued rule, which is every new one |
-| `False` | Run against all versions; `rule` is attribution only | The checks that predate the catalogue and encode long-standing requirements |
+| Value | No catalogue (0.7.0, 0.8.0) | Catalogue present | Used by |
+| --- | --- | --- | --- |
+| `False` (default) | Skip | Run only if stated and not deprecated | Every new check |
+| `True` | Run | Run only if stated and not deprecated | The four checks older than the catalogue |
 
-`False` is the default because it preserves today's behaviour exactly: `lint.container` currently
-runs against 0.7.0 and 0.8.0, which ship no catalogue, and must keep doing so. Without the flag,
-uniform gating would silently stop checking those versions for requirements they do have.
+The question the flag answers is "did this requirement exist before the catalogue did?", which is
+the only thing a pre-catalogue version cannot tell us. Both values gate identically **wherever a
+catalogue exists**; they differ only in what to assume where none does.
+
+That matters more than it first appears. A naive "always run" flag for the legacy checks would be
+wrong the moment one of their rules is superseded: the old check would keep firing against a new
+version that no longer states its requirement. Gating on the catalogue whenever one is present
+avoids that, while `True` preserves coverage on the two shipped versions that have none.
+
+Today's four legacy checks are `lint.pattern`, `lint.container`, `lint.iri-format` and
+`context.predicates`. All four rules are present and undeprecated in 1.0.0-rc.1, so `True`
+reproduces current behaviour exactly on every tracked version.
 
 That asymmetry is not arbitrary. It exists because **`since` cannot answer this question.** All 34
 rules in the 1.0.0-rc.1 catalogue carry `since: 1.0.0-rc.1`, since that is when the catalogue was
@@ -167,11 +176,31 @@ minted rather than when the requirements appeared. So there is no machine-readab
 long-standing checks apply and newly-catalogued ones cannot be attributed. Any design that gated
 on `since` would be wrong for exactly the two versions currently shipped.
 
-The lifecycle follows from the same mechanism, with no special handling. When a requirement
-changes meaning, oold-schema deprecates the old rule id and mints a new one. The existing check
-then skips automatically wherever the catalogue marks its rule deprecated, and a new check is
-added with `requires_rule=True` for the new id. Both live in the registry at once, and validating
-against an older version keeps using the old one. Nothing needs to know which version is "current".
+### What a changed rule actually costs
+
+Not every specification change reaches this repository, and the three cases differ a lot.
+
+**Reworded, same requirement.** The rule id is unchanged by upstream policy, so nothing here
+changes: same check, same registry entry, no new id. The work is one `make rules-accept` in
+oold-schema, and the vendored catalogue's `text_sha256` moves when the version is next vendored.
+
+**Changed requirement, detection driven by vendored data.** Often free. The precedent is 0.8.0,
+where the no-coercion rule widened from `xsd:string` to every natively-encoded datatype. That
+shipped entirely as a new `oold-pattern-lint.schema.json`, and `lint.pattern` picked it up by
+vendoring the version. No Python changed, because the check executes the meta-schema rather than
+reimplementing it. Anything expressible in the pattern-lint schema lands here.
+
+**Changed requirement, bespoke detection.** This is the case in the question, and yes: upstream
+mints a new rule id, and this repository gains a new predicate and a new registry entry. Both are
+necessary rather than ceremonial, because both behaviours have to be available **at the same
+time**: validating against the old version must apply the old requirement and the new version the
+new one. Editing the check in place would silently change what older versions are judged by, which
+is the failure this whole design exists to prevent.
+
+The marginal cost over simply writing the new logic is **one registry line**. The old entry needs
+no edit at all: its rule is now deprecated in the new catalogue, so it self-gates, keeps working
+for older versions, and is reported as skipped with the id that superseded it. Nothing needs to
+know which version is "current".
 
 ### The command
 
@@ -210,9 +239,10 @@ what rots. Four tests hold it to reality, all using the existing fixture corpus:
    a check that was removed, and, usefully, a check that silently stopped running.
 3. **Every non-null `rule` exists in at least one vendored catalogue.** Catches a typo'd or
    retired rule id.
-4. **Every `requires_rule=True` check is skipped under `--meta 0.7.0`.** Pins the backward
+4. **Under `--meta 0.7.0`, exactly the `predates_catalog` checks run.** Pins the backward
    compatibility promise to a test rather than to reviewer memory. 0.7.0 ships no catalogue, so a
-   gated check must skip there; if one runs, its gating is wrong.
+   check written for a catalogued rule must skip there, and a legacy one must not. Both directions
+   fail loudly, which is what stops a new check from quietly judging an old specification.
 
 Test 2 is the one that makes this different from the rejected inventory. That file would only ever
 have been compared against itself; this is compared against what the validator actually does.

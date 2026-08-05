@@ -74,6 +74,7 @@ class CheckInfo:
     per_version: bool = False     # emits once per selected meta-schema version
     detects: Callable | None = None  # the function implementing detection
     run: Predicate | None = None  # executable predicate, for self-contained checks
+    requires_rule: bool = False   # skip where the version's catalogue omits `rule`
 ```
 
 Four fields deserve comment.
@@ -132,6 +133,46 @@ modules, none of which import it or each other in a cycle, and `pipeline` import
 exist. If that ever feels too large, the predicates can move back out without changing the
 structure, since the registry holds references either way.
 
+### Versions: what runs against which specification
+
+A new specification version states a new rule, the rule needs a check, and that check must not
+fire when validating against an older version that never required it. The information that decides
+this lives in the **vendored catalogue**, not in the code, and not in a version number written
+into a check.
+
+Gating is by presence: if the selected version's `oold-rules.json` does not list the rule, the
+check is skipped with a message saying so. This is already how the ten `rule.*` checks behave, and
+it means adding a check for a new rule needs **no backward-compatibility code at all**. Older
+versions skip it because their catalogue does not mention it.
+
+One field extends that to every check:
+
+```python
+requires_rule: bool = False
+```
+
+| Value | Meaning | Used by |
+| --- | --- | --- |
+| `True` | Run only where the catalogue states `rule` and has not deprecated it. Skip otherwise, including when the version ships no catalogue | Every check written for a catalogued rule, which is every new one |
+| `False` | Run against all versions; `rule` is attribution only | The checks that predate the catalogue and encode long-standing requirements |
+
+`False` is the default because it preserves today's behaviour exactly: `lint.container` currently
+runs against 0.7.0 and 0.8.0, which ship no catalogue, and must keep doing so. Without the flag,
+uniform gating would silently stop checking those versions for requirements they do have.
+
+That asymmetry is not arbitrary. It exists because **`since` cannot answer this question.** All 34
+rules in the 1.0.0-rc.1 catalogue carry `since: 1.0.0-rc.1`, since that is when the catalogue was
+minted rather than when the requirements appeared. So there is no machine-readable record of what
+0.7.0 or 0.8.0 required, and the only safe reading for a pre-catalogue version is that
+long-standing checks apply and newly-catalogued ones cannot be attributed. Any design that gated
+on `since` would be wrong for exactly the two versions currently shipped.
+
+The lifecycle follows from the same mechanism, with no special handling. When a requirement
+changes meaning, oold-schema deprecates the old rule id and mints a new one. The existing check
+then skips automatically wherever the catalogue marks its rule deprecated, and a new check is
+added with `requires_rule=True` for the new id. Both live in the registry at once, and validating
+against an older version keeps using the old one. Nothing needs to know which version is "current".
+
 ### The command
 
 Mirrors `oold rules`, which already exists, so there is one idiom to learn:
@@ -161,7 +202,7 @@ report time.
 
 The registry is hand-*written*, which is unavoidable: a one-line description of what a check does
 exists nowhere else, so writing it down creates no second copy. It is not hand-*synced*, which is
-what rots. Three tests hold it to reality, all using the existing fixture corpus:
+what rots. Four tests hold it to reality, all using the existing fixture corpus:
 
 1. **Every id emitted during the suite is in the registry.** Adding a check without registering it
    fails, naming the id.
@@ -169,6 +210,9 @@ what rots. Three tests hold it to reality, all using the existing fixture corpus
    a check that was removed, and, usefully, a check that silently stopped running.
 3. **Every non-null `rule` exists in at least one vendored catalogue.** Catches a typo'd or
    retired rule id.
+4. **Every `requires_rule=True` check is skipped under `--meta 0.7.0`.** Pins the backward
+   compatibility promise to a test rather than to reviewer memory. 0.7.0 ships no catalogue, so a
+   gated check must skip there; if one runs, its gating is wrong.
 
 Test 2 is the one that makes this different from the rejected inventory. That file would only ever
 have been compared against itself; this is compared against what the validator actually does.
@@ -217,7 +261,7 @@ gain a `run=` callable one at a time, and phase functions shrink as checks move 
 | `src/oold/validation/pipeline.py` | `CHECK_RULES` deleted; reads `CheckInfo.rule` directly |
 | `src/oold/validation/cli.py` | `oold checks list` / `oold checks explain` |
 | `tests/test_validation/test_rule_checks.py` | Imports move to `check_registry`; otherwise unchanged, so the ten predicates keep their existing coverage |
-| `tests/test_validation/test_check_registry.py` | New. The three drift tests |
+| `tests/test_validation/test_check_registry.py` | New. The four drift tests |
 | `docs/how-to/validation.md` | Document the two identifier systems and the new command |
 | `CONTRIBUTING.md` | Registering a check, in the existing rule-translation section |
 | `CLAUDE.md` | Correct the "check ids are a public interface" section, which overstates the case and predates this decision |

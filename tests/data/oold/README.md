@@ -15,6 +15,13 @@ broken/               deliberately broken schemas: the checks must fail on these
 remote_context/       a schema whose @context chain leaves its directory
 ```
 
+`remote_context/Leaf.schema.json` requires `name`, and that is deliberate: `name` is defined
+only in the remote `../Thing.schema.json`, while Leaf's own inline `@context` defines just
+`nickname`. Any check that reads `schema["@context"]` instead of the resolved context reports a
+violation here, on a schema that is entirely correct. Keep the `required` when editing this
+fixture; without it the schema still exercises context resolution, but nothing notices a check
+judging the literal context rather than the resolved one.
+
 ## Refreshing the snapshot
 
 When a new oold-schema version is tracked in `src/oold/validation/meta/`, refresh this slice from

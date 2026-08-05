@@ -120,7 +120,7 @@ def test_the_reference_cannot_resolve_a_context_leaving_the_directory(upstream, 
 
 
 def test_every_mapped_rule_resolves_against_the_upstream_catalog(upstream):
-    """The authoritative guard against a typo in CHECK_RULES.
+    """The authoritative guard against a typo in the check registry.
 
     Per-version coverage only warns about an unknown id, because a catalog predating a mapped
     rule is indistinguishable from a mistake. Against the *current* upstream catalog there is no
@@ -129,12 +129,12 @@ def test_every_mapped_rule_resolves_against_the_upstream_catalog(upstream):
     """
     import json
 
-    from oold.validation.pipeline import CHECK_RULES
+    from oold.validation.check_registry import rule_map
 
     catalog = upstream / "meta" / "oold-rules.json"
     if not catalog.is_file():
         pytest.skip("upstream has not published a rule catalog yet")
 
     known = {r["id"] for r in json.loads(catalog.read_text(encoding="utf-8"))["rules"]}
-    unknown = {check: rule for check, rule in CHECK_RULES.items() if rule not in known}
-    assert not unknown, f"CHECK_RULES cites ids absent from the upstream catalog: {unknown}"
+    unknown = {check: rule for check, rule in rule_map().items() if rule not in known}
+    assert not unknown, f"the registry cites ids absent from the upstream catalog: {unknown}"

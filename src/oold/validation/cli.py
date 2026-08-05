@@ -239,14 +239,14 @@ def rules_group() -> None:
 @_json_option
 def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: bool) -> None:
     """List the rules in the specification's catalog."""
-    from .pipeline import CHECK_RULES
+    from .check_registry import rule_map
 
     bundle = _rules_bundle(meta, offline)
     rules = bundle.rules
     if area:
         rules = [r for r in rules if r["area"].upper() == area.upper()]
     if unchecked:
-        enforced = set(CHECK_RULES.values())
+        enforced = set(rule_map().values())
         rules = [r for r in bundle.checkable_rules() if r["id"] not in enforced]
 
     if as_json:
@@ -256,7 +256,7 @@ def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: 
         click.echo("no rules match")
         return
 
-    enforced_by = {v: k for k, v in CHECK_RULES.items()}
+    enforced_by = {v: k for k, v in rule_map().items()}
     for rule in rules:
         flag = "!" if rule.get("deprecated") else " "
         check = enforced_by.get(rule["id"], "-")
@@ -275,7 +275,7 @@ def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: 
 @_json_option
 def rules_explain(rule_id: str, meta, offline: bool, as_json: bool) -> None:
     """Show one rule in full: its level, what it binds, and the specification text."""
-    from .pipeline import CHECK_RULES
+    from .check_registry import rule_map
 
     bundle = _rules_bundle(meta, offline)
     rule = bundle.rule(rule_id.upper())
@@ -288,7 +288,7 @@ def rules_explain(rule_id: str, meta, offline: bool, as_json: bool) -> None:
         click.echo(json.dumps(rule, indent=2))
         return
 
-    enforced_by = {v: k for k, v in CHECK_RULES.items()}
+    enforced_by = {v: k for k, v in rule_map().items()}
     click.echo(click.style(rule["id"], fg="blue", bold=True) + f"  {rule['level']}")
     click.echo(f"  {rule['summary']}")
     click.echo()

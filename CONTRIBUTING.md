@@ -90,11 +90,11 @@ uv run oold rules list --unchecked        # everything still waiting for a check
 | --- | --- | --- |
 | `document` + `checkable: true` | Decidable by looking at a schema or instance | Add a check, as below |
 | `document`, not `checkable` | Binds documents but needs human judgement | Nothing; it stays listed as unchecked |
-| `implementation` | Constrains what the library *does*, which no validator can see | A test against the library, not a `RuleCheck` |
+| `implementation` | Constrains what the library *does*, which no validator can see | A test against the library, not a `CheckInfo` |
 | `advisory` | Guidance only | Nothing |
 
-To add a check, write the predicate and append a `RuleCheck` to `RULE_CHECKS` in
-`src/oold/validation/rule_checks.py`, alongside the existing entries:
+To add a check, write the predicate and append a `CheckInfo` to `CHECKS` in
+`src/oold/validation/check_registry.py`, alongside the existing entries:
 
 ```python
 def _missing_id(schema: dict[str, Any], context: ContextView) -> list[str]:
@@ -103,13 +103,13 @@ def _missing_id(schema: dict[str, Any], context: ContextView) -> list[str]:
     return []
 
 
-RULE_CHECKS = [
-    RuleCheck("rule.id", "OOLD-VER-001", "a schema has a $id", _missing_id),
+CHECKS = (
+    CheckInfo("rule.id", "a schema has a $id", rule="OOLD-VER-001", per_version=True, run=_missing_id),
     ...
-]
+)
 ```
 
-The four fields are the check id, the rule it enforces, a short description, and the predicate.
+The check id, a short description, the rule it enforces, and the predicate are what matter here.
 Use a `rule.*` check id: `lint.*`, `schema.*` and `roundtrip.*` are the checks carried over from
 the reference harness, and several of them already cite a rule.
 
@@ -126,7 +126,7 @@ about it are easy to get wrong:
   automatically. If a rule is only partially decidable, check the part you are sure of; a false
   positive costs far more than a missed finding, because it teaches people to ignore the output.
 
-Then add tests to `tests/test_validation/test_rule_checks.py` - one schema that conforms and one
+Then add tests to `tests/test_validation/test_check_registry.py` - one schema that conforms and one
 that violates. A check that only ever sees valid input is not known to fire at all.
 
 Finally, confirm the gap actually closed:

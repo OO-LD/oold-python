@@ -9,13 +9,17 @@ from __future__ import annotations
 
 import pytest
 
+from oold.validation.check_registry import CHECKS, ContextView, run_rule_checks, severity
 from oold.validation.meta_store import latest_version, load_tracked
-from oold.validation.rule_checks import RULE_CHECKS, ContextView, run_rule_checks, severity
 
 #: The catalogue actually shipped for the newest tracked version. Severity is read from it rather
 #: than hardcoded here, so if upstream relaxes a MUST to a SHOULD these tests report the change
 #: instead of silently disagreeing with the specification.
 CATALOG = {r["id"]: r for r in load_tracked(latest_version()).rules}
+
+#: The ten self-contained rule checks, in the order they are declared - the same slice
+#: `run_rule_checks` executes.
+SELF_CONTAINED_CHECKS = tuple(c for c in CHECKS if c.run)
 
 
 def _findings(schema: dict, context: ContextView | None = None):
@@ -34,10 +38,10 @@ def message(check_id: str, schema: dict, context: ContextView | None = None) -> 
 
 
 def test_every_check_names_a_rule_that_exists():
-    for check in RULE_CHECKS:
-        assert check.rule.startswith("OOLD-"), check.check_id
-        assert check.check_id.startswith("rule."), check.check_id
-        assert check.rule in CATALOG, f"{check.check_id} cites {check.rule}, absent from the catalogue"
+    for check in SELF_CONTAINED_CHECKS:
+        assert check.rule.startswith("OOLD-"), check.id
+        assert check.id.startswith("rule."), check.id
+        assert check.rule in CATALOG, f"{check.id} cites {check.rule}, absent from the catalogue"
 
 
 def test_severity_is_read_from_the_specification_not_hardcoded():
@@ -239,11 +243,11 @@ def test_no_must_level_rule_fires_on_the_upstream_examples(data_dir):
     assert not hits, [f"{c.id} {c.target}: {c.message}" for c in hits]
 
 
-@pytest.mark.parametrize("check", RULE_CHECKS, ids=lambda c: c.check_id)
+@pytest.mark.parametrize("check", SELF_CONTAINED_CHECKS, ids=lambda c: c.id)
 def test_every_check_runs_on_every_example(check, data_dir):
     """No check may crash on a real schema; each must produce a verdict."""
     from oold.validation import Options, validate_directory
 
     report = validate_directory(data_dir, Options(meta=("latest",), offline=True))
-    produced = [c for c in report.checks if c.id == check.check_id]
-    assert produced, f"{check.check_id} produced no finding at all"
+    produced = [c for c in report.checks if c.id == check.id]
+    assert produced, f"{check.id} produced no finding at all"

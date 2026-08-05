@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .check_registry import ContextView, rule_map, run_rule_checks
+from .check_registry import rule_for as _rule_for_check
 from .compliance import run_suite, vocabulary_coverage
 from .context_graph import cyclic_scoped_contexts
 from .context_resolution import find_alias_keys, resolve_context
@@ -32,27 +34,10 @@ from .predicates import check_predicates
 from .report import FAIL, OK, SKIP, WARN, Report
 from .resolve import Resolver, SchemaResolutionError, bound_schema
 from .roundtrip import roundtrip
-from .rule_checks import RULE_CHECK_MAP, ContextView, run_rule_checks
 from .schema_checks import check_usable_as_validator, validate_against_meta
 
 SCHEMA_SUFFIX = ".schema.json"
 INSTANCE_SUFFIX = ".instance.json"
-
-#: Which normative rule each check enforces, so a finding can cite the requirement rather than
-#: only this package's internal check name. Deliberately partial: a check is mapped only where it
-#: enforces one identifiable requirement. `schema.meta` for instance asserts the whole meta-schema
-#: rather than any single statement, and `roundtrip.*` asserts a contract the specification states
-#: across several bullets. Leaving those unmapped is what makes `coverage.rules` meaningful - an
-#: invented mapping would report coverage the validator does not actually have.
-CHECK_RULES: dict[str, str] = {
-    "lint.pattern": "OOLD-RT-001",  # no coercion to a natively-JSON-encoded datatype
-    "lint.container": "OOLD-RT-002",  # a strict array declares @container @set/@list
-    "lint.iri-format": "OOLD-EXT-006",  # an IRI-valued property constrains its lexical form
-    "context.predicates": "OOLD-EXT-007",  # a compact-IRI prefix is defined in the @context
-    # Checks that each enforce exactly one rule live in rule_checks.py and declare their own
-    # mapping, so adding a rule check cannot forget to register it here.
-    **RULE_CHECK_MAP,
-}
 
 #: Why a schema's JSON-LD checks were skipped. Shared so the message is identical everywhere.
 CYCLIC_NOTE = (
@@ -114,7 +99,7 @@ class _Run:
         self.report.add(check_id, *args, **kwargs)
 
     def rule_for(self, check_id: str) -> str | None:
-        rule_id = CHECK_RULES.get(check_id)
+        rule_id = _rule_for_check(check_id)
         if not rule_id:
             return None
         return rule_id if any(b.rule(rule_id) for b in self.bundles) else None
@@ -696,7 +681,7 @@ def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
     A mapped id the catalog does not contain looks like a dangling reference, but it is
     ambiguous: it is equally what a *older* meta version looks like, one minted before that rule
     existed. Failing would make validating against an older version break for no reason. A
-    genuine typo in `CHECK_RULES` is caught instead by the shape test and by the live parity test
+    genuine typo in the registry is caught instead by the shape test and by the live parity test
     that resolves every mapping against the current upstream catalog.
     """
     if not bundle.has_rules:
@@ -709,9 +694,10 @@ def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
         )
         return
 
-    unknown = sorted({r for r in CHECK_RULES.values() if not bundle.rule(r)})
+    mapped = set(rule_map().values())
+    unknown = sorted({r for r in mapped if not bundle.rule(r)})
     checkable = bundle.checkable_rules()
-    missing = sorted(r["id"] for r in checkable if r["id"] not in set(CHECK_RULES.values()))
+    missing = sorted(r["id"] for r in checkable if r["id"] not in mapped)
 
     notes: list[str] = []
     if missing:

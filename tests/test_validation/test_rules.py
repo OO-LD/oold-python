@@ -13,9 +13,9 @@ import pytest
 from click.testing import CliRunner
 
 from oold.validation import meta_store
+from oold.validation.check_registry import rule_map
 from oold.validation.cli import main
 from oold.validation.meta_store import RULES_FILE, load_tracked
-from oold.validation.pipeline import CHECK_RULES
 
 SAMPLE_RULES = {
     "spec_version": "0.9.0",
@@ -158,7 +158,7 @@ def test_checkable_rules_exclude_implementation_advisory_and_deprecated(catalog_
 
 def test_every_mapped_rule_id_is_well_formed():
     """A typo here would make findings cite a code that resolves to nothing."""
-    for check_id, rule_id in CHECK_RULES.items():
+    for check_id, rule_id in rule_map().items():
         assert rule_id.startswith("OOLD-"), f"{check_id} maps to {rule_id!r}"
         assert len(rule_id.split("-")) == 3
 
@@ -241,7 +241,7 @@ def test_unenforced_rules_are_a_warning_not_a_failure(catalog_version, complianc
 def test_a_mapped_rule_missing_from_an_older_catalog_is_not_a_failure(catalog_version, compliance_dir):
     """A catalog predating a mapped rule is indistinguishable from a typo, so it only warns.
 
-    The sample catalog omits OOLD-RT-001, which CHECK_RULES maps to. Failing there would break
+    The sample catalog omits OOLD-RT-001, which the registry maps `lint.pattern` to. Failing there would break
     validation against any meta version older than the newest rule this package enforces.
     """
     from oold.validation import Options, run_compliance

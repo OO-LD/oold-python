@@ -271,7 +271,7 @@ def list_oold_rules(
         unenforced_only: Only checkable rules that no check enforces yet.
         offline: Never fetch over the network.
     """
-    from .pipeline import CHECK_RULES
+    from .check_registry import rule_map
 
     try:
         bundles = resolve_selection(tuple(meta) if meta else ("latest",), offline=offline)
@@ -288,7 +288,7 @@ def list_oold_rules(
             ),
         }
 
-    enforced_by = {v: k for k, v in CHECK_RULES.items()}
+    enforced_by = {v: k for k, v in rule_map().items()}
     rules = bundle.checkable_rules() if unenforced_only else bundle.rules
     if area:
         rules = [r for r in rules if r["area"].upper() == area.upper()]

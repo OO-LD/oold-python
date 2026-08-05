@@ -112,6 +112,45 @@ M = TypeVar("M", bound="LinkedBaseModel")
 _logger = logging.getLogger(__name__)
 
 
+def _iri_set(value) -> frozenset:
+    """Flatten whatever get_cls_iri() returned into a set of IRIs.
+
+    Implementations return a bare string or a list, and the list may itself
+    hold the default of the type field, which is a list again.
+    """
+    if value is None:
+        return frozenset()
+    if isinstance(value, (list, tuple, set, frozenset)):
+        out = set()
+        for item in value:
+            out |= _iri_set(item)
+        return frozenset(out)
+    return frozenset((value,))
+
+
+def _inherited_cls_iris(cls) -> frozenset:
+    """The IRIs the base classes already answer with.
+
+    get_cls_iri() is defined by the subclass hierarchy - it may read a schema
+    id, a uuid, or the default of the type field - and every one of those is
+    inherited. A class that only narrows a field therefore reports its parent's
+    IRI, and registering it would replace the parent as the model for that IRI.
+    Subtracting what the bases report leaves the identity a class introduces,
+    without assuming how any particular hierarchy spells it.
+    """
+    inherited = set()
+    for base in cls.__mro__[1:]:
+        get_iri = getattr(base, "get_cls_iri", None)
+        if get_iri is None:
+            continue
+        try:
+            inherited |= _iri_set(get_iri())
+        except Exception:
+            # a base that cannot answer states no identity of its own
+            _logger.debug("get_cls_iri() failed on %s", base, exc_info=True)
+    return frozenset(inherited)
+
+
 # pydantic v2
 class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass):
     _constructing: bool = False
@@ -136,12 +175,16 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
             iri = cls.get_cls_iri()
             if iri is not None:
                 iris = iri if isinstance(iri, list) else [iri]
-                registry = _controller_types if _is_ctrl else _types
+                # Controllers are collected in a list and never shadow a data
+                # model, so they may register under an inherited IRI. A data
+                # model replaces whatever is there, so it may only claim the
+                # IRIs it introduces itself.
+                inherited = frozenset() if _is_ctrl else _inherited_cls_iris(cls)
                 for i in iris:
                     if _is_ctrl:
-                        registry.setdefault(i, []).append(cls)
-                    else:
-                        registry[i] = cls
+                        _controller_types.setdefault(i, []).append(cls)
+                    elif i not in inherited:
+                        _types[i] = cls
         return cls
 
     # override operators, see https://docs.python.org/3/library/operator.html

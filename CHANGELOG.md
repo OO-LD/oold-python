@@ -7,6 +7,27 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.16.4 (2026-08-06)
+
+### Bug Fixes
+
+- Register a class only under the type IRIs it introduces
+  ([`7ca1b85`](https://github.com/OO-LD/oold-python/commit/7ca1b85e37ed93ca2447ececfa11dc11a2265283))
+
+### Chores
+
+- License fix
+  ([`daa8d8c`](https://github.com/OO-LD/oold-python/commit/daa8d8cfa325a3745c851c845b9fae7b5e51a0cc))
+
+### Continuous Integration
+
+- **release**: Add whats-changed notes with changelog link for zenodo
+  ([`147d70f`](https://github.com/OO-LD/oold-python/commit/147d70fbf1c5da070f3cb9055fbe96e831fe8eaa))
+
+- **release**: Update on title and authors
+  ([`996c4de`](https://github.com/OO-LD/oold-python/commit/996c4dee6b4f07b6ec994e87cb341155a12e955c))
+
+
 ## v0.16.3 (2026-07-29)
 
 ### Bug Fixes

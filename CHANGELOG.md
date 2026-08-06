@@ -7,6 +7,14 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.16.5 (2026-08-06)
+
+### Bug Fixes
+
+- **ci**: Send the pypi environment claim when publishing
+  ([`3aa8029`](https://github.com/OO-LD/oold-python/commit/3aa8029eca14183b342991ed66b2cd5194d55942))
+
+
 ## v0.16.4 (2026-08-06)
 
 ### Bug Fixes

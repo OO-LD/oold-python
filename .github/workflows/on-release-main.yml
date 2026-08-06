@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force:
+        description: >
+          Cut a release even when the commits since the last tag do not warrant
+          one. Use this to recover when a release was tagged but the publish
+          step failed, since python-semantic-release will not re-cut an
+          existing tag.
+        type: choice
+        options: [none, patch, minor]
+        default: none
 
 concurrency:
   group: release
@@ -13,6 +23,11 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    # PyPI's trusted publisher for this project is registered with the
+    # environment name "pypi", so the OIDC token must carry that claim.
+    # Without it PyPI rejects the upload with 422 invalid-publisher, which is
+    # why 0.16.3 and 0.16.4 were tagged but never published.
+    environment: pypi
     permissions:
       id-token: write   # OIDC trusted publishing to PyPI
       contents: write   # push the release commit and tag, create the GitHub release
@@ -46,12 +61,17 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FORCE: ${{ inputs.force || 'none' }}
         run: |
           before=$(git rev-parse HEAD)
           # PSR bumps files, updates CHANGELOG.md, commits and tags, but does not
           # create the GitHub release; we create it below with GitHub's generated
           # "What's Changed" notes so Zenodo shows them (no changelog duplication).
-          uv run semantic-release version --no-vcs-release
+          if [ "$FORCE" = "none" ]; then
+            uv run semantic-release version --no-vcs-release
+          else
+            uv run semantic-release version --no-vcs-release "--$FORCE"
+          fi
           after=$(git rev-parse HEAD)
           if [ "$before" != "$after" ]; then
             tag=$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -1)

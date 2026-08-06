@@ -75,9 +75,7 @@ def test_every_emitted_id_is_registered(data_dir, broken_dir, compliance_dir):
 def test_every_registered_id_is_emitted(data_dir, broken_dir, compliance_dir):
     """Catches a stale entry, and a check that silently stopped running."""
     emitted = {_normalize(c) for c in _emitted_ids(data_dir, broken_dir, compliance_dir)}
-    missing = sorted(
-        check.id for check in CHECKS if check.id not in emitted and check.id not in _ONLY_ON_FAILURE_PATHS
-    )
+    missing = sorted(check.id for check in CHECKS if check.id not in emitted and check.id not in _ONLY_ON_FAILURE_PATHS)
     assert not missing, (
         f"check_registry.CHECKS has entries the fixture corpus never produced: {missing} - either "
         "the check silently stopped running, or the entry is stale and should be removed"

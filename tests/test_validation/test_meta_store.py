@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -110,6 +111,61 @@ def test_the_vendored_files_are_stored_with_unix_line_endings():
 def test_bundle_self_check_is_clean():
     bundle = load_tracked(latest_version())
     assert bundle.self_check() == []
+
+
+def test_the_newest_version_vendors_a_schema_for_its_rule_catalogue():
+    """Without it the catalogue is data the validator trusts with nothing checking it."""
+    bundle = load_tracked(latest_version())
+    assert bundle.rules, "the newest tracked version should ship a rule catalogue"
+    assert bundle.rules_schema, "and the schema describing it, vendored from the same source"
+
+
+def test_a_damaged_catalogue_is_reported_rather_than_read_as_a_shorter_specification():
+    """The failure this schema exists for, and the reason it is not merely nice to have.
+
+    A truncated catalogue is indistinguishable from a specification that states fewer rules: the
+    checks enforcing the missing ones skip, each saying the version never stated its rule, and the
+    run passes. Every one of those messages is false. `meta.self-check` is what contradicts them.
+    """
+    bundle = load_tracked(latest_version())
+    damaged = json.loads(json.dumps(bundle.rules_document))
+    damaged["rules"] = damaged["rules"][:5]
+    damaged["rules"][0]["text_sha256"] = "deadbeef"
+
+    problems = replace(bundle, rules_document=damaged)._catalog_problems()
+    assert problems, "a corrupted catalogue passed self-check"
+    assert any("text_sha256" in p for p in problems), problems
+
+
+def test_an_unreadable_catalogue_is_reported_not_swallowed(tmp_path):
+    """Loading stays lenient so validation continues; the problem surfaces as a finding."""
+    (tmp_path / meta_store.RULES_FILE).write_text("{ not json", encoding="utf-8")
+    catalog, error = meta_store._read_rules(tmp_path)
+    assert catalog is None
+    assert error and meta_store.RULES_FILE in error
+
+
+def test_a_version_without_a_catalogue_schema_still_loads():
+    """0.7.0 and 0.8.0 predate both files. Absence is the older layout, not a defect."""
+    for version in tracked_versions():
+        bundle = load_tracked(version)
+        if bundle.rules_schema is None:
+            assert bundle.self_check() == [], f"{version} must load clean without a catalogue schema"
+
+
+def test_the_fixture_slice_records_the_release_it_came_from():
+    """The tag is data, and it belongs beside the other provenance rather than in prose.
+
+    `tests/data/oold/README.md` claimed v0.8.0 for a full release after the slice had already
+    moved to v1.0.0-rc.1, because a vendoring updated the files and not the sentence describing
+    them. A compliance fixture asserts the rules of the version that introduced it, so a slice and
+    a meta-schema from different releases produce failures that say nothing about this code.
+    """
+    fixtures = meta_store.load_index()["fixtures"]
+    assert fixtures["tag"] == f"v{tracked_versions()[-1]}", (
+        "tests/data/oold/ and the newest tracked meta-schema version must come from one release; "
+        "refresh the slice (see its README) or vendor the matching version"
+    )
 
 
 def test_bundle_exposes_the_three_documents():

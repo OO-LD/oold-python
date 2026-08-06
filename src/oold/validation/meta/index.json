@@ -43,18 +43,25 @@
       "added": "2026-08-04",
       "id_base": "https://oo-ld.org/latest/meta/",
       "prerelease": true,
-      "notes": "First version to ship oold-rules.json, the catalogue of normative statements. The three meta-schemas are verbatim from the v1.0.0-rc.1 tag; the catalogue is not yet released and comes from the oold-schema branch feat/rule-catalog-rc1 (f56818f). Refresh it from the tag once that branch is merged and a release ships it.",
+      "notes": "First version to carry oold-rules.json, the catalogue of normative statements, and oold-rules.schema.json, which describes it. The three meta-schemas are verbatim from the v1.0.0-rc.1 tag. The catalogue is provisional: no release has shipped one yet, so it comes from the oold-schema branch feat/rule-catalog-rc1 instead, and rules_source records which commit. The v1.0.0-rc.1 tag itself will never gain a catalogue, so there is nothing here to refresh from a tag. When a release does ship one, vendor that version as its own entry rather than back-filling this one.",
       "rules_source": {
         "branch": "feat/rule-catalog-rc1",
-        "commit": "f56818f",
+        "commit": "c83583d0d37de8452843e0fb86de113dea1b6b9f",
         "released": false
       },
       "sha256": {
         "oold-meta-schema.json": "cad3151c6bf0ac3e74acd46a4fee59b9287a551a9f62aa68aa7e2a718f360dbc",
         "oold-pattern-lint.schema.json": "d89fce19cd2fd42fa740d92968fcf61a1764ea25e741ed5cd4e72040a45c9a86",
         "oold-ui-meta-schema.json": "dd389d13a5e03268d4a4ff845dec7f4f28238f7edbd9fe0992399b37ac358212",
-        "oold-rules.json": "befaf98f6bb0e3e9f26c8961800a36ba996e7d669e97388b564137b390aa6da0"
+        "oold-rules.json": "cb4b8c6ba198971469095a3932e8b9d50be9448d3f0f2185e92ba76cbcbbdc3e",
+        "oold-rules.schema.json": "6fbe9914625a8f1f2ffed4a7e70bdd0f47af3e35b435e47437527cfe47593630"
       }
     }
+  },
+  "fixtures": {
+    "$comment": "Provenance of the fixture slice in tests/data/oold/, which is a copy of the upstream examples/ directory. Recorded here rather than stated in that folder's README, because a tag is data: the README claimed v0.8.0 for a full release after the slice had moved to v1.0.0-rc.1, and nothing noticed. `tag` must name the newest entry in `versions`, so that fixtures and meta-schemas always come from one release; a test asserts it. The locally authored fixtures under broken/ and remote_context/ are not part of this slice and no refresh touches them.",
+    "tag": "v1.0.0-rc.1",
+    "source": "examples/",
+    "destination": "tests/data/oold/"
   }
 }

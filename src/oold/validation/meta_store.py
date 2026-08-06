@@ -46,6 +46,13 @@ PATTERN_LINT_FILE = "oold-pattern-lint.schema.json"
 #: the run failing, which is what lets an older meta version stay usable.
 RULES_FILE = "oold-rules.json"
 
+#: The schema describing the catalog, vendored beside it from the same source and optional for the
+#: same reason. It exists because the catalog is data the validator *trusts*: an unreadable one
+#: leaves every ``rule.*`` check with nothing to attribute a finding to, and those checks then skip.
+#: A skip is the correct response to a version that never stated a rule and the wrong one to a
+#: broken file, and without this schema the two are indistinguishable.
+RULES_SCHEMA_FILE = "oold-rules.schema.json"
+
 #: Selector for the unreleased upstream state.
 REMOTE = "remote"
 LATEST = "latest"
@@ -142,6 +149,12 @@ class MetaBundle:
     registry: Registry = field(repr=False)
     #: The rule catalog for this version, empty when it predates one.
     rules: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    #: The whole catalog document, kept so :meth:`self_check` can judge it against its schema.
+    rules_document: dict[str, Any] | None = field(default=None, repr=False)
+    #: The schema describing that document, when this version vendors one.
+    rules_schema: dict[str, Any] | None = field(default=None, repr=False)
+    #: Why the catalog could not be read, when a file was there but unusable.
+    rules_error: str | None = field(default=None, repr=False)
 
     @property
     def meta(self) -> dict[str, Any]:
@@ -191,6 +204,12 @@ class MetaBundle:
         The reference harness gets this for free when ajv compiles the meta-schema
         (``validate.mjs`` line 68). Here it is explicit, so a badly curated version folder is
         reported as a failing check rather than crashing mid-run.
+
+        The rule catalog is judged too, when this version vendors the schema for it. It is not a
+        schema itself but data the validator trusts, and trusting it silently is the failure this
+        guards: a truncated catalog looks exactly like a specification that states fewer rules, so
+        the checks enforcing the missing ones stand down with a message saying the version never
+        stated them. That message would be a lie, and nothing else in the run contradicts it.
         """
         problems: list[str] = []
         for name, document in sorted(self.documents.items()):
@@ -198,7 +217,26 @@ class MetaBundle:
                 Draft202012Validator.check_schema(document)
             except SchemaError as exc:
                 problems.append(f"{name} is not a valid JSON Schema 2020-12 document: {exc.message}")
+        problems.extend(self._catalog_problems())
         return problems
+
+    def _catalog_problems(self) -> list[str]:
+        """The rule catalog's own problems: unreadable, or disagreeing with its schema."""
+        if self.rules_error:
+            return [self.rules_error]
+        if self.rules_document is None or self.rules_schema is None:
+            return []
+        try:
+            Draft202012Validator.check_schema(self.rules_schema)
+        except SchemaError as exc:
+            return [f"{RULES_SCHEMA_FILE} is not a valid JSON Schema 2020-12 document: {exc.message}"]
+        errors = sorted(Draft202012Validator(self.rules_schema).iter_errors(self.rules_document), key=str)
+        # One line per problem, located, because "the catalog is invalid" is not actionable when
+        # the file is a thousand lines of generated data.
+        return [
+            f"{RULES_FILE} violates {RULES_SCHEMA_FILE} at {'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
+            for e in errors
+        ]
 
     def declared_keywords(self) -> list[str]:
         """Every ``x-oold-*`` / ``x-oold-ui-*`` keyword the meta-schemas define.
@@ -240,19 +278,38 @@ def _build_registry(documents: dict[str, Any]) -> Registry:
     return Registry(retrieve=retrieve).with_resources(pairs)
 
 
-def _read_rules(directory: Path) -> list[dict[str, Any]]:
-    """Load the optional rule catalog from a version directory.
+def _read_rules(directory: Path) -> tuple[dict[str, Any] | None, str | None]:
+    """Load the optional rule catalog from a version directory, and any problem reading it.
 
     A malformed catalog is treated as absent rather than fatal: rule ids are an annotation on
-    findings, so losing them must never stop a schema from being validated.
+    findings, so losing them must never stop a schema from being validated. The problem is
+    returned rather than raised or swallowed, so :meth:`MetaBundle.self_check` can report it. That
+    split is the point - the run continues, but a broken catalog no longer passes for a
+    specification that happens to state nothing.
     """
     path = directory / RULES_FILE
     if not path.is_file():
-        return []
+        return None, None
     try:
-        return json.loads(path.read_text(encoding="utf-8")).get("rules", [])
+        return json.loads(path.read_text(encoding="utf-8")), None
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"{RULES_FILE} is present but unreadable, so no rule can be cited: {exc}"
+
+
+def _read_rules_schema(directory: Path) -> dict[str, Any] | None:
+    """Load the optional schema describing the catalog. Absent is not a problem in itself.
+
+    Only versions from 1.0.0-rc.1 onward vendor one, and a version with a catalog but no schema
+    is simply left unchecked rather than reported: the missing file is the older layout, not a
+    defect in this one.
+    """
+    path = directory / RULES_SCHEMA_FILE
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return []
+        return None
 
 
 def _read_documents(directory: Path, label: str) -> dict[str, Any]:
@@ -275,12 +332,16 @@ def load_tracked(version: str) -> MetaBundle:
         available = ", ".join(tracked_versions()) or "none"
         raise MetaSchemaError(f"meta-schema version {version!r} is not tracked (available: {available})")
     documents = _read_documents(directory, f"meta-schema version {version}")
+    catalog, catalog_error = _read_rules(directory)
     return MetaBundle(
         version=version,
         origin=str(directory),
         documents=documents,
         registry=_build_registry(documents),
-        rules=_read_rules(directory),
+        rules=(catalog or {}).get("rules", []),
+        rules_document=catalog,
+        rules_schema=_read_rules_schema(directory),
+        rules_error=catalog_error,
     )
 
 
@@ -342,12 +403,16 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
         # The stamp is provenance for the report, so a corrupt one must not fail the run.
         with contextlib.suppress(OSError, json.JSONDecodeError, KeyError):
             origin = f"{target} (fetched {json.loads(stamp.read_text(encoding='utf-8'))['fetched']})"
+    catalog, catalog_error = _read_rules(target)
     return MetaBundle(
         version=REMOTE,
         origin=origin,
         documents=documents,
         registry=_build_registry(documents),
-        rules=_read_rules(target),
+        rules=(catalog or {}).get("rules", []),
+        rules_document=catalog,
+        rules_schema=_read_rules_schema(target),
+        rules_error=catalog_error,
     )
 
 

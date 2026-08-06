@@ -113,7 +113,7 @@ The check id, a short description, the rule it enforces, and the predicate are w
 Use a `rule.*` check id: `lint.*`, `schema.*` and `roundtrip.*` are the checks carried over from
 the reference harness, and several of them already cite a rule.
 
-The predicate returns a list of problem strings, empty when the schema conforms. Three things
+The predicate returns a list of problem strings, empty when the schema conforms. Four things
 about it are easy to get wrong:
 
 - **Judge the resolved context, not the literal one.** `ContextView` is what the term definitions
@@ -125,9 +125,32 @@ about it are easy to get wrong:
 - **Prefer skipping to guessing.** A rule absent from the selected version's catalogue is skipped
   automatically. If a rule is only partially decidable, check the part you are sure of; a false
   positive costs far more than a missed finding, because it teaches people to ignore the output.
+- **Leave `predates_catalog` alone.** It defaults to `False`, which is right for a new rule.
+  Setting it `True` claims the requirement is older than the catalogue itself, and makes the check
+  run against 0.7.0 and 0.8.0, which ship no catalogue and never stated your rule. It is reserved
+  for the four checks carried over from the reference harness. This one fails silently in the
+  wrong direction: nothing breaks, the old versions are simply judged by a rule that postdates
+  them. `test_predates_catalog_is_exactly_what_runs_under_a_pre_catalogue_version` is the guard.
 
-Then add tests to `tests/test_validation/test_check_registry.py` - one schema that conforms and one
-that violates. A check that only ever sees valid input is not known to fire at all.
+### What the check owes in tests
+
+Unit tests in `tests/test_validation/test_check_registry.py` are the obligation: one schema that
+conforms and one that violates. A check that only ever sees valid input is not known to fire at
+all. A `rule.*` predicate is a pure function of `(schema, ContextView)`, so a test constructs the
+`ContextView` directly and there is nothing else to arrange.
+
+A fixture under `tests/data/oold/broken/` is **not** expected of a `rule.*` check, and none of the
+existing ones has one. Those fixtures exist for checks whose verdict depends on machinery a unit
+test cannot stub - `schema.meta` compiling a meta-schema, `roundtrip.generated` making a real RDF
+round trip, `context.predicates` running a real JSON-LD expansion. Add one only if your check is of
+that kind.
+
+There is a third obligation neither of those covers, and it is the one that has actually gone
+missing: **at least one schema in `tests/data/oold/` must exercise the predicate through the
+pipeline.** Isolated unit tests prove the predicate is correct, never that it is reached with a
+correctly resolved `ContextView`. If the corpus gives your check nothing to judge, it passes
+everywhere and proves nothing; extend a fixture until it does. `remote_context/Leaf.schema.json`
+carries a `required` for exactly this reason.
 
 Finally, confirm the gap actually closed:
 

@@ -1,19 +1,28 @@
 # OO-LD test fixtures
 
-A snapshot of [oold-schema](https://github.com/OO-LD/oold-schema) `examples/`, taken at tag
-**v0.8.0** - the same release the newest tracked meta-schemas in
-`src/oold/validation/meta/0.8.0/` come from.
+A snapshot of [oold-schema](https://github.com/OO-LD/oold-schema) `examples/`, taken at the release
+that `src/oold/validation/meta/index.json` records under `fixtures.tag` - always the newest version
+tracked beside it.
 
 That pairing matters. A compliance fixture asserts the lint rules of the version that introduced
 them, so combining a newer fixture set with an older meta-schema produces failures that say
 nothing about this code. Upstream's current `main` is covered instead by the opt-in parity tests
 (`tests/test_validation/test_parity_live.py`), which validate against `--meta remote`.
 
+The tag is recorded in `index.json` rather than written here on purpose. It used to be stated in
+this paragraph, and a vendoring updated the fixture files without updating the sentence describing
+them, so the README claimed v0.8.0 for a full release while the slice was v1.0.0-rc.1. Nothing
+noticed, because prose is not checked.
+`test_the_fixture_slice_records_the_release_it_came_from` now checks the recorded value.
+
 ```
-.                     examples/ from v0.8.0, plus compliance/
+.                     examples/ from the recorded tag, plus compliance/
 broken/               deliberately broken schemas: the checks must fail on these
 remote_context/       a schema whose @context chain leaves its directory
 ```
+
+Only the top level and `compliance/` are the upstream snapshot. `broken/` and `remote_context/`
+are written here, exist in no oold-schema release, and the refresh below never touches them.
 
 `remote_context/Leaf.schema.json` requires `name`, and that is deliberate: `name` is defined
 only in the remote `../Thing.schema.json`, while Leaf's own inline `@context` defines just
@@ -25,10 +34,10 @@ judging the literal context rather than the resolved one.
 ## Refreshing the snapshot
 
 When a new oold-schema version is tracked in `src/oold/validation/meta/`, refresh this slice from
-the *same tag* so the two stay in step:
+the *same tag* so the two stay in step, then record that tag as `fixtures.tag` in `index.json`:
 
 ```bash
-V=0.8.0
+V=$(uv run python -c "from oold.validation.meta_store import latest_version; print(latest_version())")
 DEST=tests/data/oold
 for f in $(git -C ../oold-schema ls-tree --name-only v$V examples/ | grep '\.json$'); do
   git -C ../oold-schema show "v$V:$f" > "$DEST/$(basename $f)"

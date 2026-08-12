@@ -79,6 +79,11 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
         ("unresolvable_context_ref.schema.json", "context.predicates", FAIL),
         ("xsd_string_coercion.schema.json", "lint.pattern", FAIL),
         ("array_without_container.schema.json", "lint.container", FAIL),
+        # These two exist because their predicates returned before evaluating anything on the
+        # rest of the corpus: no other fixture pins a `type` alongside x-oold-instance-rdf-type,
+        # and none closes its objects. Both checks passed by never running.
+        ("inline_type_disagrees.schema.json", "rule.instance-type", FAIL),
+        ("closed_object_rejects_metadata.schema.json", "rule.closed-object", FAIL),
         # lint.iri-format only ever warns, so this one does not make the report fail overall.
         ("iri_reference_without_format.schema.json", "lint.iri-format", WARN),
         # Likewise rule.base-alignment: OOLD-CMP-53bf is a SHOULD. This fixture exists because

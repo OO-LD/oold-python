@@ -1,0 +1,23 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "inline_type_disagrees.schema.json",
+  "title": "InlineTypeDisagrees",
+  "x-oold-instance-rdf-type": [
+    "ex:Person"
+  ],
+  "@context": {
+    "ex": "https://example.org/",
+    "type": "@type",
+    "name": "ex:name"
+  },
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "ex:Organization"
+    },
+    "name": {
+      "type": "string"
+    }
+  }
+}

@@ -90,6 +90,13 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
         # no other schema in the corpus declares @base, so without it the predicate is never
         # reached through the pipeline and would pass by never running.
         ("base_uri_misaligned.schema.json", "rule.base-alignment", WARN),
+        ("legacy_dialect.schema.json", "rule.dialect-version", FAIL),
+        # No other fixture composes two or more allOf/$ref members, so without this one
+        # rule.context-array-order's >= 2 branch is never reached through the pipeline.
+        ("context_array_order_mismatch.schema.json", "rule.context-array-order", FAIL),
+        # No other fixture combines x-oold-version with an absolute $id, so without this one
+        # rule.versioned-id's comparison is never reached through the pipeline.
+        ("versioned_id_missing_version.schema.json", "rule.versioned-id", WARN),
     ],
 )
 def test_each_broken_fixture_fails_the_check_it_targets(broken_dir, fixture, check_id, status):

@@ -31,6 +31,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 from .compliance import run_suite, vocabulary_coverage
+from .formats import is_iri
 from .frame import collect_composed_properties, instance_rdf_types
 from .generate import generate
 from .instance_checks import roundtrip_instance, validate_instance
@@ -49,6 +50,16 @@ _OOLD_META = re.compile(r"oold-meta-schema\.json$")
 #: A canonical, hyphenated UUID, optionally prefixed with the `urn:uuid:` scheme. Version and
 #: variant bits are not checked - the rule asks for "a UUID value", not a version 4 UUID.
 _UUID = re.compile(r"^(?:urn:uuid:)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+#: A permissive BCP 47 language tag: a 2-3 letter primary subtag, then any number of hyphenated
+#: subtags of 1-8 alphanumeric characters. Permissive on purpose: the rule only asks that a key
+#: "look like" a BCP 47 tag, and rejecting an unusual but legal subtag (script, region, variant,
+#: extension) would be a false positive.
+_BCP47_TAG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$")
+
+#: JSON Schema 2020-12's own meta-schema URI - the REQUIRED floor `rule.dialect-version` checks
+#: for, distinct from `rule.dialect` above, which additionally prefers the OO-LD dialect itself.
+_JSON_SCHEMA_2020_12 = re.compile(r"^https?://json-schema\.org/draft/2020-12/schema/?#?$")
 
 
 @dataclass
@@ -382,6 +393,101 @@ def _ref_target(node: dict[str, Any]) -> str | None:
     return None
 
 
+def _multilang_shape_invalid(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """`x-oold-multilang-title`/`x-oold-multilang-description` map BCP 47 tags to strings."""
+    problems: list[str] = []
+    for key in ("x-oold-multilang-title", "x-oold-multilang-description"):
+        value = schema.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, dict):
+            problems.append(f"{key} is {value!r}, not an object mapping language tags to strings")
+            continue
+        for tag, text in value.items():
+            if not _BCP47_TAG.match(tag):
+                problems.append(f"{key} has key {tag!r}, which does not look like a BCP 47 language tag")
+            if not isinstance(text, str):
+                problems.append(f"{key}[{tag!r}] is {text!r}, not a string")
+    return problems
+
+
+def _dialect_not_2020_12(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """A declared `$schema` must be 2020-12-based: the REQUIRED floor, not merely preferred.
+
+    Distinct from `rule.dialect` (OOLD-EXT-5184), a SHOULD that a schema declare the *OO-LD*
+    dialect specifically. This one checks the REQUIRED floor underneath it: whatever dialect is
+    declared must be JSON Schema 2020-12 itself, or the OO-LD dialect meta-schema (which is built
+    on 2020-12). Skipped when `$schema` is absent - `rule.dialect` already reports that absence,
+    and guessing a dialect here would double-report the same schema.
+    """
+    declared = schema.get("$schema")
+    if not isinstance(declared, str) or not declared:
+        return []
+    if _OOLD_META.search(declared) or _JSON_SCHEMA_2020_12.match(declared):
+        return []
+    return [f"$schema is {declared!r}, which is not JSON Schema 2020-12 or the OO-LD dialect meta-schema"]
+
+
+def _context_array_order_mismatched(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """`allOf`'s `$ref` targets must appear in `@context`, as an array, in the same order.
+
+    Deliberate exception to "judge the resolved context" (see CLAUDE.md): this rule is about
+    whether the schema *as authored* stays directly usable as a remote `@context` without further
+    processing, which is a statement about its own array and the order of its own entries, not
+    about what a term means once resolution and inheritance are applied. So, on purpose, this
+    predicate reads `schema["@context"]` and `schema["allOf"]` literally rather than taking the
+    resolved `ContextView`.
+    """
+    allof = schema.get("allOf")
+    if not isinstance(allof, list):
+        return []
+    targets = [entry["$ref"] for entry in allof if isinstance(entry, dict) and isinstance(entry.get("$ref"), str)]
+    if len(targets) < 2:
+        return []
+
+    literal_context = schema.get("@context")
+    if not isinstance(literal_context, list):
+        return [
+            f"allOf composes {len(targets)} remote contexts via $ref ({', '.join(targets)}) but "
+            "@context is not an array, so this schema is not directly usable as a context"
+        ]
+
+    missing = [target for target in targets if target not in literal_context]
+    if missing:
+        return [f"@context does not list {target!r}, which allOf composes as a remote context" for target in missing]
+
+    positions = [literal_context.index(target) for target in targets]
+    if positions != sorted(positions):
+        return [
+            f"@context lists the allOf targets {targets!r} out of order (found at positions "
+            f"{positions!r}); they must appear in the same order as the allOf members"
+        ]
+    return []
+
+
+def _version_not_in_schema_location(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """`x-oold-version` should be part of the schema's location URL: OOLD-VER-534a.
+
+    The catalogued `text` for this rule is a truncated lead-in ("The version SHOULD be part of
+    the schema's location:") whose list of URL forms was cut off upstream, so this predicate is
+    written against the rule's `summary` instead, which states the intent completely: the schema
+    version should be part of the schema location URL.
+
+    Only judged when both `x-oold-version` and an absolute `$id` are present: `rule.version` and
+    `rule.id` already cover their absence, and a relative `$id` names no location to carry a
+    version.
+    """
+    version = schema.get("x-oold-version")
+    identifier = schema.get("$id")
+    if not isinstance(version, str) or not version:
+        return []
+    if not isinstance(identifier, str) or not is_iri(identifier):
+        return []
+    if version in identifier:
+        return []
+    return [f"x-oold-version {version!r} does not appear in the absolute $id {identifier!r}"]
+
+
 # ---------------------------------------------------------------------------- the registry
 
 
@@ -648,6 +754,34 @@ CHECKS: tuple[CheckInfo, ...] = (
         rule="OOLD-CMP-5266",
         per_version=True,
         run=_embedded_ref_missing_scoped_context,
+    ),
+    CheckInfo(
+        "rule.multilang-shape",
+        "x-oold-multilang-title/description map BCP 47 language tags to translated strings",
+        rule="OOLD-EXT-ef09",
+        per_version=True,
+        run=_multilang_shape_invalid,
+    ),
+    CheckInfo(
+        "rule.dialect-version",
+        "a declared $schema is JSON Schema 2020-12 or the OO-LD dialect built on it",
+        rule="OOLD-EXT-af50",
+        per_version=True,
+        run=_dialect_not_2020_12,
+    ),
+    CheckInfo(
+        "rule.context-array-order",
+        "allOf's $ref targets appear in @context, as an array, in the same order",
+        rule="OOLD-CMP-e4a3",
+        per_version=True,
+        run=_context_array_order_mismatched,
+    ),
+    CheckInfo(
+        "rule.versioned-id",
+        "x-oold-version is part of an absolute $id",
+        rule="OOLD-VER-534a",
+        per_version=True,
+        run=_version_not_in_schema_location,
     ),
 )
 

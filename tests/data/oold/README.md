@@ -65,3 +65,6 @@ Each one exists to prove a specific check fires, rather than only that valid inp
 | `closed_object_rejects_metadata` | `rule.closed-object` - `additionalProperties: false` without declaring `$schema` and `@context` |
 | `iri_reference_without_format` | `lint.iri-format` (warns, does not fail) - a bare-IRI-string reference with no `iri-reference`/`uri*` format |
 | `base_uri_misaligned` | `rule.base-alignment` (warns, does not fail) - an `@base` that resolves a relative reference somewhere other than `$id` does |
+| `legacy_dialect` | `rule.dialect-version` - `$schema` names `draft-07`, not a 2020-12-based dialect |
+| `context_array_order_mismatch` | `rule.context-array-order` - `@context` lists two `allOf`-composed remote contexts out of order |
+| `versioned_id_missing_version` | `rule.versioned-id` (warns, does not fail) - `x-oold-version` does not appear in an absolute `$id` |

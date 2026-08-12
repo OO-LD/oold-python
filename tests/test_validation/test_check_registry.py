@@ -324,6 +324,100 @@ def test_a_scalar_range_reference_is_not_flagged():
     assert outcome("rule.scoped-context", schema, context) == "ok"
 
 
+# ------------------------------------------------------------------ OOLD-EXT-ef09
+
+
+def test_multilang_shape_must_be_bcp47_keys_with_string_values():
+    assert outcome("rule.multilang-shape", {"x-oold-multilang-title": {"en": "Person", "de": "Person"}}) == "ok"
+    assert outcome("rule.multilang-shape", {"x-oold-multilang-title": "Person"}) == "fail"
+    assert outcome("rule.multilang-shape", {"x-oold-multilang-description": {"???": "text"}}) == "fail"
+    assert outcome("rule.multilang-shape", {"x-oold-multilang-title": {"en": 1}}) == "fail"
+
+
+def test_multilang_shape_accepts_a_regional_subtag():
+    """`en-GB` is a legal, non-two-letter-only BCP 47 tag."""
+    assert outcome("rule.multilang-shape", {"x-oold-multilang-title": {"en-GB": "Colour"}}) == "ok"
+
+
+def test_a_schema_using_neither_multilang_keyword_is_not_judged_by_shape():
+    assert outcome("rule.multilang-shape", {}) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-EXT-af50
+
+
+def test_dialect_version_requires_2020_12_or_the_oold_dialect():
+    assert outcome("rule.dialect-version", {"$schema": "http://json-schema.org/draft-07/schema#"}) == "fail"
+    assert outcome("rule.dialect-version", {"$schema": "https://json-schema.org/draft/2020-12/schema"}) == "ok"
+    assert outcome("rule.dialect-version", {"$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json"}) == "ok"
+
+
+def test_dialect_version_is_not_judged_when_schema_is_absent():
+    """`rule.dialect` already reports the absence; judging it here too would double-report."""
+    assert outcome("rule.dialect-version", {}) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-CMP-e4a3
+
+
+def test_context_array_order_must_match_allof():
+    schema = {
+        "allOf": [{"$ref": "Thing.schema.json"}, {"$ref": "Person.schema.json"}],
+        "@context": ["Thing.schema.json", "Person.schema.json"],
+    }
+    assert outcome("rule.context-array-order", schema) == "ok"
+
+
+def test_context_array_order_flags_a_reordered_context():
+    schema = {
+        "allOf": [{"$ref": "Thing.schema.json"}, {"$ref": "Person.schema.json"}],
+        "@context": ["Person.schema.json", "Thing.schema.json"],
+    }
+    assert outcome("rule.context-array-order", schema) == "fail"
+    assert "out of order" in message("rule.context-array-order", schema)
+
+
+def test_context_array_order_flags_a_non_array_context():
+    schema = {
+        "allOf": [{"$ref": "Thing.schema.json"}, {"$ref": "Person.schema.json"}],
+        "@context": {"ex": "https://example.org/"},
+    }
+    assert outcome("rule.context-array-order", schema) == "fail"
+    assert "not an array" in message("rule.context-array-order", schema)
+
+
+def test_context_array_order_flags_a_missing_target():
+    schema = {
+        "allOf": [{"$ref": "Thing.schema.json"}, {"$ref": "Person.schema.json"}],
+        "@context": ["Thing.schema.json"],
+    }
+    assert outcome("rule.context-array-order", schema) == "fail"
+    assert "Person.schema.json" in message("rule.context-array-order", schema)
+
+
+def test_context_array_order_is_not_judged_with_fewer_than_two_refs():
+    schema = {"allOf": [{"$ref": "Thing.schema.json"}], "@context": {"ex": "https://example.org/"}}
+    assert outcome("rule.context-array-order", schema) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-VER-534a
+
+
+def test_versioned_id_should_appear_in_an_absolute_id():
+    conforming = {"x-oold-version": "1.0.0", "$id": "https://example.org/schemas/1.0.0/Person.schema.json"}
+    assert outcome("rule.versioned-id", conforming) == "ok"
+
+    violating = {"x-oold-version": "1.0.0", "$id": "https://example.org/schemas/Person.schema.json"}
+    assert outcome("rule.versioned-id", violating) == "warn"
+    assert "1.0.0" in message("rule.versioned-id", violating)
+
+
+def test_versioned_id_is_not_judged_without_both_a_version_and_an_absolute_id():
+    assert outcome("rule.versioned-id", {}) == "ok"
+    assert outcome("rule.versioned-id", {"x-oold-version": "1.0.0"}) == "ok"
+    assert outcome("rule.versioned-id", {"x-oold-version": "1.0.0", "$id": "Person.schema.json"}) == "ok"
+
+
 # ------------------------------------------------------------------ against the real corpus
 
 

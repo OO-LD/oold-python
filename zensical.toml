@@ -92,26 +92,100 @@ link = "https://github.com/OO-LD/oold-python"
 icon = "fontawesome/brands/python"
 link = "https://pypi.org/project/oold"
 
-[project.markdown_extensions.attr_list]
+# ===========================================================================
+# BEGIN Zensical defaults - restated, not project choices
+#
+# Zensical enables a set of Markdown extensions out of the box, but a project
+# that declares ANY markdown_extensions REPLACES that set instead of extending
+# it: zensical/config.py reads them via
+#     config.get("markdown_extensions", DEFAULT_MARKDOWN_EXTENSIONS)
+# which is a fallback, not a merge. Every default left out here is therefore
+# silently switched off, with no warning and no build failure - the extension
+# just stops applying. That is how the `!!! note` / `!!! tip` admonitions in
+# how-to/backends.md, how-to/codegen.md, how-to/object-graph-mapping.md and
+# how-to/rdf-export.md ended up published as literal text.
+#
+# The entries below reproduce the Markdown extension defaults of the "zensical"
+# dev dependency pinned in pyproject.toml, so the effective set is visible in
+# one file rather than hiding behind a fallback. scripts/check_markdown_extensions.py
+# (run via `make check-extensions`) compares this block against the installed
+# Zensical's DEFAULT_MARKDOWN_EXTENSIONS and fails the build if they drift, so
+# upgrading zensical cannot change the effective set unnoticed.
+#
+# This project has no deviations from those defaults: a bare pymdownx.arithmatex,
+# a pymdownx.tabbed missing combine_header_slug, and an explicit "format" on the
+# mermaid fence used to differ from the default without a stated reason, and
+# none of them turned out to be needed (the mermaid fence's "format" defaults to
+# the exact same function - pymdownx.superfences.fence_code_format - when left
+# unset, see pymdownx/superfences.py). They were restored to match the default
+# rather than kept as unexplained overrides. See the note next to
+# pymdownx.smartsymbols below for the one entry that got deliberate thought
+# rather than a blanket restore.
+# ===========================================================================
 
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
 [project.markdown_extensions.md_in_html]
+[project.markdown_extensions.pymdownx.betterem]
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.magiclink]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.tilde]
+
+# Zensical enables this by default. It silently rewrites sequences such as
+# (c), (r), (tm), +/-, -->, <--, =/= and fractions like 1/2 wherever they
+# appear in prose - a sibling OO-LD project found it turning the "(c)" of an
+# (a)/(b)/(c) enumeration into a copyright sign. docs/ here were checked for
+# those sequences outside code fences: the only matches are the "-->" arrows
+# of Mermaid diagrams, all inside ```mermaid fences in architecture.md, which
+# smartsymbols never touches (fenced code content is not run through inline
+# extensions). With no prose depending on a literal (c)/(r)/1/2/etc. found,
+# this stays enabled as shipped. If that changes, move this table above the
+# "END Zensical defaults" marker with a comment, and add it to
+# INTENTIONALLY_DISABLED in scripts/check_markdown_extensions.py.
+[project.markdown_extensions.pymdownx.smartsymbols]
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
 
 [project.markdown_extensions.pymdownx.emoji]
 emoji_generator = "zensical.extensions.emoji.to_svg"
 emoji_index = "zensical.extensions.emoji.twemoji"
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
 
 [project.markdown_extensions.pymdownx.superfences]
 
 [[project.markdown_extensions.pymdownx.superfences.custom_fences]]
 name = "mermaid"
 class = "mermaid"
-format = "pymdownx.superfences.fence_code_format"
 
 [project.markdown_extensions.pymdownx.tabbed]
 alternate_style = true
+combine_header_slug = true
 
-[project.markdown_extensions.pymdownx.arithmatex]
-generic = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
 
 [project.markdown_extensions.toc]
 permalink = true
+
+# ===========================================================================
+# END Zensical defaults
+# ===========================================================================
+
+# No project-specific extensions or overrides at the moment: everything this
+# project needs turned out to already be a Zensical default. If a genuine
+# override or addition becomes necessary, add it here and record it in
+# scripts/check_markdown_extensions.py's INTENTIONAL_OVERRIDES or
+# PROJECT_ADDITIONS so the guard keeps checking it deliberately instead of
+# flagging it as drift.

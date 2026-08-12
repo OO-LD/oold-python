@@ -90,6 +90,12 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
+      # A project that declares any markdown_extensions replaces Zensical's defaults
+      # rather than extending them, so a missing one silently switches an extension
+      # off without failing the build below. Catch that before it does.
+      - name: Check the restated Markdown extensions match Zensical's defaults
+        run: uv run python scripts/check_markdown_extensions.py
+
       - name: Check if documentation can be built
         run: uv run zensical build -s
 

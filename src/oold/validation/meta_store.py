@@ -168,7 +168,7 @@ class MetaBundle:
         """Look up one rule, or None when this version ships no catalog or lacks the id."""
         return next((r for r in self.rules if r["id"] == rule_id), None)
 
-    def checkable_rules(self) -> list[dict[str, Any]]:
+    def machine_checkable_rules(self) -> list[dict[str, Any]]:
         """Rules a validator can enforce by inspecting a document.
 
         `implementation` rules constrain a library rather than a document, and `advisory` ones
@@ -177,7 +177,7 @@ class MetaBundle:
         return [
             r
             for r in self.rules
-            if r.get("checkable") and r.get("applies_to") == "document" and not r.get("deprecated")
+            if r.get("machine_checkable") and r.get("applies_to") == "document" and not r.get("deprecated")
         ]
 
     @property

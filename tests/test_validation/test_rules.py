@@ -21,38 +21,38 @@ SAMPLE_RULES = {
     "spec_version": "0.9.0",
     "rules": [
         {
-            "id": "OOLD-RT-002",
+            "id": "OOLD-RT-08f2",
             "area": "RT",
             "level": "MUST",
             "applies_to": "document",
             "section": "round-trip",
             "summary": "A strictly array-typed property must declare @container @set or @list.",
             "text": "Because the reconstruction MUST re-validate, a property that is strictly an array MUST declare @container.",
-            "checkable": True,
+            "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": False,
         },
         {
-            "id": "OOLD-INS-003",
+            "id": "OOLD-INS-7cd1",
             "area": "INS",
             "level": "MUST",
             "applies_to": "implementation",
             "section": "identity",
             "summary": "An exported identifiable entity must carry an IRI.",
             "text": "When it exports an identifiable entity it MUST assign an @id.",
-            "checkable": False,
+            "machine_checkable": False,
             "since": "0.8.0",
             "deprecated": False,
         },
         {
-            "id": "OOLD-VER-001",
+            "id": "OOLD-VER-3b96",
             "area": "VER",
             "level": "MUST",
             "applies_to": "document",
             "section": "identification",
             "summary": "A schema must have a $id.",
             "text": "OO-LD schemas MUST have a $id.",
-            "checkable": True,
+            "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": False,
         },
@@ -60,29 +60,29 @@ SAMPLE_RULES = {
             # Nothing enforces @propagate, so this is the sample's coverage gap. It must stay
             # unenforced for the coverage tests to mean anything; if a check is ever written for
             # it, swap in another unenforced rule rather than deleting the assertions.
-            "id": "OOLD-CMP-004",
+            "id": "OOLD-CMP-9a44",
             "area": "CMP",
             "level": "MUST",
             "applies_to": "document",
             "section": "merge-and-override-model",
             "summary": "A scoped context that must apply only to the immediate node sets @propagate false.",
             "text": "The schema MUST set @propagate false on that scoped context.",
-            "checkable": True,
+            "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": False,
         },
         {
-            "id": "OOLD-RT-009",
+            "id": "OOLD-RT-4f18",
             "area": "RT",
             "level": "MUST",
             "applies_to": "document",
             "section": "round-trip",
             "summary": "A retired rule.",
             "text": "This rule MUST no longer be applied.",
-            "checkable": True,
+            "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": True,
-            "superseded_by": ["OOLD-RT-002"],
+            "superseded_by": ["OOLD-RT-08f2"],
         },
     ],
 }
@@ -127,14 +127,14 @@ def test_a_version_without_a_catalog_still_loads():
     for version in WITHOUT_CATALOG:
         bundle = load_tracked(version)
         assert bundle.rules == []
-        assert bundle.rule("OOLD-RT-002") is None
+        assert bundle.rule("OOLD-RT-08f2") is None
         assert bundle.meta_validator().is_valid({"type": "object"}), "still usable"
 
 
 def test_catalog_is_loaded_when_present(catalog_version):
     bundle = load_tracked(catalog_version)
     assert bundle.has_rules
-    assert bundle.rule("OOLD-RT-002")["level"] == "MUST"
+    assert bundle.rule("OOLD-RT-08f2")["level"] == "MUST"
     assert bundle.rule("OOLD-NOPE-001") is None
 
 
@@ -147,10 +147,10 @@ def test_a_malformed_catalog_is_treated_as_absent(catalog_version, tmp_path):
 
 
 def test_checkable_rules_exclude_implementation_advisory_and_deprecated(catalog_version):
-    ids = [r["id"] for r in load_tracked(catalog_version).checkable_rules()]
-    assert ids == ["OOLD-RT-002", "OOLD-VER-001", "OOLD-CMP-004"]
-    assert "OOLD-INS-003" not in ids, "an implementation rule is not checkable by a validator"
-    assert "OOLD-RT-009" not in ids, "a deprecated rule is not counted"
+    ids = [r["id"] for r in load_tracked(catalog_version).machine_checkable_rules()]
+    assert ids == ["OOLD-RT-08f2", "OOLD-VER-3b96", "OOLD-CMP-9a44"]
+    assert "OOLD-INS-7cd1" not in ids, "an implementation rule is not checkable by a validator"
+    assert "OOLD-RT-4f18" not in ids, "a deprecated rule is not counted"
 
 
 # ------------------------------------------------------------------ mapping
@@ -199,7 +199,7 @@ def test_findings_cite_a_rule_when_the_catalog_has_it(catalog_version, broken_di
         Options(meta=(catalog_version,), offline=True),
     )
     container = next(c for c in report.checks if c.id == "lint.container")
-    assert container.rule == "OOLD-RT-002"
+    assert container.rule == "OOLD-RT-08f2"
     # lint.pattern maps to a rule this sample catalog does not contain, so it stays uncited
     # rather than quoting a dangling code.
     assert next(c for c in report.checks if c.id == "lint.pattern").rule is None
@@ -214,7 +214,7 @@ def test_rule_appears_in_the_serialised_report(catalog_version, broken_dir):
     )
     payload = report.to_dict("summary")
     cited = [c for c in payload["checks"] if c.get("rule")]
-    assert any(c["rule"] == "OOLD-RT-002" for c in cited)
+    assert any(c["rule"] == "OOLD-RT-08f2" for c in cited)
 
 
 # ------------------------------------------------------------------ coverage
@@ -235,13 +235,13 @@ def test_unenforced_rules_are_a_warning_not_a_failure(catalog_version, complianc
     report = run_compliance(compliance_dir, Options(meta=(catalog_version,), offline=True))
     coverage = next(c for c in report.checks if c.id == "coverage.rules")
     assert coverage.status == "warn"
-    assert "OOLD-CMP-004" in coverage.detail["unenforced"]
+    assert "OOLD-CMP-9a44" in coverage.detail["unenforced"]
 
 
 def test_a_mapped_rule_missing_from_an_older_catalog_is_not_a_failure(catalog_version, compliance_dir):
     """A catalog predating a mapped rule is indistinguishable from a typo, so it only warns.
 
-    The sample catalog omits OOLD-RT-001, which the registry maps `lint.pattern` to. Failing there would break
+    The sample catalog omits OOLD-RT-d9bd, which the registry maps `lint.pattern` to. Failing there would break
     validation against any meta version older than the newest rule this package enforces.
     """
     from oold.validation import Options, run_compliance
@@ -249,7 +249,7 @@ def test_a_mapped_rule_missing_from_an_older_catalog_is_not_a_failure(catalog_ve
     report = run_compliance(compliance_dir, Options(meta=(catalog_version,), offline=True))
     coverage = next(c for c in report.checks if c.id == "coverage.rules")
     assert coverage.status == "warn"
-    assert "OOLD-RT-001" in coverage.detail["unknown"]
+    assert "OOLD-RT-d9bd" in coverage.detail["unknown"]
     assert report.passed, "an older catalog must not fail the run"
 
 
@@ -265,33 +265,33 @@ def run():
 def test_rules_list(run, catalog_version):
     result = run("rules", "list", "--meta", catalog_version)
     assert result.exit_code == 0
-    assert "OOLD-RT-002" in result.output
+    assert "OOLD-RT-08f2" in result.output
     assert "lint.container" in result.output, "the enforcing check is shown"
 
 
 def test_rules_list_filters_by_area(run, catalog_version):
     out = run("rules", "list", "--meta", catalog_version, "--area", "VER").output
-    assert "OOLD-VER-001" in out
-    assert "OOLD-RT-002" not in out
+    assert "OOLD-VER-3b96" in out
+    assert "OOLD-RT-08f2" not in out
 
 
 def test_rules_list_unchecked_shows_the_gap(run, catalog_version):
     out = run("rules", "list", "--meta", catalog_version, "--unchecked").output
-    assert "OOLD-CMP-004" in out, "no check enforces @propagate"
-    assert "OOLD-RT-002" not in out, "lint.container enforces it"
-    assert "OOLD-VER-001" not in out, "rule.id enforces it"
+    assert "OOLD-CMP-9a44" in out, "no check enforces @propagate"
+    assert "OOLD-RT-08f2" not in out, "lint.container enforces it"
+    assert "OOLD-VER-3b96" not in out, "rule.id enforces it"
 
 
 def test_rules_explain(run, catalog_version):
-    out = run("rules", "explain", "OOLD-RT-002", "--meta", catalog_version).output
+    out = run("rules", "explain", "OOLD-RT-08f2", "--meta", catalog_version).output
     assert "MUST" in out
     assert "enforced by lint.container" in out
-    assert "#rule-OOLD-RT-002" in out
+    assert "#rule-OOLD-RT-08f2" in out
     assert "MUST re-validate" in out, "the specification text is shown"
 
 
 def test_rules_explain_is_case_insensitive(run, catalog_version):
-    assert run("rules", "explain", "oold-rt-002", "--meta", catalog_version).exit_code == 0
+    assert run("rules", "explain", "oold-rt-08f2", "--meta", catalog_version).exit_code == 0
 
 
 def test_rules_explain_unknown_id_suggests_listing(run, catalog_version):

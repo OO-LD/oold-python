@@ -235,7 +235,7 @@ def rules_group() -> None:
 @click.option(
     "--unchecked",
     is_flag=True,
-    help="Only checkable rules that no check enforces yet, which is the coverage gap.",
+    help="Only machine-checkable rules that no check enforces yet, which is the coverage gap.",
 )
 @_json_option
 def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: bool) -> None:
@@ -248,7 +248,7 @@ def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: 
         rules = [r for r in rules if r["area"].upper() == area.upper()]
     if unchecked:
         enforced = set(rule_map().values())
-        rules = [r for r in bundle.checkable_rules() if r["id"] not in enforced]
+        rules = [r for r in bundle.machine_checkable_rules() if r["id"] not in enforced]
 
     if as_json:
         click.echo(json.dumps(rules, indent=2))
@@ -279,7 +279,10 @@ def rules_explain(rule_id: str, meta, offline: bool, as_json: bool) -> None:
     from .check_registry import rule_map
 
     bundle = _rules_bundle(meta, offline)
-    rule = bundle.rule(rule_id.upper())
+    # Case-insensitive by comparing both sides upper, rather than upper-casing rule_id alone:
+    # ids now mint a lowercase hex suffix (OOLD-RT-08f2), so `.upper()` on the query alone would
+    # no longer match the catalogue's own casing.
+    rule = next((r for r in bundle.rules if r["id"].upper() == rule_id.upper()), None)
     if rule is None:
         raise click.ClickException(
             f"{rule_id} is not in the catalog for meta-schema {bundle.version}. "
@@ -296,7 +299,7 @@ def rules_explain(rule_id: str, meta, offline: bool, as_json: bool) -> None:
     click.echo(f"  area       {rule['area']}")
     click.echo(f"  applies to {rule['applies_to']}")
     click.echo(
-        f"  checkable  {rule['checkable']}"
+        f"  machine-checkable  {rule['machine_checkable']}"
         + (f" (enforced by {enforced_by[rule['id']]})" if rule["id"] in enforced_by else "")
     )
     click.echo(f"  since      {rule['since']}")
@@ -331,7 +334,7 @@ def checks_group() -> None:
     """Look up the checks this validator can run.
 
     Check ids (``lint.container``, ``rule.id-fragment``) name which check produced a finding;
-    rule ids (``OOLD-RT-002``, see ``oold rules``) name the specification requirement it
+    rule ids (``OOLD-RT-08f2``, see ``oold rules``) name the specification requirement it
     enforces, when it enforces one at all. The two are not peers: see
     ``specs/2026-08-04-check-registry-design.md`` for why.
     """

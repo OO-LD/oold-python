@@ -703,12 +703,12 @@ def run_compliance(path: str | Path, options: Options | None = None) -> Report:
 
 
 def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
-    """Report which checkable rules this validator actually enforces.
+    """Report which machine-checkable rules this validator actually enforces.
 
     Both directions are reported as a warning rather than a failure, for different reasons.
 
-    An unenforced checkable rule is the gap the catalog exists to expose; failing on it would
-    block every run on requirements nobody has implemented a check for yet.
+    An unenforced machine-checkable rule is the gap the catalog exists to expose; failing on it
+    would block every run on requirements nobody has implemented a check for yet.
 
     A mapped id the catalog does not contain looks like a dangling reference, but it is
     ambiguous: it is equally what a *older* meta version looks like, one minted before that rule
@@ -728,12 +728,12 @@ def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
 
     mapped = set(rule_map().values())
     unknown = sorted({r for r in mapped if not bundle.rule(r)})
-    checkable = bundle.checkable_rules()
+    checkable = bundle.machine_checkable_rules()
     missing = sorted(r["id"] for r in checkable if r["id"] not in mapped)
 
     notes: list[str] = []
     if missing:
-        notes.append(f"{len(missing)}/{len(checkable)} checkable rule(s) have no check: " + ", ".join(missing))
+        notes.append(f"{len(missing)}/{len(checkable)} machine-checkable rule(s) have no check: " + ", ".join(missing))
     if unknown:
         notes.append(
             f"{len(unknown)} mapped rule id(s) absent from this catalog (newer than "
@@ -754,6 +754,6 @@ def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
             "coverage.rules",
             target,
             OK,
-            f"all {len(checkable)} checkable rules are enforced",
+            f"all {len(checkable)} machine-checkable rules are enforced",
             meta_version=bundle.version,
         )

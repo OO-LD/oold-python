@@ -29,7 +29,7 @@ but that is the rarer case.
 
 ### Rules come from the specification, not from this code
 
-The OO-LD spec numbers its normative statements (`OOLD-RT-002`) and publishes them as
+The OO-LD spec numbers its normative statements (`OOLD-RT-08f2`) and publishes them as
 `oold-rules.json`, vendored per version under `src/oold/validation/meta/<version>/`. Three
 consequences that are easy to get wrong:
 

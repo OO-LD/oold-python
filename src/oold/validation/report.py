@@ -40,7 +40,7 @@ class Check:
     message: str = ""
     detail: dict[str, Any] = field(default_factory=dict)
     meta_version: str | None = None
-    #: The normative rule this check enforces, e.g. ``OOLD-RT-002``. None when the check maps to
+    #: The normative rule this check enforces, e.g. ``OOLD-RT-08f2``. None when the check maps to
     #: no single requirement, or when the meta version in use predates the rule catalog.
     rule: str | None = None
 

@@ -50,14 +50,14 @@ def test_severity_is_read_from_the_specification_not_hardcoded():
     Nothing in this package repeats the level, so upstream relaxing a MUST changes the outcome
     with no code change here.
     """
-    assert severity(CATALOG["OOLD-VER-001"]) == "fail", "OOLD-VER-001 is a MUST"
-    assert severity(CATALOG["OOLD-VER-002"]) == "warn", "OOLD-VER-002 is a SHOULD"
-    assert severity(CATALOG["OOLD-RT-001"]) == "fail", "MUST NOT is also a failure"
+    assert severity(CATALOG["OOLD-VER-3b96"]) == "fail", "OOLD-VER-3b96 is a MUST"
+    assert severity(CATALOG["OOLD-VER-3662"]) == "warn", "OOLD-VER-3662 is a SHOULD"
+    assert severity(CATALOG["OOLD-RT-d9bd"]) == "fail", "MUST NOT is also a failure"
 
 
 def test_a_rule_absent_from_the_catalogue_is_skipped():
     """A version that never stated a requirement must not be judged against it."""
-    without = {k: v for k, v in CATALOG.items() if k != "OOLD-VER-001"}
+    without = {k: v for k, v in CATALOG.items() if k != "OOLD-VER-3b96"}
     findings = {f.check_id: f for f in run_rule_checks({}, ContextView(), without)}
     assert findings["rule.id"].status == "skip"
     assert "not stated" in findings["rule.id"].message
@@ -65,14 +65,14 @@ def test_a_rule_absent_from_the_catalogue_is_skipped():
 
 def test_a_deprecated_rule_is_skipped():
     retired = dict(CATALOG)
-    retired["OOLD-VER-001"] = {**retired["OOLD-VER-001"], "deprecated": True, "superseded_by": ["OOLD-VER-009"]}
+    retired["OOLD-VER-3b96"] = {**retired["OOLD-VER-3b96"], "deprecated": True, "superseded_by": ["OOLD-VER-0009"]}
     findings = {f.check_id: f for f in run_rule_checks({}, ContextView(), retired)}
     assert findings["rule.id"].status == "skip"
     assert "deprecated" in findings["rule.id"].message
-    assert "OOLD-VER-009" in findings["rule.id"].message
+    assert "OOLD-VER-0009" in findings["rule.id"].message
 
 
-# ------------------------------------------------------------------ OOLD-VER-001 / CMP-005
+# ------------------------------------------------------------------ OOLD-VER-3b96 / CMP-dd2b
 
 
 def test_missing_id_is_reported():
@@ -87,7 +87,7 @@ def test_id_fragment():
     assert outcome("rule.id-fragment", {"$id": "https://example.org/T.json#"}) == "ok"
 
 
-# ------------------------------------------------------------------ OOLD-EXT-005
+# ------------------------------------------------------------------ OOLD-EXT-3fe9
 
 
 def test_range_must_use_x_oold_ref_not_ref():
@@ -108,7 +108,7 @@ def test_a_ref_outside_a_range_is_not_flagged():
     assert outcome("rule.range-ref", schema) == "ok"
 
 
-# ------------------------------------------------------------------ OOLD-INS-002
+# ------------------------------------------------------------------ OOLD-INS-4b5c
 
 
 def test_pinned_type_must_agree_with_the_declared_rdf_type():
@@ -137,7 +137,7 @@ def test_inherited_rdf_type_is_used():
     assert outcome("rule.instance-type", schema) == "fail"
 
 
-# ------------------------------------------------------------------ OOLD-INS-009
+# ------------------------------------------------------------------ OOLD-INS-2e5d
 
 
 def test_free_text_range_must_not_be_coerced_to_iri():
@@ -167,7 +167,7 @@ def test_an_iri_branch_is_not_mistaken_for_free_text():
     assert outcome("rule.free-text-iri", schema, context) == "ok"
 
 
-# ------------------------------------------------------------------ OOLD-INS-005
+# ------------------------------------------------------------------ OOLD-INS-ba9e
 
 
 def test_a_closed_object_must_permit_schema_and_context():
@@ -229,6 +229,99 @@ def test_processing_mode_uses_the_resolved_context():
 def test_processing_mode_rejects_the_string_form():
     """`"1.1"` is a string; JSON-LD requires the number."""
     assert outcome("rule.processing-mode", {}, ContextView(entries=[{"@version": "1.1"}])) == "warn"
+
+
+# ------------------------------------------------------------------ OOLD-VER-edb9
+
+
+def test_uuid_annotation_must_be_present_and_valid():
+    assert outcome("rule.uuid", {}) == "warn"
+    assert outcome("rule.uuid", {"x-oold-uuid": "not-a-uuid"}) == "warn"
+    assert outcome("rule.uuid", {"x-oold-uuid": "b5203131-7321-46bb-8a11-acb3d1015840"}) == "ok"
+
+
+def test_uuid_annotation_accepts_the_urn_prefix():
+    """`urn:uuid:...` is a legitimate way to write a UUID value."""
+    assert outcome("rule.uuid", {"x-oold-uuid": "urn:uuid:b5203131-7321-46bb-8a11-acb3d1015840"}) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-EXT-dd76
+
+
+def test_multilang_keyword_needs_its_plain_default():
+    assert outcome("rule.multilang-default", {"x-oold-multilang-title": {"en": "Person"}}) == "warn"
+    assert outcome("rule.multilang-default", {"x-oold-multilang-description": {"en": "..."}}) == "warn"
+    conforming = {"x-oold-multilang-title": {"en": "Person"}, "title": "Person"}
+    assert outcome("rule.multilang-default", conforming) == "ok"
+
+
+def test_a_schema_using_neither_multilang_keyword_is_not_judged():
+    """The word "still" in the rule scopes it to schemas that use the multilingual keywords."""
+    assert outcome("rule.multilang-default", {}) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-CMP-53bf
+
+
+def test_base_alignment_flags_a_mismatched_base():
+    schema = {"$id": "https://example.org/schemas/A.schema.json"}
+    context = ContextView(entries=[{"@base": "https://example.org/other/"}])
+    assert outcome("rule.base-alignment", schema, context) == "warn"
+    assert "@base" in message("rule.base-alignment", schema, context)
+
+
+def test_base_alignment_accepts_an_aligned_base():
+    schema = {"$id": "https://example.org/schemas/A.schema.json"}
+    context = ContextView(entries=[{"@base": "https://example.org/schemas/"}])
+    assert outcome("rule.base-alignment", schema, context) == "ok"
+
+
+def test_base_alignment_is_not_judged_without_both_an_id_and_a_base():
+    assert outcome("rule.base-alignment", {}) == "ok"
+    assert outcome("rule.base-alignment", {"$id": "A.schema.json"}) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-CMP-5266
+
+
+def test_scoped_context_flags_a_ref_embed_with_no_scoped_context():
+    schema = {"properties": {"address": {"type": "object", "$ref": "Address.schema.json"}}}
+    context = ContextView(terms={"address": {"@id": "schema:address"}})
+    assert outcome("rule.scoped-context", schema, context) == "warn"
+    assert "Address.schema.json" in message("rule.scoped-context", schema, context)
+
+
+def test_scoped_context_accepts_a_ref_embed_with_a_scoped_context():
+    schema = {"properties": {"address": {"type": "object", "$ref": "Address.schema.json"}}}
+    context = ContextView(terms={"address": {"@id": "schema:address", "@context": "Address.schema.json"}})
+    assert outcome("rule.scoped-context", schema, context) == "ok"
+
+
+def test_an_inline_embed_is_not_flagged():
+    """The exception is for a cyclic embed graph, which only a $ref-based embed can form."""
+    schema = {"properties": {"address": {"type": "object", "properties": {"street": {"type": "string"}}}}}
+    context = ContextView(terms={"address": {"@id": "schema:address"}})
+    assert outcome("rule.scoped-context", schema, context) == "ok"
+
+
+def test_a_self_reference_is_not_flagged():
+    """A schema cannot scope a remote context onto itself without recursing."""
+    schema = {"$id": "Person.schema.json", "properties": {"friend": {"$ref": "Person.schema.json"}}}
+    context = ContextView(terms={"friend": {"@id": "schema:knows"}})
+    assert outcome("rule.scoped-context", schema, context) == "ok"
+
+
+def test_a_property_with_no_term_at_all_is_not_flagged():
+    """A different check covers a property with no @context term."""
+    schema = {"properties": {"address": {"$ref": "Address.schema.json"}}}
+    assert outcome("rule.scoped-context", schema, ContextView()) == "ok"
+
+
+def test_a_scalar_range_reference_is_not_flagged():
+    """x-oold-range/x-oold-ref is a scalar reference, not an embedded object."""
+    schema = {"properties": {"worksFor": {"x-oold-range": {"allOf": [{"x-oold-ref": "Organization.schema.json"}]}}}}
+    context = ContextView(terms={"worksFor": {"@id": "schema:worksFor"}})
+    assert outcome("rule.scoped-context", schema, context) == "ok"
 
 
 # ------------------------------------------------------------------ against the real corpus

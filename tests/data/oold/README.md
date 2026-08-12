@@ -62,3 +62,4 @@ Each one exists to prove a specific check fires, rather than only that valid inp
 | `xsd_string_coercion` | `lint.pattern` - a term coercing a literal to `xsd:string` never round-trips |
 | `array_without_container` | `lint.container` - a strict array without `@container: @set` |
 | `iri_reference_without_format` | `lint.iri-format` (warns, does not fail) - a bare-IRI-string reference with no `iri-reference`/`uri*` format |
+| `base_uri_misaligned` | `rule.base-alignment` (warns, does not fail) - an `@base` that resolves a relative reference somewhere other than `$id` does |

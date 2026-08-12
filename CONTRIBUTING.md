@@ -72,15 +72,15 @@ uv run zensical build -s
 
 ## Translating a specification rule
 
-The OO-LD specification numbers each of its normative statements (`OOLD-RT-002`, `OOLD-INS-004`,
-...) and publishes them as `oold-rules.json`, which this repository vendors per meta-schema
-version. When oold-schema adds a rule, its `make check` prints a pointer back to this section,
-because a new rule is the moment the validator falls behind the specification.
+The OO-LD specification numbers each of its normative statements (`OOLD-RT-08f2`, ...) and
+publishes them as `oold-rules.json`, which this repository vendors per meta-schema version. When
+oold-schema adds a rule, its `make check` prints a pointer back to this section, because a new
+rule is the moment the validator falls behind the specification.
 
 Not every rule becomes a check, so start by reading it:
 
 ```bash
-uv run oold rules explain OOLD-RT-002
+uv run oold rules explain OOLD-RT-08f2
 uv run oold rules list --unchecked        # everything still waiting for a check
 ```
 
@@ -88,8 +88,8 @@ uv run oold rules list --unchecked        # everything still waiting for a check
 
 | `applies_to` | Meaning | Action |
 | --- | --- | --- |
-| `document` + `checkable: true` | Decidable by looking at a schema or instance | Add a check, as below |
-| `document`, not `checkable` | Binds documents but needs human judgement | Nothing; it stays listed as unchecked |
+| `document` + `machine_checkable: true` | Decidable by looking at a schema or instance | Add a check, as below |
+| `document`, not `machine_checkable` | Binds documents but needs human judgement | Nothing; it stays listed as unchecked |
 | `implementation` | Constrains what the library *does*, which no validator can see | A test against the library, not a `CheckInfo` |
 | `advisory` | Guidance only | Nothing |
 
@@ -104,7 +104,7 @@ def _missing_id(schema: dict[str, Any], context: ContextView) -> list[str]:
 
 
 CHECKS = (
-    CheckInfo("rule.id", "a schema has a $id", rule="OOLD-VER-001", per_version=True, run=_missing_id),
+    CheckInfo("rule.id", "a schema has a $id", rule="OOLD-VER-3b96", per_version=True, run=_missing_id),
     ...
 )
 ```

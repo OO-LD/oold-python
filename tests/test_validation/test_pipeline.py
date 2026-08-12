@@ -81,6 +81,10 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
         ("array_without_container.schema.json", "lint.container", FAIL),
         # lint.iri-format only ever warns, so this one does not make the report fail overall.
         ("iri_reference_without_format.schema.json", "lint.iri-format", WARN),
+        # Likewise rule.base-alignment: OOLD-CMP-53bf is a SHOULD. This fixture exists because
+        # no other schema in the corpus declares @base, so without it the predicate is never
+        # reached through the pipeline and would pass by never running.
+        ("base_uri_misaligned.schema.json", "rule.base-alignment", WARN),
     ],
 )
 def test_each_broken_fixture_fails_the_check_it_targets(broken_dir, fixture, check_id, status):

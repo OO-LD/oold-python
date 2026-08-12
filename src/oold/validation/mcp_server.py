@@ -259,7 +259,7 @@ def list_oold_rules(
 ) -> dict[str, Any]:
     """List the normative rules the specification defines, and which checks enforce them.
 
-    Every validation finding cites a rule id such as OOLD-RT-002; this resolves those ids to the
+    Every validation finding cites a rule id such as OOLD-RT-08f2; this resolves those ids to the
     requirement text, its level (MUST / SHOULD / ...), and the specification URL. Use it to
     explain a finding, or with unenforced_only to see which requirements the validator does not
     yet check.
@@ -268,7 +268,7 @@ def list_oold_rules(
         meta: Meta-schema versions to read the catalog from. The catalog was introduced upstream
             after 0.8.0, so ["remote"] may be needed until a release ships it.
         area: Restrict to one area, e.g. RT (round-trip), CMP (composition), INS (instances).
-        unenforced_only: Only checkable rules that no check enforces yet.
+        unenforced_only: Only machine-checkable rules that no check enforces yet.
         offline: Never fetch over the network.
     """
     from .check_registry import rule_map
@@ -289,7 +289,7 @@ def list_oold_rules(
         }
 
     enforced_by = {v: k for k, v in rule_map().items()}
-    rules = bundle.checkable_rules() if unenforced_only else bundle.rules
+    rules = bundle.machine_checkable_rules() if unenforced_only else bundle.rules
     if area:
         rules = [r for r in rules if r["area"].upper() == area.upper()]
     if unenforced_only:
@@ -310,7 +310,7 @@ def list_oold_checks(
     """List the checks this validator can run, mirroring list_oold_rules for check ids.
 
     A finding cites two identifiers: the check id (e.g. lint.container) names which check in this
-    validator produced it, the rule id (e.g. OOLD-RT-002, see list_oold_rules) names the
+    validator produced it, the rule id (e.g. OOLD-RT-08f2, see list_oold_rules) names the
     specification requirement it enforces, when it enforces one at all. Use unmapped_only to see
     the checks that enforce no rule - these are this validator's own methodology (satisfiability,
     round-trip, self-tests about the fixture suite) rather than a numbered requirement.

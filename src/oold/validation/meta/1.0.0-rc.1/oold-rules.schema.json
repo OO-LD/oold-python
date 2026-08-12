@@ -85,7 +85,7 @@
         "summary",
         "text",
         "text_sha256",
-        "checkable",
+        "machine_checkable",
         "since",
         "deprecated",
         "source"
@@ -94,8 +94,8 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^OOLD-(CNF|SCH|CMP|INS|RT|VER|EXT)-[0-9]{3}$",
-          "description": "Permanent and never reused. Downstream checks cite it, so the pattern is asserted rather than assumed; see meta/RULES.md."
+          "pattern": "^OOLD-(CNF|SCH|CMP|INS|RT|VER|EXT)-[0-9a-f]{4}$",
+          "description": "Permanent and never reused. The suffix is a minted hex value, not a sequential number, so a deprecated rule leaves no visible gap. Downstream checks cite the id, so the pattern is asserted rather than assumed; see meta/RULES.md."
         },
         "area": {
           "$ref": "#/$defs/area"
@@ -134,9 +134,14 @@
           "pattern": "^[0-9a-f]{64}$",
           "description": "sha256 of `text`. meta/rules-baseline.json compares against this to catch a rule whose meaning changed under an unchanged id, so its shape is asserted here."
         },
-        "checkable": {
+        "context": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The containing block `text` was taken from, for display. May equal `text` when the rule's sentence is the whole block. Not hashed, and not part of the baseline comparison."
+        },
+        "machine_checkable": {
           "type": "boolean",
-          "description": "Whether the requirement is decidable by inspecting a document. Defaults to true for `document` rules only."
+          "description": "Whether the requirement is mechanically decidable by inspecting a document. Defaults to true for `document` rules only. This says nothing about whether any given validator actually enforces it - that is a separate, downstream fact."
         },
         "since": {
           "$ref": "#/$defs/version",
@@ -150,7 +155,7 @@
           "minItems": 1,
           "items": {
             "type": "string",
-            "pattern": "^OOLD-(CNF|SCH|CMP|INS|RT|VER|EXT)-[0-9]{3}$"
+            "pattern": "^OOLD-(CNF|SCH|CMP|INS|RT|VER|EXT)-[0-9a-f]{4}$"
           },
           "description": "Present only on a deprecated rule, naming what replaced it."
         },

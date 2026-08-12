@@ -1,7 +1,7 @@
 """The registry of every check id the validator can emit.
 
 Two identifier systems appear in a finding: the check id (``lint.container``) names which check
-in this package produced it, and the rule id (``OOLD-RT-002``) names the normative statement it
+in this package produced it, and the rule id (``OOLD-RT-08f2``) names the normative statement it
 enforces, when there is one. Rule ids come from the specification and are permanent; check ids
 are implementation-defined and follow this package's structure. A finding cites both, because
 fourteen of the twenty-eight checks enforce no rule at all - `schema.meta` is definitional,
@@ -28,6 +28,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urljoin
 
 from .compliance import run_suite, vocabulary_coverage
 from .frame import collect_composed_properties, instance_rdf_types
@@ -44,6 +45,10 @@ from .schema_checks import check_refs_resolve
 #: oo-ld.github.io to oo-ld.org, and released copies stamp a version in place of `latest`, so the
 #: check matches the file name rather than any single URL.
 _OOLD_META = re.compile(r"oold-meta-schema\.json$")
+
+#: A canonical, hyphenated UUID, optionally prefixed with the `urn:uuid:` scheme. Version and
+#: variant bits are not checked - the rule asks for "a UUID value", not a version 4 UUID.
+_UUID = re.compile(r"^(?:urn:uuid:)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 @dataclass
@@ -274,6 +279,109 @@ def _processing_mode_not_declared(schema: dict[str, Any], context: ContextView) 
     return [f"@version is {value!r}; it must be the JSON number 1.1, not a string"]
 
 
+def _uuid_annotation_missing_or_invalid(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """`x-oold-uuid`, if present, must actually be a UUID."""
+    value = schema.get("x-oold-uuid")
+    if value is None:
+        return ["schema declares no x-oold-uuid annotation"]
+    if not isinstance(value, str) or not _UUID.match(value):
+        return [f"x-oold-uuid is {value!r}, which is not a UUID"]
+    return []
+
+
+def _multilang_missing_default(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """A schema using a multilingual keyword must still carry the plain default it falls back to.
+
+    Only fires when the multilingual keyword is actually used - the word "still" in the rule is
+    what scopes it; a schema using neither keyword says nothing about localization at all.
+    """
+    problems = []
+    if "x-oold-multilang-title" in schema and "title" not in schema:
+        problems.append("x-oold-multilang-title is present but the schema declares no default title")
+    if "x-oold-multilang-description" in schema and "description" not in schema:
+        problems.append("x-oold-multilang-description is present but the schema declares no default description")
+    return problems
+
+
+def _base_uri_misaligned(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """`$id` and the resolved `@base` should resolve a relative reference to the same place.
+
+    Only judged when both are actually present: with no `@base` there is nothing on the JSON-LD
+    side to compare against, and guessing which of the two is "correct" is not this check's job.
+    """
+    schema_id = schema.get("$id")
+    if not isinstance(schema_id, str) or not schema_id:
+        return []
+    base = context.keyword("@base")
+    if not base:
+        return []
+
+    probe = "Sibling.schema.json"
+    under_schema = urljoin(schema_id, probe)
+    under_jsonld = urljoin(urljoin(schema_id, base), probe)
+    if under_schema == under_jsonld:
+        return []
+    return [
+        f"$id ({schema_id!r}) and the resolved @base ({base!r}) are not aligned: a relative "
+        f"reference resolves to {under_schema!r} under $id but {under_jsonld!r} under @base"
+    ]
+
+
+def _embedded_ref_missing_scoped_context(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """An object embedded by `$ref` to another document should get a scoped `@context`.
+
+    Deliberately narrow: an inline `type: object` embed is not flagged, because the rule's own
+    paragraph permits flattening those terms onto the root context for a cyclic embed graph, and
+    this check cannot tell a cyclic graph from a careless one without resolving remote schemas. A
+    `$ref` to the schema's own `$id` is exempted for the same reason - a self-reference cannot be
+    given a scoped remote context without recursing.
+    """
+    own_id = schema.get("$id")
+    problems = []
+    for name, prop in collect_composed_properties(schema).items():
+        target = _ref_embed_target(prop)
+        if target is None:
+            continue
+        if own_id and target == own_id:
+            continue
+        definition = context.terms.get(name)
+        if definition is None:
+            continue  # no term at all: a different check covers ungrounded predicates
+        if not isinstance(definition, dict) or "@context" in definition:
+            continue
+        problems.append(
+            f"{name!r} brings in an embedded object by $ref ({target}) but its term declares no "
+            "scoped @context, so the embedded schema's terms resolve globally. If the embed graph "
+            "is cyclic this may be deliberate: the specification allows flattening onto the root "
+            "context in that case."
+        )
+    return problems
+
+
+def _ref_embed_target(prop: Any) -> str | None:
+    """The `$ref` target when a property, or the `items` of an array property, embeds by reference.
+
+    Only a direct `$ref`, or one nested inside a single-entry `allOf`, counts - the shapes that
+    unambiguously mean "this property's value is another schema document". `x-oold-range` is not
+    walked into: it denotes a scalar reference, not an embedded object.
+    """
+    if not isinstance(prop, dict):
+        return None
+    target = _ref_target(prop)
+    if target:
+        return target
+    return _ref_target(prop.get("items")) if isinstance(prop.get("items"), dict) else None
+
+
+def _ref_target(node: dict[str, Any]) -> str | None:
+    if isinstance(node.get("$ref"), str):
+        return node["$ref"]
+    branches = node.get("allOf")
+    if isinstance(branches, list) and len(branches) == 1 and isinstance(branches[0], dict):
+        return _ref_target(branches[0])
+    return None
+
+
 # ---------------------------------------------------------------------------- the registry
 
 
@@ -335,7 +443,7 @@ CHECKS: tuple[CheckInfo, ...] = (
     CheckInfo(
         "lint.pattern",
         "no @context term coerces a literal to a datatype JSON encodes natively",
-        rule="OOLD-RT-001",
+        rule="OOLD-RT-d9bd",
         per_version=True,
         detects=_lint_pattern,
         predates_catalog=True,
@@ -343,14 +451,14 @@ CHECKS: tuple[CheckInfo, ...] = (
     CheckInfo(
         "lint.container",
         "a strictly array-typed property declares @container @set or @list",
-        rule="OOLD-RT-002",
+        rule="OOLD-RT-08f2",
         detects=array_properties_missing_container,
         predates_catalog=True,
     ),
     CheckInfo(
         "lint.iri-format",
         "a bare-IRI-string reference declares an iri-reference or stricter uri* format",
-        rule="OOLD-EXT-006",
+        rule="OOLD-EXT-6ea3",
         default_status=WARN,
         detects=iri_references_missing_format,
         predates_catalog=True,
@@ -378,7 +486,7 @@ CHECKS: tuple[CheckInfo, ...] = (
     CheckInfo(
         "context.predicates",
         "every declared property produces a grounded predicate",
-        rule="OOLD-EXT-007",
+        rule="OOLD-EXT-2b61",
         detects=check_predicates,
         predates_catalog=True,
     ),
@@ -425,7 +533,7 @@ CHECKS: tuple[CheckInfo, ...] = (
     ),
     CheckInfo(
         "coverage.rules",
-        "every checkable rule in the catalog is enforced by some check",
+        "every machine-checkable rule in the catalog is enforced by some check",
         default_status=WARN,
         per_version=True,
         # Compares the catalogue against this very registry; there is no external function to
@@ -446,72 +554,100 @@ CHECKS: tuple[CheckInfo, ...] = (
     CheckInfo(
         "rule.id",
         "a schema has a $id",
-        rule="OOLD-VER-001",
+        rule="OOLD-VER-3b96",
         per_version=True,
         run=_missing_id,
     ),
     CheckInfo(
         "rule.id-fragment",
         "a $id has no non-empty fragment",
-        rule="OOLD-CMP-005",
+        rule="OOLD-CMP-dd2b",
         per_version=True,
         run=_id_has_fragment,
     ),
     CheckInfo(
         "rule.range-ref",
         "x-oold-range references use x-oold-ref",
-        rule="OOLD-EXT-005",
+        rule="OOLD-EXT-3fe9",
         per_version=True,
         run=_range_uses_ref,
     ),
     CheckInfo(
         "rule.instance-type",
         "a pinned type agrees with x-oold-instance-rdf-type",
-        rule="OOLD-INS-002",
+        rule="OOLD-INS-4b5c",
         per_version=True,
         run=_inline_type_disagrees,
     ),
     CheckInfo(
         "rule.free-text-iri",
         "a free-text range is not coerced to @id",
-        rule="OOLD-INS-009",
+        rule="OOLD-INS-2e5d",
         per_version=True,
         run=_free_text_range_coerced_to_iri,
     ),
     CheckInfo(
         "rule.closed-object",
         "a closed object still permits $schema and @context",
-        rule="OOLD-INS-005",
+        rule="OOLD-INS-ba9e",
         per_version=True,
         run=_closed_object_rejects_metadata,
     ),
     CheckInfo(
         "rule.version",
         "a schema states x-oold-version",
-        rule="OOLD-VER-002",
+        rule="OOLD-VER-3662",
         per_version=True,
         run=_missing_version,
     ),
     CheckInfo(
         "rule.id-alias",
         "@id is exposed through an alias",
-        rule="OOLD-INS-007",
+        rule="OOLD-INS-2b3f",
         per_version=True,
         run=_id_not_aliased,
     ),
     CheckInfo(
         "rule.dialect",
         "a schema declares the OO-LD dialect",
-        rule="OOLD-EXT-002",
+        rule="OOLD-EXT-5184",
         per_version=True,
         run=_dialect_not_declared,
     ),
     CheckInfo(
         "rule.processing-mode",
         "a context declares @version 1.1",
-        rule="OOLD-EXT-001",
+        rule="OOLD-EXT-ddda",
         per_version=True,
         run=_processing_mode_not_declared,
+    ),
+    CheckInfo(
+        "rule.uuid",
+        "a schema carries an x-oold-uuid annotation holding a UUID value",
+        rule="OOLD-VER-edb9",
+        per_version=True,
+        run=_uuid_annotation_missing_or_invalid,
+    ),
+    CheckInfo(
+        "rule.multilang-default",
+        "a schema using x-oold-multilang-title/description also declares the plain default",
+        rule="OOLD-EXT-dd76",
+        per_version=True,
+        run=_multilang_missing_default,
+    ),
+    CheckInfo(
+        "rule.base-alignment",
+        "a schema's $id and resolved @base resolve a relative reference the same way",
+        rule="OOLD-CMP-53bf",
+        per_version=True,
+        run=_base_uri_misaligned,
+    ),
+    CheckInfo(
+        "rule.scoped-context",
+        "an embedded object brought in by $ref is reflected as that property's scoped @context",
+        rule="OOLD-CMP-5266",
+        per_version=True,
+        run=_embedded_ref_missing_scoped_context,
     ),
 )
 

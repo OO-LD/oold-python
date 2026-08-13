@@ -3,7 +3,14 @@
   "source_repository": "https://github.com/OO-LD/oold-schema",
   "remote": {
     "ref": "refs/heads/main",
-    "base_url": "https://raw.githubusercontent.com/OO-LD/oold-schema/refs/heads/main/meta/"
+    "base_url": "https://raw.githubusercontent.com/OO-LD/oold-schema/refs/heads/main/meta/",
+    "$comment": "files overrides the top-level default for this source only. main split the dialect meta-schema into a wrapper (oold-meta-schema.json, document-level obligations) and a body ($ref'd from it, oold-meta-schema-base.json, the keyword syntax and $dynamicAnchor). No released version has that split, so it is declared here rather than in the shared default, which tracked versions still read unchanged.",
+    "files": [
+      "oold-meta-schema.json",
+      "oold-meta-schema-base.json",
+      "oold-pattern-lint.schema.json",
+      "oold-ui-meta-schema.json"
+    ]
   },
   "files": [
     "oold-meta-schema.json",

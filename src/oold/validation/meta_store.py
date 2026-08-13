@@ -85,8 +85,24 @@ def load_index() -> dict[str, Any]:
         raise MetaSchemaError(f"meta-schema index is not valid JSON: {exc}") from exc
 
 
-def meta_files() -> list[str]:
+def meta_files(source: str | None = None) -> list[str]:
+    """The meta-schema file names to load for one source.
+
+    ``source`` is a tracked version name, :data:`REMOTE`, or omitted for the shared default that
+    most tracked versions use. A source-specific ``files`` list in ``index.json`` - a version's
+    own entry, or ``remote.files`` - wins over that default, so a source whose file set changes
+    (the way unreleased ``main`` split the meta-schema into a wrapper and a base) can declare it
+    there without a code change, while tracked versions that do not override it keep loading
+    exactly the default three.
+    """
     index = load_index()
+    override = None
+    if source == REMOTE:
+        override = (index.get("remote") or {}).get("files")
+    elif source is not None:
+        override = (index.get("versions", {}).get(source) or {}).get("files")
+    if isinstance(override, list) and override:
+        return list(override)
     files = index.get("files")
     if not isinstance(files, list) or not files:
         return [META_SCHEMA_FILE, PATTERN_LINT_FILE, UI_META_SCHEMA_FILE]
@@ -243,8 +259,19 @@ class MetaBundle:
 
         Used by the vocabulary-coverage cross-check, which fails when a keyword exists in the
         meta-schemas but no compliance fixture exercises it.
+
+        Collected across every document in the bundle, not from the dialect wrapper alone.
+        Upstream split the dialect into a wrapper carrying the document-level obligations and a
+        body holding the keyword syntax, which moved most `x-oold-*` definitions out of the
+        wrapper: reading only that one lost 14 of 26 keywords on the split bundle, and the
+        coverage check went quietly vacuous over what remained rather than failing.
         """
-        keywords = [key for key in (self.meta.get("properties") or {}) if key.startswith("x-oold-")]
+        keywords = [
+            key
+            for document in self.documents.values()
+            for key in (document.get("properties") or {})
+            if key.startswith("x-oold-")
+        ]
         ui_keywords = (self.ui_meta.get("$defs") or {}).get("keywords", {}).get("properties") or {}
         keywords.extend(ui_keywords)
         return sorted(set(keywords))
@@ -312,9 +339,9 @@ def _read_rules_schema(directory: Path) -> dict[str, Any] | None:
         return None
 
 
-def _read_documents(directory: Path, label: str) -> dict[str, Any]:
+def _read_documents(directory: Path, label: str, files: list[str]) -> dict[str, Any]:
     documents: dict[str, Any] = {}
-    for name in meta_files():
+    for name in files:
         path = directory / name
         try:
             documents[name] = json.loads(path.read_text(encoding="utf-8"))
@@ -331,7 +358,7 @@ def load_tracked(version: str) -> MetaBundle:
     if not directory.is_dir():
         available = ", ".join(tracked_versions()) or "none"
         raise MetaSchemaError(f"meta-schema version {version!r} is not tracked (available: {available})")
-    documents = _read_documents(directory, f"meta-schema version {version}")
+    documents = _read_documents(directory, f"meta-schema version {version}", meta_files(version))
     catalog, catalog_error = _read_rules(directory)
     return MetaBundle(
         version=version,
@@ -352,12 +379,13 @@ def fetch_remote(force: bool = False, timeout: float = 10.0) -> Path:
     """Fetch the unreleased ``main`` meta-schemas into the user cache and return its path."""
     target = remote_cache_dir()
     stamp = target / "fetched.json"
-    if not force and all((target / name).is_file() for name in meta_files()):
+    files = meta_files(REMOTE)
+    if not force and all((target / name).is_file() for name in files):
         return target
 
     base = remote_base_url()
     target.mkdir(parents=True, exist_ok=True)
-    for name in meta_files():
+    for name in files:
         document = http_get_json(base + name, timeout=timeout)
         (target / name).write_text(json.dumps(document, indent=2), encoding="utf-8")
     try:
@@ -371,7 +399,7 @@ def fetch_remote(force: bool = False, timeout: float = 10.0) -> Path:
             {
                 "base_url": base,
                 "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "files": meta_files(),
+                "files": files,
             },
             indent=2,
         ),
@@ -383,7 +411,8 @@ def fetch_remote(force: bool = False, timeout: float = 10.0) -> Path:
 def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
     """Load the ``main`` meta-schemas, from the cache when offline."""
     target = remote_cache_dir()
-    cached = all((target / name).is_file() for name in meta_files())
+    files = meta_files(REMOTE)
+    cached = all((target / name).is_file() for name in files)
 
     if not cached:
         if offline:
@@ -396,7 +425,7 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
         except SchemaResolutionError as exc:
             raise MetaSchemaError(f"could not fetch the remote meta-schemas: {exc}") from exc
 
-    documents = _read_documents(target, "the remote meta-schemas")
+    documents = _read_documents(target, "the remote meta-schemas", files)
     origin = str(target)
     stamp = target / "fetched.json"
     if stamp.is_file():
@@ -458,7 +487,7 @@ def describe_store() -> dict[str, Any]:
     index = load_index()
     versions = tracked_versions()
     cache = remote_cache_dir()
-    cached = all((cache / name).is_file() for name in meta_files())
+    cached = all((cache / name).is_file() for name in meta_files(REMOTE))
 
     fetched = None
     stamp = cache / "fetched.json"

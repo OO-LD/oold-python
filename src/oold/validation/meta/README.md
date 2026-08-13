@@ -17,6 +17,23 @@ Which version `latest` resolves to is deliberately not written down here. It is 
 present, decided by `tracked_versions()`, and `oold meta list` prints it. A hand-maintained copy of
 a derived fact only rots: this line used to name 0.8.0 and was still naming it two versions later.
 
+## The file list is per source, not global
+
+`index.json`'s top-level `files` is the *shared default* file set - the three meta-schemas every
+tracked version ships today. `meta_files(source)` reads it for a tracked version, or for `remote`,
+but a source can override it with its own `files` entry when its set actually differs. `remote`
+already does: unreleased `main` split the dialect meta-schema into a wrapper
+(`oold-meta-schema.json`, document-level obligations) and a body it `$ref`s
+(`oold-meta-schema-base.json`, the keyword syntax), so `remote.files` names four files instead of
+the shared three. No tracked version has that split, so none is made to load a file it does not
+have; `remote.files` is declared once, in `index.json`, rather than in code.
+
+A future release that ships the same split (or any other file-set change) declares it the same
+way: add a `files` list to that version's own entry under `versions`, naming exactly what it
+ships. Omit it, and the version falls back to the shared default. A file a source's list names but
+does not have is still a load error, not a silent skip - drift here is exactly what this is meant
+to catch.
+
 Nothing here is written at runtime. `--meta remote` fetches the unreleased `main` state into the
 user cache (`~/.cache/oold/meta/`, or `OOLD_CACHE_DIR`) and never touches this folder, so a released
 version cannot change meaning behind your back.

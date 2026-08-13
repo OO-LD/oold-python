@@ -264,12 +264,28 @@ def test_remote_is_refused_offline_when_not_cached(isolated_cache):
         resolve_selection(["remote"], offline=True)
 
 
+def _remote_documents() -> dict:
+    """What a fake upstream serves for ``--meta remote``: the tracked baseline, plus whatever
+    ``remote.files`` in ``index.json`` adds on top (e.g. a wrapper/base split no tracked version
+    has yet). A minimal, self-contained schema stands in for a file no tracked version ships.
+    """
+    source = meta_store.meta_dir() / latest_version()
+    documents = {}
+    for name in meta_store.meta_files(meta_store.REMOTE):
+        path = source / name
+        if path.is_file():
+            documents[name] = json.loads(path.read_text("utf-8"))
+        else:
+            documents[name] = {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": f"https://example.invalid/{name}",
+            }
+    return documents
+
+
 def test_remote_fetch_writes_only_to_the_cache(isolated_cache, monkeypatch, tmp_path):
     """A remote fetch must never touch the tracked version history."""
-    documents = {
-        name: json.loads((meta_store.meta_dir() / latest_version() / name).read_text("utf-8"))
-        for name in meta_store.meta_files()
-    }
+    documents = _remote_documents()
     before = {path: path.read_bytes() for path in meta_store.meta_dir().rglob("*.json")}
 
     def fake_get(uri, timeout=10.0):
@@ -291,10 +307,7 @@ def test_remote_fetch_writes_only_to_the_cache(isolated_cache, monkeypatch, tmp_
 
 
 def test_cached_remote_is_usable_offline(isolated_cache, monkeypatch):
-    documents = {
-        name: json.loads((meta_store.meta_dir() / latest_version() / name).read_text("utf-8"))
-        for name in meta_store.meta_files()
-    }
+    documents = _remote_documents()
 
     def fake_get(uri, timeout=10.0):
         name = uri.rsplit("/", 1)[-1]

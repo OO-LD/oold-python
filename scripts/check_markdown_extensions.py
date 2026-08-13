@@ -70,11 +70,7 @@ def load_converter():
             "Run `uv sync` (or `make install`) so the pinned dev dependency is "
             "available, then run this via `make check-extensions`."
         )
-    missing = [
-        n
-        for n in ("DEFAULT_MARKDOWN_EXTENSIONS", "_convert_markdown_extensions")
-        if not hasattr(zconfig, n)
-    ]
+    missing = [n for n in ("DEFAULT_MARKDOWN_EXTENSIONS", "_convert_markdown_extensions") if not hasattr(zconfig, n)]
     if missing:
         sys.exit(
             f"zensical.config no longer provides: {', '.join(missing)}.\n"

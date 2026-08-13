@@ -468,10 +468,12 @@ def _context_array_order_mismatched(schema: dict[str, Any], context: ContextView
 def _version_not_in_schema_location(schema: dict[str, Any], context: ContextView) -> list[str]:
     """`x-oold-version` should be part of the schema's location URL: OOLD-VER-534a.
 
-    The catalogued `text` for this rule is a truncated lead-in ("The version SHOULD be part of
-    the schema's location:") whose list of URL forms was cut off upstream, so this predicate is
-    written against the rule's `summary` instead, which states the intent completely: the schema
-    version should be part of the schema location URL.
+    The catalogued `text` is the lead-in alone ("The version SHOULD be part of the schema's
+    location:"); the URL forms it introduces are now `context`, and the two that state a
+    requirement of their own were split into OOLD-VER-befc and OOLD-VER-4261 upstream. So this
+    stays the umbrella check: it asks only that the version appear in the location, not which
+    of the sanctioned layouts put it there. Deliberately - a validator cannot tell which layout
+    a schema intends, and the third form, a GitHub release tag, is a shape of its own.
 
     Only judged when both `x-oold-version` and an absolute `$id` are present: `rule.version` and
     `rule.id` already cover their absence, and a relative `$id` names no location to carry a

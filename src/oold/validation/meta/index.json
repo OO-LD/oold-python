@@ -45,8 +45,12 @@
       "prerelease": true,
       "notes": "First version to carry oold-rules.json, the catalogue of normative statements, and oold-rules.schema.json, which describes it. The three meta-schemas are verbatim from the v1.0.0-rc.1 tag. The catalogue is provisional: no release has shipped one yet, so it comes from an unmerged oold-schema branch and rules_source records which commit. This refresh brought sentence-scoped `text` with the surrounding block kept as `context`, the `checkable` to `machine_checkable` rename, and the rules split out of lead-in lists. The v1.0.0-rc.1 tag itself will never gain a catalogue, so there is nothing here to refresh from a tag. When a release does ship one, vendor that version as its own entry rather than back-filling this one.",
       "rules_source": {
+        "$comment": "Where this catalogue was taken from. `pr` is the durable reference: oold-schema rebases a branch when it merges, so `commit` names a pre-merge SHA that stops existing on main - the entry this replaced pointed at exactly such an orphan. Once the pull request merges, set `merged` to its commit on main and leave `pr` as the record of where it came from.",
+        "pr": 124,
+        "repository": "https://github.com/OO-LD/oold-schema",
         "branch": "feat/rule-list-scope",
         "commit": "30534ecbb3956afb1022e09c99d2aeec0737ea3c",
+        "merged": null,
         "released": false
       },
       "sha256": {

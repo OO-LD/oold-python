@@ -1,0 +1,13 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "NarrowBase.schema.json",
+  "title": "NarrowBase",
+  "@context": {
+    "schema": "http://schema.org/",
+    "reading": "schema:value"
+  },
+  "type": "object",
+  "properties": {
+    "reading": { "type": "number", "minimum": 0, "maximum": 100 }
+  }
+}

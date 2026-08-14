@@ -103,6 +103,10 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
         # No other fixture composes oneOf/anyOf branches by $ref, so without this one
         # rule.branch-context-conflict's comparison is never reached through the pipeline.
         ("branch_context_conflict.schema.json", "rule.branch-context-conflict", FAIL),
+        # No fixture in the main corpus reuses a property name across an allOf ancestor chain
+        # (Researcher/Person/Thing never repeat one), so without this one rule.narrow-only's
+        # per-keyword comparison is never reached through the pipeline.
+        ("narrow_only_relaxation.schema.json", "rule.narrow-only", FAIL),
     ],
 )
 def test_each_broken_fixture_fails_the_check_it_targets(broken_dir, fixture, check_id, status):

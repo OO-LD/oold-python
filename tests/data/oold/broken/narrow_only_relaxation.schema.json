@@ -1,0 +1,11 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "narrow_only_relaxation.schema.json",
+  "title": "NarrowOnlyRelaxation",
+  "@context": ["NarrowBase.schema.json"],
+  "allOf": [{ "$ref": "NarrowBase.schema.json" }],
+  "type": "object",
+  "properties": {
+    "reading": { "type": "number", "minimum": 0, "maximum": 1000 }
+  }
+}

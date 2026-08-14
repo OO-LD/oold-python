@@ -4,18 +4,20 @@ Two identifier systems appear in a finding: the check id (``lint.container``) na
 in this package produced it, and the rule id (``OOLD-RT-08f2``) names the normative statement it
 enforces, when there is one. Rule ids come from the specification and are permanent; check ids
 are implementation-defined and follow this package's structure. A finding cites both, because
-fourteen of the thirty-eight checks enforce no rule at all - `schema.meta` is definitional,
+fourteen of the thirty-nine checks enforce no rule at all - `schema.meta` is definitional,
 `generate.satisfiable`, `variants` and the `roundtrip.*` checks are this validator's methodology,
 `coverage.*` are self-tests about the fixture suite, `meta.self-check` and `rule.checks` report on
 the run itself rather than on a schema, and `compliance.suite`/`compliance.*` are the deterministic
 fixture suite's own outcomes - and for those the check id is the only identifier a user has.
 
-This module holds two things that used to live apart. The twenty ``rule.*`` checks each enforce
-exactly one normative statement and are narrow enough to be self-contained predicates over an
-already-resolved :class:`ContextView`, so they are declared here and executed by
-:func:`run_rule_checks`. The other eighteen checks are driven by the phases in ``pipeline.py`` and
-leave :attr:`CheckInfo.run` empty; this module only records their metadata; ``detects`` points at
-the function that actually decides the verdict, where one function is clearly responsible.
+This module holds two things that used to live apart. The twenty-one ``rule.*`` checks each
+enforce exactly one normative statement and are narrow enough to be self-contained predicates,
+so they are declared here and executed by :func:`run_rule_checks`. Most take an already-resolved
+:class:`ContextView` and the schema exactly as authored (:attr:`CheckInfo.run`); a few instead
+need the dereferenced schema, to see through an ancestor's `$ref` (:attr:`CheckInfo.run_resolved`).
+The other eighteen checks are driven by the phases in ``pipeline.py`` and leave both empty; this
+module only records their metadata; ``detects`` points at the function that actually decides the
+verdict, where one function is clearly responsible.
 
 Every check is written to avoid false positives in preference to catching every violation. A
 validator that cries wolf on valid schemas gets switched off, and an unenforced rule is already
@@ -24,6 +26,7 @@ reported honestly by ``coverage.rules``.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -586,6 +589,250 @@ def _branch_context_conflict(schema: dict[str, Any], context: ContextView) -> li
     return problems
 
 
+#: `maximum`/`exclusiveMaximum` and the three `max*` size bounds: a wider derived value relaxes
+#: what an ancestor declared. `minimum`/`exclusiveMinimum` and the three `min*` bounds are the
+#: mirror image, so they share the same comparison with the inequality flipped.
+_WIDER_IF_GREATER = ("maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties")
+_WIDER_IF_LESSER = ("minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties")
+
+#: Distinguishes "no node in the chain declares this keyword" from a legitimate `None`/`null`.
+_MISSING = object()
+
+
+def _numeric(value: Any) -> bool:
+    """True for an `int`/`float` that is not also a `bool` (Python's `bool` is an `int`)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _chain_nodes(node: Any, seen: set[int] | None = None) -> Any:
+    """Preorder walk of a resolved schema and its `allOf`-composed ancestors, root first.
+
+    Same precedence as `collect_composed_properties`: a node's own declaration outranks
+    anything reached through its `allOf`, and of several `allOf` entries the earlier one
+    outranks the later. `seen` guards a self-referential chain defensively; `bound_schema`
+    already cuts cycles before this ever runs, so in practice it never triggers.
+    """
+    if seen is None:
+        seen = set()
+    if not isinstance(node, dict) or id(node) in seen:
+        return
+    seen.add(id(node))
+    yield node
+    for sub in node.get("allOf") or []:
+        yield from _chain_nodes(sub, seen)
+
+
+def _first_declared(nodes: list[Any], keyword: str) -> tuple[Any, list[Any]]:
+    """The most-derived value of `keyword` across `nodes`, and the nodes that follow it.
+
+    `nodes` is ordered most-derived first, mirroring `_chain_nodes`. Under JSON Merge Patch a
+    member is resolved independently per key, so the most-derived value for one keyword can come
+    from a different chain position than another keyword on the very same property; this looks
+    at one keyword at a time rather than at a whole property object. Returns `(_MISSING, [])`
+    when no node declares the keyword at all.
+    """
+    for index, node in enumerate(nodes):
+        if isinstance(node, dict) and keyword in node:
+            return node[keyword], nodes[index + 1 :]
+    return _MISSING, []
+
+
+def _bound_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """The two monotonic families: a derived bound must not be looser than an inherited one."""
+    problems: list[str] = []
+    for keyword in _WIDER_IF_GREATER:
+        derived, ancestors = _first_declared(nodes, keyword)
+        if derived is _MISSING or not _numeric(derived):
+            continue
+        for ancestor in ancestors:
+            if not isinstance(ancestor, dict) or keyword not in ancestor:
+                continue
+            value = ancestor[keyword]
+            if _numeric(value) and derived > value:
+                problems.append(f"{label} relaxes {keyword} from {value!r} (inherited) to {derived!r}")
+    for keyword in _WIDER_IF_LESSER:
+        derived, ancestors = _first_declared(nodes, keyword)
+        if derived is _MISSING or not _numeric(derived):
+            continue
+        for ancestor in ancestors:
+            if not isinstance(ancestor, dict) or keyword not in ancestor:
+                continue
+            value = ancestor[keyword]
+            if _numeric(value) and derived < value:
+                problems.append(f"{label} relaxes {keyword} from {value!r} (inherited) to {derived!r}")
+    return problems
+
+
+def _multiple_of_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """A derived `multipleOf` must itself be a multiple of an inherited one."""
+    derived, ancestors = _first_declared(nodes, "multipleOf")
+    if derived is _MISSING or not _numeric(derived) or derived <= 0:
+        return []
+    problems: list[str] = []
+    for ancestor in ancestors:
+        if not isinstance(ancestor, dict) or "multipleOf" not in ancestor:
+            continue
+        value = ancestor["multipleOf"]
+        if not _numeric(value) or value <= 0:
+            continue
+        ratio = derived / value
+        if not math.isclose(ratio, round(ratio), rel_tol=1e-9, abs_tol=1e-9):
+            problems.append(
+                f"{label} sets multipleOf {derived!r}, which is not itself a multiple of the inherited {value!r}"
+            )
+    return problems
+
+
+def _enum_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """A derived `enum` must not admit a value the inherited `enum` excluded."""
+    derived, ancestors = _first_declared(nodes, "enum")
+    if derived is _MISSING or not isinstance(derived, list):
+        return []
+    problems: list[str] = []
+    for ancestor in ancestors:
+        if not isinstance(ancestor, dict) or not isinstance(ancestor.get("enum"), list):
+            continue
+        missing = [value for value in derived if value not in ancestor["enum"]]
+        if missing:
+            problems.append(f"{label} enum admits {missing!r}, absent from the inherited enum {ancestor['enum']!r}")
+    return problems
+
+
+def _const_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """A derived `const` must agree with an inherited `const`, or fall inside an inherited `enum`."""
+    derived, ancestors = _first_declared(nodes, "const")
+    if derived is _MISSING:
+        return []
+    problems: list[str] = []
+    for ancestor in ancestors:
+        if not isinstance(ancestor, dict):
+            continue
+        if "const" in ancestor:
+            if ancestor["const"] != derived:
+                problems.append(f"{label} const {derived!r} disagrees with the inherited const {ancestor['const']!r}")
+        elif isinstance(ancestor.get("enum"), list) and derived not in ancestor["enum"]:
+            problems.append(f"{label} const {derived!r} is absent from the inherited enum {ancestor['enum']!r}")
+    return problems
+
+
+def _type_set(value: Any) -> set[str] | None:
+    """`type`, normalised to a set: a single string, or 2020-12's array-of-types form."""
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, list) and value and all(isinstance(item, str) for item in value):
+        return set(value)
+    return None
+
+
+def _type_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """A derived `type` must not admit a JSON type absent from an inherited `type`."""
+    derived, ancestors = _first_declared(nodes, "type")
+    if derived is _MISSING:
+        return []
+    derived_types = _type_set(derived)
+    if derived_types is None:
+        return []
+    problems: list[str] = []
+    for ancestor in ancestors:
+        if not isinstance(ancestor, dict) or "type" not in ancestor:
+            continue
+        ancestor_types = _type_set(ancestor["type"])
+        if ancestor_types is None:
+            continue
+        stray = sorted(derived_types - ancestor_types)
+        if stray:
+            problems.append(
+                f"{label} admits type(s) {stray!r}, absent from the inherited type {sorted(ancestor_types)!r}"
+            )
+    return problems
+
+
+def _unique_items_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """A derived `uniqueItems: false` must not relax an inherited `uniqueItems: true`."""
+    derived, ancestors = _first_declared(nodes, "uniqueItems")
+    if derived is not False:
+        return []
+    for ancestor in ancestors:
+        if isinstance(ancestor, dict) and ancestor.get("uniqueItems") is True:
+            return [f"{label} sets uniqueItems: false, relaxing the inherited uniqueItems: true"]
+    return []
+
+
+def _additional_properties_relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """A derived `additionalProperties: true` must not relax an inherited `additionalProperties: false`."""
+    derived, ancestors = _first_declared(nodes, "additionalProperties")
+    if derived is not True:
+        return []
+    for ancestor in ancestors:
+        if isinstance(ancestor, dict) and ancestor.get("additionalProperties") is False:
+            return [f"{label} sets additionalProperties: true, relaxing the inherited additionalProperties: false"]
+    return []
+
+
+def _relaxations(label: str, nodes: list[Any]) -> list[str]:
+    """Every narrow-only comparison this check makes, for one member position.
+
+    `label` names that position in a finding (a property, or the schema itself); `nodes` is its
+    declarations across the chain, most-derived first.
+    """
+    return [
+        *_bound_relaxations(label, nodes),
+        *_multiple_of_relaxations(label, nodes),
+        *_enum_relaxations(label, nodes),
+        *_const_relaxations(label, nodes),
+        *_type_relaxations(label, nodes),
+        *_unique_items_relaxations(label, nodes),
+        *_additional_properties_relaxations(label, nodes),
+    ]
+
+
+def _narrow_only_relaxations(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """A derived schema's assertion-bearing keywords may only tighten an ancestor's, never relax
+    them: OOLD-CMP-f3c7.
+
+    Takes the *resolved* schema (see `CheckInfo.run_resolved`): the raw, authored document
+    composes an ancestor with `allOf: [{"$ref": ...}]`, and the ancestor's own constraints are
+    not visible without resolving that reference first. After dereferencing, a subclass chain is
+    inlined as nested `allOf` entries each carrying the ancestor's own `properties` - see
+    `resolve.dereference`/`resolve.bound_schema` and `collect_composed_properties`'s docstring.
+
+    Comparisons are per keyword rather than per whole property object, because that is how
+    OO-LD's own merge model (JSON Merge Patch, RFC 7396) resolves the chain: keyed by object
+    member, so `properties.foo.maximum` and `properties.foo.minimum` are each independently
+    overridden by the nearest declaration, and can come from different levels of the same chain.
+    The schema root itself is compared the same way, alongside each property, since a keyword
+    such as `additionalProperties` sits there rather than under `properties`. `type` is compared
+    as a set, since 2020-12 allows an array of types.
+
+    Two keywords in the specification's own list are deliberately left out:
+
+    - `pattern` - whether one regular expression is narrower than another is not decidable in
+      general, so any comparison here would be a guess, not a finding.
+    - `required` - an object-level keyword rather than an assertion on a single value. Under the
+      merge model a derived object can legitimately drop an inherited `required` entry (that key
+      simply stops being required), and the rule's own wording, about restricting a
+      "constraint", does not clearly cover this case either way. Left unchecked rather than
+      guessed.
+
+    Only compares a keyword when both sides declare it with a comparable type - a `maximum` that
+    is a string on either side, for instance, is silently skipped rather than compared.
+    """
+    nodes = list(_chain_nodes(schema))
+    if len(nodes) < 2:
+        return []  # no ancestor at all: nothing could have been relaxed
+
+    problems = _relaxations("the schema itself", nodes)
+
+    names: dict[str, None] = {}
+    for node in nodes:
+        for name in node.get("properties") or {}:
+            names.setdefault(name, None)
+    for name in names:
+        property_nodes = [(node.get("properties") or {}).get(name) for node in nodes]
+        problems.extend(_relaxations(f"property {name!r}", property_nodes))
+    return problems
+
+
 # ---------------------------------------------------------------------------- the registry
 
 
@@ -609,6 +856,13 @@ class CheckInfo:
     because a rule minted after the catalogue cannot be attributed to a version that predates it.
     ``True`` runs it anyway, for the four checks whose requirement is older than the catalogue
     itself and would otherwise silently stop being enforced on those versions.
+
+    ``run`` and ``run_resolved`` are mutually exclusive ways to be a self-contained rule check;
+    at most one is set. ``run`` receives the schema exactly as authored, which is what a check
+    reading its own literal ``@context``/``allOf`` needs (see ``rule.context-array-order`` and
+    friends). ``run_resolved`` instead receives the dereferenced, bounded schema - the same one
+    the pipeline already builds for generation and round-tripping - for a check that needs to see
+    through an ancestor's ``$ref`` rather than just its own authored document.
     """
 
     id: str
@@ -618,6 +872,7 @@ class CheckInfo:
     per_version: bool = False
     detects: Callable[..., Any] | None = None
     run: Predicate | None = None
+    run_resolved: Predicate | None = None
     predates_catalog: bool = False
 
 
@@ -895,6 +1150,13 @@ CHECKS: tuple[CheckInfo, ...] = (
         per_version=True,
         run=_branch_context_conflict,
     ),
+    CheckInfo(
+        "rule.narrow-only",
+        "a derived schema's assertion-bearing keywords only tighten what an allOf ancestor declared",
+        rule="OOLD-CMP-f3c7",
+        per_version=True,
+        run_resolved=_narrow_only_relaxations,
+    ),
 )
 
 
@@ -965,6 +1227,7 @@ def run_rule_checks(
     schema: dict[str, Any],
     context: ContextView,
     catalog: dict[str, dict[str, Any]] | None = None,
+    resolved: dict[str, Any] | None = None,
 ) -> list[RuleFinding]:
     """Apply the rule checks that the selected specification version actually states.
 
@@ -973,19 +1236,36 @@ def run_rule_checks(
     and enforcing it would report a violation of something the target does not require. A
     deprecated rule is skipped for the same reason from the other end. See :func:`catalog_gate`.
 
-    When ``catalog`` is None the version ships no catalogue at all, and every one of these ten
-    checks skips: none of them predates the catalogue (:attr:`CheckInfo.predates_catalog` is
-    False for all of them), so there is nothing pre-catalogue evidence could attribute the rule
-    to.
+    When ``catalog`` is None the version ships no catalogue at all, and every one of these checks
+    skips: none of them predates the catalogue (:attr:`CheckInfo.predates_catalog` is False for
+    all of them), so there is nothing pre-catalogue evidence could attribute the rule to.
+
+    ``resolved`` is the dereferenced, bounded schema, for the checks declared with
+    :attr:`CheckInfo.run_resolved` rather than :attr:`CheckInfo.run`. When it is not available -
+    the default, for callers with nothing to offer - a ``run_resolved`` check is skipped rather
+    than guessing from the raw document or crashing on a missing argument.
     """
     findings: list[RuleFinding] = []
-    for check in (c for c in CHECKS if c.run):
+    for check in (c for c in CHECKS if c.run or c.run_resolved):
         gate = catalog_gate(check, catalog)
         if gate is not None:
             findings.append(gate)
             continue
         rule = (catalog or {}).get(check.rule)
-        problems = check.run(schema, context)
+        if check.run_resolved is not None:
+            if resolved is None:
+                findings.append(
+                    RuleFinding(
+                        check.id,
+                        check.rule,
+                        SKIP,
+                        f"the dereferenced schema is not available in this context, so {check.rule} cannot be judged",
+                    )
+                )
+                continue
+            problems = check.run_resolved(resolved, context)
+        else:
+            problems = check.run(schema, context)
         if not problems:
             findings.append(RuleFinding(check.id, check.rule, OK))
         else:

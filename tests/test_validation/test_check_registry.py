@@ -17,21 +17,23 @@ from oold.validation.meta_store import latest_version, load_tracked
 #: instead of silently disagreeing with the specification.
 CATALOG = {r["id"]: r for r in load_tracked(latest_version()).rules}
 
-#: The ten self-contained rule checks, in the order they are declared - the same slice
-#: `run_rule_checks` executes.
-SELF_CONTAINED_CHECKS = tuple(c for c in CHECKS if c.run)
+#: The twenty-one self-contained rule checks, in the order they are declared - the same slice
+#: `run_rule_checks` executes. Most run against the schema exactly as authored (`CheckInfo.run`);
+#: `rule.narrow-only` instead needs the dereferenced form (`CheckInfo.run_resolved`), supplied to
+#: these helpers as `resolved` rather than as `schema`.
+SELF_CONTAINED_CHECKS = tuple(c for c in CHECKS if c.run or c.run_resolved)
 
 
-def _findings(schema: dict, context: ContextView | None = None):
-    return {f.check_id: f for f in run_rule_checks(schema, context or ContextView(), CATALOG)}
+def _findings(schema: dict, context: ContextView | None = None, resolved: dict | None = None):
+    return {f.check_id: f for f in run_rule_checks(schema, context or ContextView(), CATALOG, resolved=resolved)}
 
 
-def outcome(check_id: str, schema: dict, context: ContextView | None = None) -> str:
-    return _findings(schema, context)[check_id].status
+def outcome(check_id: str, schema: dict, context: ContextView | None = None, resolved: dict | None = None) -> str:
+    return _findings(schema, context, resolved)[check_id].status
 
 
-def message(check_id: str, schema: dict, context: ContextView | None = None) -> str:
-    return _findings(schema, context)[check_id].message
+def message(check_id: str, schema: dict, context: ContextView | None = None, resolved: dict | None = None) -> str:
+    return _findings(schema, context, resolved)[check_id].message
 
 
 # ------------------------------------------------------------------ registry
@@ -500,6 +502,136 @@ def test_branch_context_conflict_ignores_structural_keywords():
     schema = {"oneOf": [{"$ref": "Sensor.schema.json"}, {"$ref": "Gauge.schema.json"}]}
     context = ContextView(entries=[{"@version": 1.1}, {"@version": 1.1}])
     assert outcome("rule.branch-context-conflict", schema, context) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-CMP-f3c7
+
+
+def test_narrow_only_skips_cleanly_without_a_resolved_schema():
+    """`rule.narrow-only` needs `resolved`; with none supplied it must skip, not silently pass."""
+    schema = {"properties": {"reading": {"maximum": 1000}}}
+    assert outcome("rule.narrow-only", schema) == "skip"
+
+
+def test_narrow_only_ignores_the_raw_document():
+    """This check is declared with `run_resolved`; `schema` itself is never consulted."""
+    raw = {"properties": {"reading": {"maximum": 1000}}}
+    resolved = {"type": "object", "properties": {"reading": {"maximum": 50}}}
+    assert outcome("rule.narrow-only", raw, resolved=resolved) == "ok"
+
+
+def test_narrow_only_accepts_a_tightened_bound():
+    resolved = {
+        "type": "object",
+        "properties": {"reading": {"type": "number", "maximum": 50}},
+        "allOf": [{"type": "object", "properties": {"reading": {"type": "number", "maximum": 100}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "ok"
+
+
+def test_narrow_only_flags_a_relaxed_bound():
+    resolved = {
+        "type": "object",
+        "properties": {"reading": {"type": "number", "maximum": 1000}},
+        "allOf": [{"type": "object", "properties": {"reading": {"type": "number", "maximum": 100}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "fail"
+    assert "maximum" in message("rule.narrow-only", {}, resolved=resolved)
+
+
+def test_narrow_only_is_not_judged_without_an_ancestor():
+    """A schema with nothing in its `allOf` chain has nothing it could have relaxed."""
+    resolved = {"type": "object", "properties": {"reading": {"maximum": 100}}}
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "ok"
+
+
+def test_narrow_only_flags_a_multiple_of_that_is_not_itself_a_multiple():
+    resolved = {
+        "type": "object",
+        "properties": {"amount": {"multipleOf": 6}},
+        "allOf": [{"type": "object", "properties": {"amount": {"multipleOf": 4}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "fail"
+    assert "multipleOf" in message("rule.narrow-only", {}, resolved=resolved)
+
+
+def test_narrow_only_accepts_a_multiple_of_the_inherited_multiple():
+    resolved = {
+        "type": "object",
+        "properties": {"amount": {"multipleOf": 8}},
+        "allOf": [{"type": "object", "properties": {"amount": {"multipleOf": 4}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "ok"
+
+
+def test_narrow_only_flags_an_enum_admitting_a_value_outside_the_inherited_enum():
+    resolved = {
+        "type": "object",
+        "properties": {"status": {"enum": ["open", "closed", "archived"]}},
+        "allOf": [{"type": "object", "properties": {"status": {"enum": ["open", "closed"]}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "fail"
+    assert "archived" in message("rule.narrow-only", {}, resolved=resolved)
+
+
+def test_narrow_only_accepts_an_enum_subset():
+    resolved = {
+        "type": "object",
+        "properties": {"status": {"enum": ["open"]}},
+        "allOf": [{"type": "object", "properties": {"status": {"enum": ["open", "closed"]}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "ok"
+
+
+def test_narrow_only_flags_a_const_absent_from_the_inherited_enum():
+    resolved = {
+        "type": "object",
+        "properties": {"status": {"const": "archived"}},
+        "allOf": [{"type": "object", "properties": {"status": {"enum": ["open", "closed"]}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "fail"
+    assert "const" in message("rule.narrow-only", {}, resolved=resolved)
+
+
+def test_narrow_only_flags_a_type_admitting_a_type_outside_the_inherited_type():
+    resolved = {
+        "type": "object",
+        "properties": {"value": {"type": ["string", "number"]}},
+        "allOf": [{"type": "object", "properties": {"value": {"type": "string"}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "fail"
+    assert "number" in message("rule.narrow-only", {}, resolved=resolved)
+
+
+def test_narrow_only_accepts_a_type_subset():
+    resolved = {
+        "type": "object",
+        "properties": {"value": {"type": "string"}},
+        "allOf": [{"type": "object", "properties": {"value": {"type": ["string", "number"]}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "ok"
+
+
+def test_narrow_only_flags_additional_properties_relaxed_at_the_schema_root():
+    """`additionalProperties` sits on the schema itself, not under `properties`."""
+    resolved = {
+        "type": "object",
+        "additionalProperties": True,
+        "allOf": [{"type": "object", "additionalProperties": False}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "fail"
+    assert "additionalProperties" in message("rule.narrow-only", {}, resolved=resolved)
+
+
+def test_narrow_only_ignores_pattern_and_required():
+    """`pattern` and `required` are deliberately excluded; see `_narrow_only_relaxations`."""
+    resolved = {
+        "type": "object",
+        "required": [],
+        "properties": {"code": {"pattern": ".*"}},
+        "allOf": [{"type": "object", "required": ["code"], "properties": {"code": {"pattern": "^[A-Z]+$"}}}],
+    }
+    assert outcome("rule.narrow-only", {}, resolved=resolved) == "ok"
 
 
 # ------------------------------------------------------------------ against the real corpus

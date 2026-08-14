@@ -109,7 +109,7 @@ class _Run:
         """The skip verdict for `check_id` against one meta-schema version, or None to run it.
 
         Delegates to `check_registry.catalog_gate`, the single place the presence/deprecation
-        gating lives - `run_rule_checks` applies the same function to the ten self-contained
+        gating lives - `run_rule_checks` applies the same function to the self-contained
         `rule.*` checks. This is what lets `lint.pattern`, `lint.container`, `lint.iri-format`
         and `context.predicates` (the four checks older than the catalogue,
         `CheckInfo.predates_catalog`) keep running against a version that ships no catalogue at
@@ -397,7 +397,7 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
         run.add("context.predicates", name, SKIP, "schema declares no @context")
         return
 
-    _run_rule_checks(run, name, raw, ContextView(terms=context.terms(), entries=list(context.context)))
+    _run_rule_checks(run, name, raw, schema, ContextView(terms=context.terms(), entries=list(context.context)))
 
     gate = run.catalog_gate("context.predicates", run.bundles[0])
     if gate is not None:
@@ -439,7 +439,7 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
 # ---------------------------------------------------------------------------- instances
 
 
-def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], context: ContextView) -> None:
+def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], resolved: dict[str, Any], context: ContextView) -> None:
     """Report the narrow, single-rule checks for one schema, per meta-schema version.
 
     These are the only checks whose *applicability* depends on the version: each enforces one
@@ -450,6 +450,11 @@ def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], context: Context
     A version shipping no catalogue skips them entirely rather than guessing. Running blind would
     assert requirements that version may never have stated, which is the same false-positive class
     as judging a schema on its literal rather than resolved `@context`.
+
+    ``resolved`` is the dereferenced, bounded schema this run already built for generation and
+    round-tripping (see `_Run.bounded`); it is passed on to `run_rule_checks` for the handful of
+    checks declared with `CheckInfo.run_resolved`, which need to see through an ancestor's `$ref`
+    rather than just this schema's own authored document.
 
     A passing check is still recorded, so `--verbose` shows what was verified and the counts line
     up with what `oold rules list` claims is enforced.
@@ -466,7 +471,7 @@ def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], context: Context
             )
             continue
         catalog = {r["id"]: r for r in bundle.rules}
-        for finding in run_rule_checks(raw, context, catalog):
+        for finding in run_rule_checks(raw, context, catalog, resolved=resolved):
             run.add(
                 finding.check_id,
                 name,

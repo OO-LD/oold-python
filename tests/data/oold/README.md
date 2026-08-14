@@ -70,3 +70,4 @@ Each one exists to prove a specific check fires, rather than only that valid inp
 | `versioned_id_missing_version` | `rule.versioned-id` (warns, does not fail) - `x-oold-version` does not appear in an absolute `$id` |
 | `root_ref_not_reflected` | `rule.context-reflects-refs` - a single `allOf` `$ref` is not reflected anywhere in `@context` |
 | `branch_context_conflict` | `rule.branch-context-conflict` - two `oneOf`-branch contexts map the same keyword to different IRIs at the root |
+| `narrow_only_relaxation` | `rule.narrow-only` - an `allOf` ancestor's `maximum` is relaxed rather than tightened (`NarrowBase.schema.json` is its sibling ancestor) |

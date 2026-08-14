@@ -68,3 +68,5 @@ Each one exists to prove a specific check fires, rather than only that valid inp
 | `legacy_dialect` | `rule.dialect-version` - `$schema` names `draft-07`, not a 2020-12-based dialect |
 | `context_array_order_mismatch` | `rule.context-array-order` - `@context` lists two `allOf`-composed remote contexts out of order |
 | `versioned_id_missing_version` | `rule.versioned-id` (warns, does not fail) - `x-oold-version` does not appear in an absolute `$id` |
+| `root_ref_not_reflected` | `rule.context-reflects-refs` - a single `allOf` `$ref` is not reflected anywhere in `@context` |
+| `branch_context_conflict` | `rule.branch-context-conflict` - two `oneOf`-branch contexts map the same keyword to different IRIs at the root |

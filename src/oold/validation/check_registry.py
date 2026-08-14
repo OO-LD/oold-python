@@ -4,13 +4,13 @@ Two identifier systems appear in a finding: the check id (``lint.container``) na
 in this package produced it, and the rule id (``OOLD-RT-08f2``) names the normative statement it
 enforces, when there is one. Rule ids come from the specification and are permanent; check ids
 are implementation-defined and follow this package's structure. A finding cites both, because
-fourteen of the twenty-eight checks enforce no rule at all - `schema.meta` is definitional,
+fourteen of the thirty-eight checks enforce no rule at all - `schema.meta` is definitional,
 `generate.satisfiable`, `variants` and the `roundtrip.*` checks are this validator's methodology,
 `coverage.*` are self-tests about the fixture suite, `meta.self-check` and `rule.checks` report on
 the run itself rather than on a schema, and `compliance.suite`/`compliance.*` are the deterministic
 fixture suite's own outcomes - and for those the check id is the only identifier a user has.
 
-This module holds two things that used to live apart. The ten ``rule.*`` checks each enforce
+This module holds two things that used to live apart. The twenty ``rule.*`` checks each enforce
 exactly one normative statement and are narrow enough to be self-contained predicates over an
 already-resolved :class:`ContextView`, so they are declared here and executed by
 :func:`run_rule_checks`. The other eighteen checks are driven by the phases in ``pipeline.py`` and
@@ -490,6 +490,102 @@ def _version_not_in_schema_location(schema: dict[str, Any], context: ContextView
     return [f"x-oold-version {version!r} does not appear in the absolute $id {identifier!r}"]
 
 
+def _root_ref_missing_from_context(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """A schema's single root-level `allOf` `$ref` must be reflected in its own `@context`.
+
+    Deliberate exception to "judge the resolved context" (see CLAUDE.md), for the same reason as
+    `rule.context-array-order`: whether a schema stays directly usable as a remote `@context` with
+    no further processing is a statement about its own, authored `@context`, not about what a term
+    means once inheritance is applied. So this predicate reads `schema["@context"]` and
+    `schema["allOf"]` literally, like that check does.
+
+    `rule.context-array-order` (OOLD-CMP-e4a3) already covers two or more `allOf` `$ref`s and the
+    order they must appear in, including reporting one that is missing entirely; this is the
+    residue it never reaches, the single-`$ref` case, where there is no order to judge, only
+    presence. `rule.scoped-context` (OOLD-CMP-5266) covers a property-level `$ref` separately, so
+    only root-level composition is judged here.
+    """
+    allof = schema.get("allOf")
+    if not isinstance(allof, list):
+        return []
+    targets = [entry["$ref"] for entry in allof if isinstance(entry, dict) and isinstance(entry.get("$ref"), str)]
+    if len(targets) != 1:
+        return []  # 0: nothing to reflect; 2+: rule.context-array-order's job
+
+    target = targets[0]
+    literal_context = schema.get("@context")
+    if isinstance(literal_context, list) and target in literal_context:
+        return []
+    if isinstance(literal_context, str) and literal_context == target:
+        return []
+    if isinstance(literal_context, dict) and literal_context.get("@import") == target:
+        return []
+    return [
+        f"allOf composes {target!r} as a remote context but @context does not reflect it, so this "
+        "schema would need further processing before it can be interpreted as a JSON-LD context"
+    ]
+
+
+def _has_ref_branch(schema: dict[str, Any]) -> bool:
+    """Whether `oneOf`/`anyOf` composes at least one branch by `$ref`."""
+    for keyword in ("oneOf", "anyOf"):
+        variants = schema.get(keyword)
+        if not isinstance(variants, list):
+            continue
+        for variant in variants:
+            if isinstance(variant, dict) and _ref_target(variant):
+                return True
+    return False
+
+
+def _branch_context_conflict(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """Reflected `oneOf`/`anyOf` branch contexts must not conflict at the root.
+
+    Scoped to schemas that actually compose `oneOf`/`anyOf` branches by `$ref` - only those have
+    branch contexts that could be reflected at all; an inline branch (see `rule.free-text-iri`'s
+    value-form examples) has no remote context of its own to conflict. A JSON-LD processor merges
+    every `@context` array entry left to right with no notion of which branch an instance matched,
+    so a root-level conflict would be decided by array order rather than by which branch the data
+    actually conforms to.
+
+    Only conflicts between *reflected* entries count. The specification separately allows a schema
+    to "append its own context object as the last array entry to override an inherited term", and
+    in the resolved view that override is indistinguishable from a conflict: the same term, two
+    IRIs, two entries. What tells them apart is how the entry was authored - a string is a remote
+    context reflected into the root, a dict is the schema's own object. `entries` keeps the
+    authored order and length, resolving a reference in place, so the two line up by position and
+    an override by the schema's own object is skipped rather than reported.
+    """
+    if not _has_ref_branch(schema):
+        return []
+
+    authored = schema.get("@context")
+    authored = authored if isinstance(authored, list) else [authored]
+    reflected = [not isinstance(entry, dict) for entry in authored]
+
+    seen: dict[str, str] = {}
+    problems: list[str] = []
+    for position, entry in enumerate(context.entries):
+        if not isinstance(entry, dict):
+            continue
+        # An entry the schema wrote itself may override anything above it; only a reflected
+        # remote context can conflict in the sense this rule forbids.
+        if position >= len(reflected) or not reflected[position]:
+            continue
+        for term, definition in entry.items():
+            if term.startswith("@"):
+                continue
+            target = definition.get("@id") if isinstance(definition, dict) else definition
+            if not isinstance(target, str):
+                continue
+            prior = seen.get(term)
+            if prior is None:
+                seen[term] = target
+            elif prior != target:
+                problems.append(f"{term!r} maps to both {prior!r} and {target!r} across the reflected @context")
+    return problems
+
+
 # ---------------------------------------------------------------------------- the registry
 
 
@@ -656,7 +752,7 @@ CHECKS: tuple[CheckInfo, ...] = (
         per_version=True,
         default_status=SKIP,
         # Decided inline in pipeline.py's `_run_rule_checks`, which substitutes this one finding
-        # for the whole family rather than calling any of the ten predicates below.
+        # for the whole family rather than calling any of the predicates below.
         detects=None,
     ),
     CheckInfo(
@@ -785,6 +881,20 @@ CHECKS: tuple[CheckInfo, ...] = (
         per_version=True,
         run=_version_not_in_schema_location,
     ),
+    CheckInfo(
+        "rule.context-reflects-refs",
+        "a single root-level allOf $ref is reflected in @context",
+        rule="OOLD-CMP-b926",
+        per_version=True,
+        run=_root_ref_missing_from_context,
+    ),
+    CheckInfo(
+        "rule.branch-context-conflict",
+        "reflected oneOf/anyOf branch contexts do not conflict at the root",
+        rule="OOLD-CMP-1d7e",
+        per_version=True,
+        run=_branch_context_conflict,
+    ),
 )
 
 
@@ -810,7 +920,7 @@ _BY_ID: dict[str, CheckInfo] = {c.id: c for c in CHECKS}
 def catalog_gate(check: CheckInfo, catalog: dict[str, dict[str, Any]] | None) -> RuleFinding | None:
     """Whether ``check`` must be skipped against ``catalog``, or None to mean "run it".
 
-    This is the one place the presence/deprecation gating lives, shared by the ten self-contained
+    This is the one place the presence/deprecation gating lives, shared by the self-contained
     ``rule.*`` predicates (via :func:`run_rule_checks`) and the four checks that predate the
     catalogue, applied directly in ``pipeline.py``. A check with no ``rule`` is never gated: the
     question only makes sense for a check that names a normative statement.

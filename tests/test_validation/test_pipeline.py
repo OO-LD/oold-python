@@ -97,6 +97,12 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
         # No other fixture combines x-oold-version with an absolute $id, so without this one
         # rule.versioned-id's comparison is never reached through the pipeline.
         ("versioned_id_missing_version.schema.json", "rule.versioned-id", WARN),
+        # Every other fixture with a single allOf $ref reflects it, so without this one
+        # rule.context-reflects-refs never reaches its failing branch through the pipeline.
+        ("root_ref_not_reflected.schema.json", "rule.context-reflects-refs", FAIL),
+        # No other fixture composes oneOf/anyOf branches by $ref, so without this one
+        # rule.branch-context-conflict's comparison is never reached through the pipeline.
+        ("branch_context_conflict.schema.json", "rule.branch-context-conflict", FAIL),
     ],
 )
 def test_each_broken_fixture_fails_the_check_it_targets(broken_dir, fixture, check_id, status):

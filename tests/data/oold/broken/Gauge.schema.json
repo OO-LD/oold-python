@@ -1,0 +1,15 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "Gauge.schema.json",
+  "@context": {
+    "schema": "http://schema.org/",
+    "reading": "schema:pressure"
+  },
+  "title": "Gauge",
+  "type": "object",
+  "required": ["kind"],
+  "properties": {
+    "kind": { "type": "string", "const": "Gauge" },
+    "reading": { "type": "number" }
+  }
+}

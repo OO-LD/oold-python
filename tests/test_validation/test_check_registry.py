@@ -418,6 +418,90 @@ def test_versioned_id_is_not_judged_without_both_a_version_and_an_absolute_id():
     assert outcome("rule.versioned-id", {"x-oold-version": "1.0.0", "$id": "Person.schema.json"}) == "ok"
 
 
+# ------------------------------------------------------------------ OOLD-CMP-b926
+
+
+def test_a_single_root_ref_must_be_reflected_in_context():
+    schema = {"allOf": [{"$ref": "Thing.schema.json"}], "@context": {"ex": "https://example.org/"}}
+    assert outcome("rule.context-reflects-refs", schema) == "fail"
+    assert "Thing.schema.json" in message("rule.context-reflects-refs", schema)
+
+
+def test_a_single_root_ref_reflected_as_an_array_entry_is_fine():
+    schema = {
+        "allOf": [{"$ref": "Thing.schema.json"}],
+        "@context": ["Thing.schema.json", {"ex": "https://example.org/"}],
+    }
+    assert outcome("rule.context-reflects-refs", schema) == "ok"
+
+
+def test_a_single_root_ref_reflected_as_a_bare_string_context_is_fine():
+    """A single $ref MAY be reflected by referencing it directly, with no array wrapper."""
+    schema = {"allOf": [{"$ref": "Thing.schema.json"}], "@context": "Thing.schema.json"}
+    assert outcome("rule.context-reflects-refs", schema) == "ok"
+
+
+def test_two_or_more_refs_are_left_to_context_array_order():
+    """The >= 2 case, including a target missing entirely, is rule.context-array-order's job."""
+    schema = {"allOf": [{"$ref": "A.schema.json"}, {"$ref": "B.schema.json"}], "@context": {"ex": "https://x/"}}
+    assert outcome("rule.context-reflects-refs", schema) == "ok"
+
+
+def test_no_allof_ref_means_nothing_to_reflect():
+    assert outcome("rule.context-reflects-refs", {}) == "ok"
+    assert outcome("rule.context-reflects-refs", {"allOf": [{"type": "object"}]}) == "ok"
+
+
+# ------------------------------------------------------------------ OOLD-CMP-1d7e
+
+
+#: Two branch contexts reflected into the root, as the rule describes them. Authored as strings,
+#: because that is what tells a reflected context from the schema's own object.
+_REFLECTED = ["Sensor.schema.json", "Gauge.schema.json"]
+
+
+def test_branch_context_conflict_flags_a_root_level_keyword_conflict():
+    schema = {"@context": _REFLECTED, "oneOf": [{"$ref": "Sensor.schema.json"}, {"$ref": "Gauge.schema.json"}]}
+    context = ContextView(entries=[{"reading": "ex:temperature"}, {"reading": "ex:pressure"}])
+    assert outcome("rule.branch-context-conflict", schema, context) == "fail"
+    assert "reading" in message("rule.branch-context-conflict", schema, context)
+
+
+def test_branch_context_conflict_accepts_branches_agreeing_on_a_term():
+    schema = {"@context": _REFLECTED, "anyOf": [{"$ref": "Sensor.schema.json"}, {"$ref": "Gauge.schema.json"}]}
+    context = ContextView(entries=[{"reading": "ex:temperature"}, {"reading": "ex:temperature"}])
+    assert outcome("rule.branch-context-conflict", schema, context) == "ok"
+
+
+def test_branch_context_conflict_accepts_the_schema_overriding_an_inherited_term():
+    """The specification allows a schema to append its own object to override a term it inherits.
+
+    In the resolved view that is indistinguishable from a conflict - same term, two IRIs, two
+    entries - so the check reads how each entry was authored. A string is a reflected remote
+    context; a dict is the schema's own, and may override anything above it.
+    """
+    schema = {
+        "@context": ["Sensor.schema.json", {"reading": "ex:pressure"}],
+        "oneOf": [{"$ref": "Sensor.schema.json"}, {"$ref": "Gauge.schema.json"}],
+    }
+    context = ContextView(entries=[{"reading": "ex:temperature"}, {"reading": "ex:pressure"}])
+    assert outcome("rule.branch-context-conflict", schema, context) == "ok"
+
+
+def test_branch_context_conflict_is_not_judged_without_ref_branches():
+    """An inline branch, like the value-form pattern's, has no remote context to conflict."""
+    schema = {"anyOf": [{"type": "string"}, {"type": "object"}]}
+    context = ContextView(entries=[{"reading": "ex:temperature"}, {"reading": "ex:pressure"}])
+    assert outcome("rule.branch-context-conflict", schema, context) == "ok"
+
+
+def test_branch_context_conflict_ignores_structural_keywords():
+    """@version, @base and the like are JSON-LD machinery, not the "keyword" the rule means."""
+    schema = {"oneOf": [{"$ref": "Sensor.schema.json"}, {"$ref": "Gauge.schema.json"}]}
+    context = ContextView(entries=[{"@version": 1.1}, {"@version": 1.1}])
+    assert outcome("rule.branch-context-conflict", schema, context) == "ok"
+
+
 # ------------------------------------------------------------------ against the real corpus
 
 

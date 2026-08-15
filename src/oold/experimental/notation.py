@@ -150,6 +150,32 @@ def _unwrap(annotation: Any) -> tuple[Any, bool, bool, list[Any]]:
     return target, many, marked, literals
 
 
+def _emit_one(ref: Any, boxed: bool) -> Any:
+    """Serialise a single stored reference.
+
+    ``boxed`` is set when the field also accepts a literal, in which case a
+    reference must be written as ``{"@id": ...}`` so that re-reading it cannot
+    be confused with text. A value without an IRI has no reference to emit, so
+    it is written inline - a blank node.
+    """
+    if ref is None:
+        return None
+    iri = getattr(ref, "iri", None)
+    if iri:
+        return {"@id": iri} if boxed else iri
+    obj = getattr(ref, "_obj", None)
+    if obj is None:
+        return None
+    return obj.model_dump(exclude_none=True) if hasattr(obj, "model_dump") else obj
+
+
+def _emit(stored: Any, boxed: bool) -> Any:
+    if isinstance(stored, list):
+        out = [_emit_one(r, boxed) for r in stored]
+        return [v for v in out if v is not None]
+    return _emit_one(stored, boxed)
+
+
 class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
     """Model base supporting the proposed link notations."""
 
@@ -239,10 +265,22 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
     @model_serializer(mode="wrap")
     def _serialize_links(self, handler: Any) -> dict[str, Any]:
         d = handler(self)
+        literals = type(self).__link_literals__
         for name, descr in type(self).__link_fields__.items():
-            iris = descr.iris(self)
-            if iris:
-                d[name] = iris
-            elif name in d and self._links.get(name) is None and name not in self.__dict__:
+            stored = self._links.get(name)
+            if stored is None and name not in self._links:
+                # never set as a link: a literal arm may have taken the value,
+                # in which case the plain pydantic field already serialised it
+                continue
+            # A field that also accepts a literal cannot emit a reference as a
+            # bare IRI: on re-read the string would be indistinguishable from
+            # text. JSON-LD spells the unambiguous form {"@id": ...}.
+            boxed = bool(literals.get(name))
+            emitted = _emit(stored, boxed)
+            if emitted is None and descr.many:
+                emitted = []
+            if emitted in (None, []) and not descr.many:
                 d.pop(name, None)
+            else:
+                d[name] = emitted
         return d

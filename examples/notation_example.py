@@ -116,11 +116,12 @@ def main() -> None:
     print("   inline ->", inline.location.address)
     print("   blank  ->", blank.location.address, "(no IRI)")
 
-    print("\n4. serialisation: links collapse to IRIs, blank nodes stay nested")
+    print("\n4. serialisation: links to IRIs; references boxed where a literal arm exists")
     dumped = alice.model_dump(exclude_none=True)
     assert dumped["knows"] == ["ex:bob", "ex:carol"]
     assert dumped["employer"] == "ex:acme"
-    assert ref.model_dump(exclude_none=True)["location"] == "ex:eiffel"
+    # boxed as {"@id": ...} because the field also accepts a literal
+    assert ref.model_dump(exclude_none=True)["location"] == {"@id": "ex:eiffel"}
     assert isinstance(blank.model_dump(exclude_none=True)["location"], dict)
     print("   alice ->", dumped)
     print("   ref   ->", ref.model_dump(exclude_none=True))
@@ -133,6 +134,24 @@ def main() -> None:
     assert condition.field == "name" and condition.value == "Bob"
     print("   link_iris('knows')     =", lazy.link_iris("knows"))
     print("   Person.name == 'Bob'   =", condition)
+
+    print("\n6. de-serialisation: every union arm survives a round trip")
+    for label, value, expected in [
+        ("text     ", "at the Eiffel Tower", str),
+        ("reference", {"@id": "ex:eiffel"}, Location),
+        ("inline   ", {"address": "Main St 1", "type": "ex:Location"}, Location),
+    ]:
+        original = Person(id="ex:rt", location=value)
+        payload = original.model_dump(exclude_none=True)
+        restored = Person(**payload)
+        assert isinstance(restored.location, expected), label
+        shown = str(payload["location"])[:34]
+        print(f"   {label} {shown:36} -> {type(restored.location).__name__}")
+
+    restored = Person(**alice.model_dump(exclude_none=True))
+    assert [x.id for x in restored.knows] == ["ex:bob", "ex:carol"]
+    assert restored.employer.name == "ACME"
+    print("   lists and to-one links round trip too")
 
     print("\nALL CHECKS PASSED")
 

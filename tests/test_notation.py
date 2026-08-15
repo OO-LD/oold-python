@@ -10,8 +10,6 @@ Covers the notations proposed in the oold-python#107 review:
 inline object and a reference.
 """
 
-from typing import List, Optional, Union
-
 import pytest
 from pydantic import Field
 
@@ -22,27 +20,27 @@ from oold.experimental.notation import Link, OoldField, OoldModel
 
 class Org(OoldModel):
     id: str
-    name: Optional[str] = None
-    type: Optional[str] = "ex:NOrg"
+    name: str | None = None
+    type: str | None = "ex:NOrg"
 
 
 class Location(OoldModel):
-    id: Optional[str] = None
-    address: Optional[str] = None
-    type: Optional[str] = "ex:NLoc"
+    id: str | None = None
+    address: str | None = None
+    type: str | None = "ex:NLoc"
 
 
 class Person(OoldModel):
     id: str
-    name: Optional[str] = None
-    type: Optional[str] = "ex:NPerson"
+    name: str | None = None
+    type: str | None = "ex:NPerson"
     # target inferred from the annotation, no range= needed
-    knows: Optional[List["Person"]] = OoldField()
+    knows: list["Person"] | None = OoldField()
     # Link[T] inside the annotation
-    employer: Optional[Link[Org]] = Field(default=None)
-    friends: Optional[List[Link["Person"]]] = OoldField()
+    employer: Link[Org] | None = Field(default=None)
+    friends: list[Link["Person"]] | None = OoldField()
     # union: literal text | inline object | reference
-    location: Union[str, Location, None] = OoldField(link=True)
+    location: str | Location | None = OoldField(link=True)
 
 
 Person.model_rebuild()
@@ -51,17 +49,15 @@ Person.model_rebuild()
 @pytest.fixture()
 def store():
     s = SimpleDictDocumentStore()
-    s.store_json_dicts(
-        {
-            "ex:p2": {"id": "ex:p2", "name": "Bob", "type": "ex:NPerson"},
-            "ex:acme": {"id": "ex:acme", "name": "ACME", "type": "ex:NOrg"},
-            "ex:loc": {
-                "id": "ex:loc",
-                "address": "Champ de Mars",
-                "type": "ex:NLoc",
-            },
-        }
-    )
+    s.store_json_dicts({
+        "ex:p2": {"id": "ex:p2", "name": "Bob", "type": "ex:NPerson"},
+        "ex:acme": {"id": "ex:acme", "name": "ACME", "type": "ex:NOrg"},
+        "ex:loc": {
+            "id": "ex:loc",
+            "address": "Champ de Mars",
+            "type": "ex:NLoc",
+        },
+    })
     set_resolver(SetResolverParam(iri="ex", resolver=s))
     return s
 
@@ -96,7 +92,9 @@ def test_union_reference_arm(store):
     p = Person(id="ex:b", location={"@id": "ex:loc"})
     assert isinstance(p.location, Location)
     assert p.location.address == "Champ de Mars"
-    assert p.model_dump(exclude_none=True)["location"] == "ex:loc"
+    # the field also accepts a literal, so a reference must be boxed as
+    # {"@id": ...} - a bare IRI would be re-read as text
+    assert p.model_dump(exclude_none=True)["location"] == {"@id": "ex:loc"}
 
 
 def test_union_inline_arm_with_id(store):
@@ -105,8 +103,8 @@ def test_union_inline_arm_with_id(store):
         location={"id": "ex:inline", "address": "inline addr", "type": "ex:NLoc"},
     )
     assert isinstance(p.location, Location) and p.location.address == "inline addr"
-    # it carries an IRI, so it serialises as a reference
-    assert p.model_dump(exclude_none=True)["location"] == "ex:inline"
+    # it carries an IRI, so it serialises as a (boxed) reference
+    assert p.model_dump(exclude_none=True)["location"] == {"@id": "ex:inline"}
 
 
 def test_union_inline_without_id_is_a_blank_node(store):
@@ -130,3 +128,38 @@ def test_query_dsl_still_available():
     cond = Person.name == "John"
     assert cond.field == "name"
     assert Person[cond] is not None
+
+
+def test_union_round_trip_preserves_every_arm(store):
+    """Deserialisation is the hard part: each arm must survive a round trip."""
+    cases = {
+        "text": ("at the Eiffel Tower", str),
+        "reference": ({"@id": "ex:loc"}, Location),
+        "inline": ({"address": "Main St", "type": "ex:NLoc"}, Location),
+    }
+    for label, (value, expected) in cases.items():
+        original = Person(id="ex:rt", location=value)
+        restored = Person(**original.model_dump(exclude_none=True))
+        assert isinstance(restored.location, expected), label
+        if expected is str:
+            assert restored.location == original.location, label
+        else:
+            assert restored.location.address == original.location.address, label
+
+
+def test_round_trip_without_literal_arm_keeps_bare_iri(store):
+    """With no literal arm a bare IRI is unambiguous, so it stays compact."""
+    p = Person(id="ex:p1", employer="ex:acme")
+    dumped = p.model_dump(exclude_none=True)
+    assert dumped["employer"] == "ex:acme"  # not boxed
+    restored = Person(**dumped)
+    assert isinstance(restored.employer, Org)
+    assert restored.employer.name == "ACME"
+
+
+def test_round_trip_list_of_links(store):
+    p = Person(id="ex:p1", knows=["ex:p2"], friends=["ex:p2"])
+    restored = Person(**p.model_dump(exclude_none=True))
+    assert [x.id for x in restored.knows] == ["ex:p2"]
+    assert [x.id for x in restored.friends] == ["ex:p2"]
+    assert isinstance(restored.knows[0], Person)

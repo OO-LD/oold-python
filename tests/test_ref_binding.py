@@ -27,13 +27,11 @@ from oold.experimental.ref_binding import Bar, Foo, Person, Ref
 def store():
     """A backend with ex:b/ex:b1/ex:b2 registered under the ``ex`` prefix."""
     s = SimpleDictDocumentStore()
-    s.store_json_dicts(
-        {
-            "ex:b": {"id": "ex:b", "prop1": "resolved-b"},
-            "ex:b1": {"id": "ex:b1", "prop1": "resolved-b1"},
-            "ex:b2": {"id": "ex:b2", "prop1": "resolved-b2"},
-        }
-    )
+    s.store_json_dicts({
+        "ex:b": {"id": "ex:b", "prop1": "resolved-b"},
+        "ex:b1": {"id": "ex:b1", "prop1": "resolved-b1"},
+        "ex:b2": {"id": "ex:b2", "prop1": "resolved-b2"},
+    })
     set_resolver(SetResolverParam(iri="ex", resolver=s))
     return s
 
@@ -70,12 +68,10 @@ def test_transparent_linked_field_is_lazy_and_typed(store):
     separately with pyright). At runtime each item is a lazy ``Ref`` that
     resolves through the backend and serialises back to an IRI.
     """
-    store.store_json_dicts(
-        {
-            "ex:p2": {"id": "ex:p2", "name": "Bob"},
-            "ex:p3": {"id": "ex:p3", "name": "Carol"},
-        }
-    )
+    store.store_json_dicts({
+        "ex:p2": {"id": "ex:p2", "name": "Bob"},
+        "ex:p3": {"id": "ex:p3", "name": "Carol"},
+    })
     p = Person(id="ex:p1", name="Alice", knows=["ex:p2", "ex:p3"])
 
     # runtime value is a lazy Ref, unresolved until accessed
@@ -130,7 +126,6 @@ def test_equivalence_with_linked_base_model(store):
     # Importing oold.model applies the FieldInfo monkeypatch to THIS process;
     # that is fine here - the isolation guarantee is checked in a subprocess
     # (test_poc_does_not_monkeypatch_fieldinfo).
-    from typing import List, Optional
 
     from pydantic import Field as PydField
 
@@ -138,15 +133,13 @@ def test_equivalence_with_linked_base_model(store):
 
     class LBar(LinkedBaseModel):
         id: str
-        prop1: Optional[str] = None
+        prop1: str | None = None
 
     class LFoo(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
-        b: Optional[LBar] = PydField(default=None, json_schema_extra={"range": "LBar"})
-        b2: Optional[List[LBar]] = PydField(
-            default=None, json_schema_extra={"range": "LBar"}
-        )
+        literal: str | None = None
+        b: LBar | None = PydField(default=None, json_schema_extra={"range": "LBar"})
+        b2: list[LBar] | None = PydField(default=None, json_schema_extra={"range": "LBar"})
 
     shipped = LFoo(
         id="ex:f",
@@ -169,16 +162,12 @@ def test_equivalence_with_linked_base_model(store):
 
 def test_poc_does_not_monkeypatch_fieldinfo():
     """Importing the prototype must not patch pydantic.fields.FieldInfo."""
-    code = (
-        "import pydantic.fields as pf;"
-        "import oold.experimental.ref_binding;"  # noqa: F401
-        "print(pf.FieldInfo.__name__)"
+    code = "import pydantic.fields as pf;import oold.experimental.ref_binding;print(pf.FieldInfo.__name__)"
+    res = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code], capture_output=True, text=True
     )
-    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
-    assert (
-        res.stdout.strip() == "FieldInfo"
-    ), f"prototype patched FieldInfo -> {res.stdout.strip()!r}\n{res.stderr}"
+    assert res.stdout.strip() == "FieldInfo", f"prototype patched FieldInfo -> {res.stdout.strip()!r}\n{res.stderr}"
 
 
 def test_attribute_access_benchmark(capsys):
@@ -189,13 +178,12 @@ def test_attribute_access_benchmark(capsys):
     to native pydantic. We record the ratio; the only hard assertion is a very
     loose sanity bound so the test is not flaky.
     """
-    from typing import Optional
 
     from oold.model import LinkedBaseModel
 
     class LPlain(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     proto = Foo(id="ex:f", literal="x")
     shipped = LPlain(id="ex:f", literal="x")
@@ -214,8 +202,8 @@ def test_attribute_access_benchmark(capsys):
 
     with capsys.disabled():
         print(
-            f"\n[attr-access {n:,}x] prototype={proto_t*1e3:.1f}ms "
-            f"shipped={shipped_t*1e3:.1f}ms "
+            f"\n[attr-access {n:,}x] prototype={proto_t * 1e3:.1f}ms "
+            f"shipped={shipped_t * 1e3:.1f}ms "
             f"ratio(shipped/proto)={shipped_t / proto_t:.2f}x"
         )
     # sanity only: the prototype must not be pathologically slower

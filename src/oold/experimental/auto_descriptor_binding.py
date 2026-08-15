@@ -31,14 +31,12 @@ in one backend call.
 
 from __future__ import annotations
 
+import types
 from collections import defaultdict
 from typing import (
     Any,
     ClassVar,
-    Dict,
     Generic,
-    List,
-    Optional,
     TypeVar,
     Union,
     get_args,
@@ -66,10 +64,10 @@ class OoldExtraModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     range: str = Field(alias="x-oold-range", min_length=1)
-    required_iri: Optional[bool] = Field(None, alias="x-oold-required-iri")
+    required_iri: bool | None = Field(None, alias="x-oold-required-iri")
 
 
-class OoldExtra(Dict[str, Any]):
+class OoldExtra(dict[str, Any]):
     """Typed, pydantic-validated replacement for a raw ``json_schema_extra`` dict.
 
     Must subclass ``dict``: pydantic merges ``json_schema_extra`` into the JSON
@@ -85,10 +83,10 @@ class OoldExtra(Dict[str, Any]):
         self,
         *,
         range: str,
-        required_iri: Optional[bool] = None,
+        required_iri: bool | None = None,
         **vendor: Any,
     ) -> None:
-        data: Dict[str, Any] = {"x-oold-range": range}
+        data: dict[str, Any] = {"x-oold-range": range}
         if required_iri is not None:
             data["x-oold-required-iri"] = required_iri
         data.update(vendor)
@@ -107,16 +105,33 @@ class OoldExtra(Dict[str, Any]):
         return self.model.range
 
     @property
-    def required_iri(self) -> Optional[bool]:
+    def required_iri(self) -> bool | None:
         return self.model.required_iri
 
 
-def OoldField(*, range: str, required_iri: Optional[bool] = None, **kwargs: Any) -> Any:
-    """``Field`` wrapper that attaches a validated :class:`OoldExtra`."""
-    return Field(
-        **kwargs,
-        json_schema_extra=OoldExtra(range=range, required_iri=required_iri),
-    )
+def OoldField(
+    *,
+    range: str | None = None,
+    link: bool | None = None,
+    required_iri: bool | None = None,
+    **kwargs: Any,
+) -> Any:
+    """``Field`` wrapper marking a property as a link.
+
+    ``range`` is optional: when omitted the link target is taken from the
+    annotation, so ``OoldField()`` on its own is enough for the common case.
+    """
+    if range is not None:
+        extra: dict[str, Any] = dict(OoldExtra(range=range, required_iri=required_iri))
+    else:
+        extra = {"x-oold-link": True if link is None else bool(link)}
+        if required_iri is not None:
+            extra["x-oold-required-iri"] = required_iri
+    # Link values are routed out of the payload before pydantic validates, so a
+    # link field must not be required at the pydantic level. This also makes the
+    # bare OoldField() form work with no arguments at all.
+    kwargs.setdefault("default", None)
+    return Field(**kwargs, json_schema_extra=extra)
 
 
 class FieldProxy:
@@ -173,7 +188,12 @@ class LinkedQueryMeta(ModelMetaclass):
         return cls.oold_query(item)
 
 
-def _extract_target(annotation: Any) -> "tuple[Any, bool]":
+_UNION_ORIGINS = {Union}
+if hasattr(types, "UnionType"):  # PEP 604: X | None
+    _UNION_ORIGINS.add(types.UnionType)
+
+
+def _extract_target(annotation: Any) -> tuple[Any, bool]:
     """Return (target_type, is_many) for an annotation like Optional[List[X]]."""
     many = False
     target = annotation
@@ -181,22 +201,22 @@ def _extract_target(annotation: Any) -> "tuple[Any, bool]":
     while changed:
         changed = False
         origin = get_origin(target)
-        if origin is Union:
+        if origin in _UNION_ORIGINS:
             args = [a for a in get_args(target) if a is not type(None)]
             if len(args) == 1:
                 target, changed = args[0], True
-        elif origin in (list, List):
+        elif origin is list:
             args = get_args(target)
             if args:
                 target, many, changed = args[0], True, True
     return target, many
 
 
-_TYPE_REGISTRY: Dict[str, type] = {}
+_TYPE_REGISTRY: dict[str, type] = {}
 """Maps a ``type`` field default (the class IRI) to its model class."""
 
 
-def _resolve_cls(data: Dict[str, Any], target: Any) -> Any:
+def _resolve_cls(data: dict[str, Any], target: Any) -> Any:
     """Pick the most specific class for a document, by its type IRI."""
     type_iri = data.get("type")
     if isinstance(type_iri, list):
@@ -208,7 +228,7 @@ def _resolve_cls(data: Dict[str, Any], target: Any) -> Any:
     return target
 
 
-class LinkResultList(List[Any]):
+class LinkResultList(list[Any]):
     """List returned by a to-many link, with IRI lookup, filtering, projection."""
 
     def __getitem__(self, index: Any) -> Any:
@@ -221,10 +241,7 @@ class LinkResultList(List[Any]):
             return LinkResultList(
                 item
                 for item in self
-                if item is not None
-                and apply_operator(
-                    index.operator, getattr(item, index.field, None), index.value
-                )
+                if item is not None and apply_operator(index.operator, getattr(item, index.field, None), index.value)
             )
         return list.__getitem__(self, index)
 
@@ -244,10 +261,10 @@ class LinkResultList(List[Any]):
         return out
 
 
-def _batch_resolve(refs: List[Optional[Ref]], target: Any) -> List[Any]:
+def _batch_resolve(refs: list[Ref | None], target: Any) -> list[Any]:
     """Resolve all unresolved refs, one backend call per resolver prefix."""
     pending = [r for r in refs if r is not None and r._obj is None and r.iri]
-    groups: Dict[str, List[Ref]] = defaultdict(list)
+    groups: dict[str, list[Ref]] = defaultdict(list)
     for r in pending:
         groups[r.iri.split(":")[0]].append(r)
     for group in groups.values():
@@ -262,7 +279,7 @@ def _batch_resolve(refs: List[Optional[Ref]], target: Any) -> List[Any]:
     return [None if r is None else r._obj for r in refs]
 
 
-def _to_ref(value: Any, target: Any) -> Optional[Ref]:
+def _to_ref(value: Any, target: Any) -> Ref | None:
     if value is None:
         return None
     if isinstance(value, Ref):
@@ -289,9 +306,7 @@ class _AutoLink:
     runtime behaviour is identical.
     """
 
-    def __init__(
-        self, name: Optional[str] = None, target: Any = None, many: bool = False
-    ):
+    def __init__(self, name: str | None = None, target: Any = None, many: bool = False):
         self.name = name
         self.target = target
         self.many = many
@@ -322,9 +337,7 @@ class _AutoLink:
         if isinstance(target, str):
             import sys
 
-            module = sys.modules.get(
-                getattr(owner or self.owner, "__module__", ""), None
-            )
+            module = sys.modules.get(getattr(owner or self.owner, "__module__", ""), None)
             target = getattr(module, target, None) if module else None
         if target is not None:
             self.__dict__["_resolved_target"] = target
@@ -338,11 +351,7 @@ class _AutoLink:
         stored = obj._links.get(self.name)
         target = self._target_cls(objtype or type(obj))
         if self.many:
-            result = (
-                LinkResultList(_batch_resolve(stored, target))
-                if stored
-                else LinkResultList()
-            )
+            result = LinkResultList(_batch_resolve(stored, target)) if stored else LinkResultList()
         elif stored is None:
             result = None
         else:
@@ -358,9 +367,7 @@ class _AutoLink:
     def set_value(self, obj: Any, value: Any) -> None:
         target = self._target_cls(type(obj))
         if self.many:
-            obj._links[self.name] = (
-                [] if value is None else [_to_ref(v, target) for v in value]
-            )
+            obj._links[self.name] = [] if value is None else [_to_ref(v, target) for v in value]
         else:
             obj._links[self.name] = _to_ref(value, target)
         obj.__dict__.pop(self.name, None)  # invalidate the cached read
@@ -384,16 +391,14 @@ class _AutoLink:
 class Link(_AutoLink, Generic[T]):
     """Explicit to-one link descriptor: ``employer = Link(Organization)``."""
 
-    def __init__(self, target: "type[T] | str | None" = None):
+    def __init__(self, target: type[T] | str | None = None):
         super().__init__(name=None, target=target, many=False)
 
     @overload
-    def __get__(self, obj: None, objtype: Any = None) -> "Link[T]":
-        ...
+    def __get__(self, obj: None, objtype: Any = None) -> Link[T]: ...
 
     @overload
-    def __get__(self, obj: object, objtype: Any = None) -> Optional[T]:
-        ...
+    def __get__(self, obj: object, objtype: Any = None) -> T | None: ...
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         return _AutoLink.__get__(self, obj, objtype)
@@ -402,16 +407,14 @@ class Link(_AutoLink, Generic[T]):
 class LinkList(_AutoLink, Generic[T]):
     """Explicit to-many link descriptor: ``knows = LinkList["Person"]()``."""
 
-    def __init__(self, target: "type[T] | str | None" = None):
+    def __init__(self, target: type[T] | str | None = None):
         super().__init__(name=None, target=target, many=True)
 
     @overload
-    def __get__(self, obj: None, objtype: Any = None) -> "LinkList[T]":
-        ...
+    def __get__(self, obj: None, objtype: Any = None) -> LinkList[T]: ...
 
     @overload
-    def __get__(self, obj: object, objtype: Any = None) -> List[T]:
-        ...
+    def __get__(self, obj: object, objtype: Any = None) -> list[T]: ...
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         return _AutoLink.__get__(self, obj, objtype)
@@ -422,9 +425,9 @@ class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
 
     model_config = ConfigDict(ignored_types=(Link, LinkList, _AutoLink))
 
-    _links: Dict[str, Any] = PrivateAttr(default_factory=dict)
-    _link_cache: Dict[str, Any] = PrivateAttr(default_factory=dict)
-    __link_fields__: ClassVar[Dict[str, _AutoLink]] = {}
+    _links: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _link_cache: dict[str, Any] = PrivateAttr(default_factory=dict)
+    __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
 
     @classmethod
     def oold_query(cls, item: Any) -> Any:
@@ -434,7 +437,7 @@ class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
-        links: Dict[str, _AutoLink] = dict(getattr(cls, "__link_fields__", {}))
+        links: dict[str, _AutoLink] = dict(getattr(cls, "__link_fields__", {}))
         # Explicit form: descriptors declared directly in the class body.
         for klass in reversed(cls.__mro__):
             for key, value in vars(klass).items():
@@ -446,7 +449,8 @@ class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
             if not isinstance(extra, dict):
                 continue
             rng = extra.get("x-oold-range", extra.get("range"))
-            if not rng:
+            # x-oold-link marks a link whose target comes from the annotation
+            if not rng and not extra.get("x-oold-link"):
                 continue
             target, many = _extract_target(field.annotation)
             if isinstance(rng, str) and not isinstance(target, type):
@@ -485,14 +489,14 @@ class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
         else:
             super().__setattr__(name, value)
 
-    def get_iri(self) -> Optional[str]:
+    def get_iri(self) -> str | None:
         return getattr(self, "id", None)
 
     def link_iris(self, name: str) -> Any:
         return type(self).__link_fields__[name].iris(self)
 
     @model_serializer(mode="wrap")
-    def _serialize_links(self, handler: Any) -> Dict[str, Any]:
+    def _serialize_links(self, handler: Any) -> dict[str, Any]:
         d = handler(self)
         for name, descr in type(self).__link_fields__.items():
             iris = descr.iris(self)

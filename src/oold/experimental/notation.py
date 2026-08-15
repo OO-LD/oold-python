@@ -21,14 +21,12 @@ Everything reuses the descriptor machinery from
 
 from __future__ import annotations
 
+import types
 from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
     ClassVar,
-    Dict,
-    List,
-    Optional,
     TypeVar,
     Union,
     get_args,
@@ -75,9 +73,9 @@ else:
 
 def OoldField(
     *,
-    link: Optional[bool] = None,
-    range: Optional[str] = None,
-    required_iri: Optional[bool] = None,
+    link: bool | None = None,
+    range: str | None = None,
+    required_iri: bool | None = None,
     **kwargs: Any,
 ) -> Any:
     """``Field`` wrapper marking a property as a link.
@@ -85,7 +83,7 @@ def OoldField(
     ``range`` is optional: when omitted the target is taken from the
     annotation. ``OoldField()`` therefore suffices in the common case.
     """
-    extra: Dict[str, Any] = {}
+    extra: dict[str, Any] = {}
     if range is not None:
         extra = dict(OoldExtra(range=range, required_iri=required_iri))
     else:
@@ -99,7 +97,12 @@ def OoldField(
     return Field(**kwargs, json_schema_extra=extra)
 
 
-def _unwrap(annotation: Any) -> "tuple[Any, bool, bool, List[Any]]":
+_UNION_ORIGINS = {Union}
+if hasattr(types, "UnionType"):  # PEP 604: X | None
+    _UNION_ORIGINS.add(types.UnionType)
+
+
+def _unwrap(annotation: Any) -> tuple[Any, bool, bool, list[Any]]:
     """Return (target, many, has_link_marker, literal_arms) for an annotation.
 
     Understands ``Optional[...]``, ``List[...]``, ``Annotated[...]`` and unions
@@ -107,7 +110,7 @@ def _unwrap(annotation: Any) -> "tuple[Any, bool, bool, List[Any]]":
     """
     many = False
     marked = False
-    literals: List[Any] = []
+    literals: list[Any] = []
     target = annotation
 
     def strip(tp: Any) -> Any:
@@ -124,7 +127,7 @@ def _unwrap(annotation: Any) -> "tuple[Any, bool, bool, List[Any]]":
         changed = False
         target = strip(target)
         origin = get_origin(target)
-        if origin is Union:
+        if origin in _UNION_ORIGINS:
             arms = [a for a in get_args(target) if a is not type(None)]
             model_arms, other = [], []
             for arm in arms:
@@ -140,7 +143,7 @@ def _unwrap(annotation: Any) -> "tuple[Any, bool, bool, List[Any]]":
                 target, changed = model_arms[0], True
             elif other:
                 target, changed = other[0], True
-        elif origin in (list, List):
+        elif origin in (list, list):
             args = get_args(target)
             if args:
                 target, many, changed = strip(args[0]), True, True
@@ -152,9 +155,9 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
 
     model_config = ConfigDict(ignored_types=(_AutoLink,))
 
-    _links: Dict[str, Any] = PrivateAttr(default_factory=dict)
-    __link_fields__: ClassVar[Dict[str, _AutoLink]] = {}
-    __link_literals__: ClassVar[Dict[str, List[Any]]] = {}
+    _links: dict[str, Any] = PrivateAttr(default_factory=dict)
+    __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
+    __link_literals__: ClassVar[dict[str, list[Any]]] = {}
 
     @classmethod
     def oold_query(cls, item: Any) -> Any:
@@ -163,8 +166,8 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
-        links: Dict[str, _AutoLink] = dict(getattr(cls, "__link_fields__", {}))
-        literals: Dict[str, List[Any]] = dict(getattr(cls, "__link_literals__", {}))
+        links: dict[str, _AutoLink] = dict(getattr(cls, "__link_fields__", {}))
+        literals: dict[str, list[Any]] = dict(getattr(cls, "__link_literals__", {}))
         for name, field in cls.model_fields.items():
             extra = field.json_schema_extra
             extra = extra if isinstance(extra, dict) else {}
@@ -227,23 +230,19 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
         else:
             super().__setattr__(name, value)
 
-    def get_iri(self) -> Optional[str]:
+    def get_iri(self) -> str | None:
         return getattr(self, "id", None)
 
     def link_iris(self, name: str) -> Any:
         return type(self).__link_fields__[name].iris(self)
 
     @model_serializer(mode="wrap")
-    def _serialize_links(self, handler: Any) -> Dict[str, Any]:
+    def _serialize_links(self, handler: Any) -> dict[str, Any]:
         d = handler(self)
         for name, descr in type(self).__link_fields__.items():
             iris = descr.iris(self)
             if iris:
                 d[name] = iris
-            elif (
-                name in d
-                and self._links.get(name) is None
-                and name not in self.__dict__
-            ):
+            elif name in d and self._links.get(name) is None and name not in self.__dict__:
                 d.pop(name, None)
         return d

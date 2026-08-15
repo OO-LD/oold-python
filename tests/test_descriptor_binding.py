@@ -30,12 +30,10 @@ class CountingStore(SimpleDictDocumentStore):
 def store():
     RESOLVE_CALLS.clear()
     s = CountingStore()
-    s.store_json_dicts(
-        {
-            "ex:p2": {"id": "ex:p2", "name": "Bob"},
-            "ex:p3": {"id": "ex:p3", "name": "Carol"},
-        }
-    )
+    s.store_json_dicts({
+        "ex:p2": {"id": "ex:p2", "name": "Bob"},
+        "ex:p3": {"id": "ex:p3", "name": "Carol"},
+    })
     set_resolver(SetResolverParam(iri="ex", resolver=s))
     return s
 
@@ -141,24 +139,21 @@ def test_no_getattribute_override():
 
 
 def test_does_not_monkeypatch_fieldinfo():
-    code = (
-        "import pydantic.fields as pf;"
-        "import oold.experimental.descriptor_binding;"  # noqa: F401
-        "print(pf.FieldInfo.__name__)"
+    code = "import pydantic.fields as pf;import oold.experimental.descriptor_binding;print(pf.FieldInfo.__name__)"
+    res = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code], capture_output=True, text=True
     )
-    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert res.stdout.strip() == "FieldInfo", res.stdout + res.stderr
 
 
 def test_plain_field_access_benchmark(capsys):
-    from typing import Optional
 
     from oold.model import LinkedBaseModel
 
     class LPlain(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     proto = Person(id="ex:p1", name="x")
     shipped = LPlain(id="ex:p1", literal="x")
@@ -176,8 +171,8 @@ def test_plain_field_access_benchmark(capsys):
 
     with capsys.disabled():
         print(
-            f"\n[plain-access {n:,}x] descriptor-model={proto_t*1e3:.1f}ms "
-            f"shipped={shipped_t*1e3:.1f}ms "
+            f"\n[plain-access {n:,}x] descriptor-model={proto_t * 1e3:.1f}ms "
+            f"shipped={shipped_t * 1e3:.1f}ms "
             f"ratio(shipped/proto)={shipped_t / proto_t:.2f}x"
         )
     assert proto_t < shipped_t * 10  # sanity only

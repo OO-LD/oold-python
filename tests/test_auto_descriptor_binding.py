@@ -6,7 +6,6 @@ the declaration syntax is unchanged. See docs/design/graph-object-binding.md.
 
 import subprocess
 import sys
-from typing import List, Optional
 
 import pytest
 
@@ -31,21 +30,21 @@ class CountingStore(SimpleDictDocumentStore):
 
 class Org(AutoLinkedModel):
     id: str
-    name: Optional[str] = None
-    type: Optional[str] = "ex:Org"
+    name: str | None = None
+    type: str | None = "ex:Org"
 
 
 class Person(AutoLinkedModel):
     id: str
-    name: Optional[str] = None
-    type: Optional[str] = "ex:Person"
-    knows: Optional[List["Person"]] = OoldField(default=None, range="Person")
+    name: str | None = None
+    type: str | None = "ex:Person"
+    knows: list["Person"] | None = OoldField(default=None, range="Person")
     employer = Link(Org)
     friends = LinkList["Person"]()
 
 
 class Employee(Person):
-    type: Optional[str] = "ex:Employee"
+    type: str | None = "ex:Employee"
 
 
 Person.model_rebuild()
@@ -55,22 +54,32 @@ Person.model_rebuild()
 def store():
     CALLS.clear()
     s = CountingStore()
-    s.store_json_dicts(
-        {
-            "ex:p2": {"id": "ex:p2", "name": "Bob", "type": "ex:Person"},
-            "ex:p3": {"id": "ex:p3", "name": "Carol", "type": "ex:Person"},
-            "ex:e1": {"id": "ex:e1", "name": "Dave", "type": "ex:Employee"},
-            "ex:acme": {"id": "ex:acme", "name": "ACME", "type": "ex:Org"},
-        }
-    )
+    s.store_json_dicts({
+        "ex:p2": {"id": "ex:p2", "name": "Bob", "type": "ex:Person"},
+        "ex:p3": {"id": "ex:p3", "name": "Carol", "type": "ex:Person"},
+        "ex:e1": {"id": "ex:e1", "name": "Dave", "type": "ex:Employee"},
+        "ex:acme": {"id": "ex:acme", "name": "ACME", "type": "ex:Org"},
+    })
     set_resolver(SetResolverParam(iri="ex", resolver=s))
     return s
 
 
+def test_oold_field_without_arguments(store):
+    """OoldField() with no args: the target is inferred from the annotation."""
+
+    class Team(AutoLinkedModel):
+        id: str
+        type: str | None = "ex:Team"
+        members: list[Org] | None = OoldField()
+
+    Team.model_rebuild()
+    t = Team(id="ex:t1", members=["ex:acme"])
+    assert isinstance(t.members[0], Org) and t.members[0].name == "ACME"
+    assert t.model_dump(exclude_none=True)["members"] == ["ex:acme"]
+
+
 def test_implicit_and_explicit_forms_coexist(store):
-    p = Person(
-        id="ex:p1", name="Alice", knows=["ex:p2"], employer="ex:acme", friends=["ex:p3"]
-    )
+    p = Person(id="ex:p1", name="Alice", knows=["ex:p2"], employer="ex:acme", friends=["ex:p3"])
     assert set(Person.__link_fields__) == {"knows", "employer", "friends"}
     assert isinstance(p.knows[0], Person) and p.knows[0].name == "Bob"
     assert isinstance(p.employer, Org) and p.employer.name == "ACME"
@@ -155,11 +164,9 @@ def test_extras_reach_the_json_schema():
 
 
 def test_does_not_monkeypatch_fieldinfo():
-    code = (
-        "import pydantic.fields as pf;"
-        "import oold.experimental.auto_descriptor_binding;"  # noqa: F401
-        "print(pf.FieldInfo.__name__)"
+    code = "import pydantic.fields as pf;import oold.experimental.auto_descriptor_binding;print(pf.FieldInfo.__name__)"
+    res = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code], capture_output=True, text=True
     )
-    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert res.stdout.strip() == "FieldInfo"

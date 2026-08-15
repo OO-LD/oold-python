@@ -91,14 +91,18 @@ SAMPLE_RULES = {
 @pytest.fixture
 def catalog_version(tmp_path, monkeypatch):
     """A tracked meta version that additionally ships a rule catalog."""
-    source = meta_store.meta_dir() / meta_store.latest_version()
+    version = meta_store.latest_version()
+    # What that version ships, not the shared default: since 1.0.0-rc.2 the dialect is a wrapper
+    # plus the base it $refs, and copying only the default three leaves that $ref dangling.
+    files = meta_store.meta_files(version)
+    source = meta_store.meta_dir() / version
     target = tmp_path / "meta" / "9.9.9"
     target.mkdir(parents=True)
-    for name in meta_store.meta_files():
+    for name in files:
         (target / name).write_bytes((source / name).read_bytes())
     (target / RULES_FILE).write_text(json.dumps(SAMPLE_RULES), encoding="utf-8")
     (tmp_path / "meta" / "index.json").write_text(
-        json.dumps({"files": meta_store.meta_files(), "versions": {"9.9.9": {}}, "remote": {}}),
+        json.dumps({"files": files, "versions": {"9.9.9": {}}, "remote": {}}),
         encoding="utf-8",
     )
     monkeypatch.setattr(meta_store, "meta_dir", lambda: tmp_path / "meta")
@@ -143,7 +147,8 @@ def test_a_malformed_catalog_is_treated_as_absent(catalog_version, tmp_path):
     (tmp_path / "meta" / catalog_version / RULES_FILE).write_text("{ not json", encoding="utf-8")
     bundle = load_tracked(catalog_version)
     assert bundle.has_rules is False
-    assert bundle.meta_validator().is_valid({"type": "object"})
+    # $id because this fixture copies the newest dialect, which requires one of a document.
+    assert bundle.meta_validator().is_valid({"$id": "https://example.org/probe.schema.json", "type": "object"})
 
 
 def test_checkable_rules_exclude_implementation_advisory_and_deprecated(catalog_version):

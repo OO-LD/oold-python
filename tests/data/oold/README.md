@@ -40,13 +40,19 @@ the *same tag* so the two stay in step, then record that tag as `fixtures.tag` i
 V=$(uv run python -c "from oold.validation.meta_store import latest_version; print(latest_version())")
 DEST=tests/data/oold
 for f in $(git -C ../oold-schema ls-tree --name-only v$V examples/ | grep '\.json$'); do
-  git -C ../oold-schema show "v$V:$f" > "$DEST/$(basename $f)"
+  git -C ../oold-schema cat-file blob "v$V:$f" > "$DEST/$(basename $f)"
 done
 for f in $(git -C ../oold-schema ls-tree --name-only v$V examples/compliance/); do
-  git -C ../oold-schema show "v$V:$f" > "$DEST/compliance/$(basename $f)"
+  git -C ../oold-schema cat-file blob "v$V:$f" > "$DEST/compliance/$(basename $f)"
 done
 make validate
 ```
+
+`cat-file blob` rather than `show`, for the same reason the meta-schemas use it: `show` applies the
+checkout's end-of-line conversion and writes CRLF on Windows.
+
+Upstream `examples/` also has a `spec/` subdirectory. It is deliberately outside this slice, which
+is the top level plus `compliance/`, so the loops above do not descend into it.
 
 ## Broken fixtures
 

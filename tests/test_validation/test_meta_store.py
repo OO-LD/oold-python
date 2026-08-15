@@ -168,11 +168,14 @@ def test_the_fixture_slice_records_the_release_it_came_from():
     )
 
 
-def test_bundle_exposes_the_three_documents():
+def test_bundle_exposes_every_document_the_version_ships():
     bundle = load_tracked(latest_version())
     assert bundle.meta["$id"]
     assert bundle.ui_meta["$id"]
     assert bundle.pattern_lint["$id"]
+    # Not three since 1.0.0-rc.2: the dialect is a wrapper plus the base it $refs, and the base
+    # has no accessor of its own because nothing reaches it except through that $ref.
+    assert set(bundle.documents) == set(meta_store.meta_files(latest_version()))
 
 
 def test_declared_keywords_are_found():
@@ -221,9 +224,17 @@ def test_registry_resolves_the_ui_meta_schema_cross_reference():
     """The core meta-schema $refs the UI one, so a bad registry silently stops asserting."""
     bundle = load_tracked(latest_version())
     validator = bundle.meta_validator()
-    # x-oold-ui-* keywords are defined only in the UI meta-schema.
-    assert validator.is_valid({"x-oold-ui-title": "ok"})
-    assert not validator.is_valid({"x-oold-instance-rdf-type": "must-be-an-array"})
+    # Every probe carries $id because the dialect requires one of a document from 1.0.0-rc.2 on.
+    # Without it these assertions pass or fail for a reason that has nothing to do with the
+    # registry.
+    probe = {"$id": "https://example.org/probe.schema.json"}
+    # The keyword has to be one the UI meta-schema constrains, and the probe has to violate that
+    # constraint. Merely naming an x-oold-ui-* keyword proves nothing: 2020-12 tolerates an
+    # unreached keyword as an annotation, so such a probe is valid whether or not the
+    # cross-reference resolved. x-oold-ui-form-hidden is declared boolean, and only there.
+    assert validator.is_valid(probe | {"x-oold-ui-form-hidden": True})
+    assert not validator.is_valid(probe | {"x-oold-ui-form-hidden": "not-a-boolean"})
+    assert not validator.is_valid(probe | {"x-oold-instance-rdf-type": "must-be-an-array"})
 
 
 def test_registry_resolves_by_file_name_when_the_id_domain_differs(tmp_path, monkeypatch):
@@ -233,10 +244,14 @@ def test_registry_resolves_by_file_name_when_the_id_domain_differs(tmp_path, mon
     particular URL. This rewrites the ids and asserts validation still works.
     """
     version = latest_version()
+    # The file set is read from the version being copied, not from the shared default. Since
+    # 1.0.0-rc.2 the dialect is two files, and copying three would leave the wrapper's $ref
+    # dangling - which is a fault in this fixture, not in the resolution being tested.
+    files = meta_store.meta_files(version)
     source = meta_store.meta_dir() / version
     target = tmp_path / "meta" / "9.9.9"
     target.mkdir(parents=True)
-    for name in meta_store.meta_files():
+    for name in files:
         document = json.loads((source / name).read_text(encoding="utf-8"))
         if "$id" in document:
             document["$id"] = (
@@ -245,11 +260,21 @@ def test_registry_resolves_by_file_name_when_the_id_domain_differs(tmp_path, mon
                 .replace("oo-ld.github.io/oold-schema", "example.invalid/elsewhere")
             )
         (target / name).write_text(json.dumps(document), encoding="utf-8")
+    # Only the $id values were rewritten, so the wrapper still $refs the base at /latest/ while
+    # the base now answers to /9.9.9/. That mismatch is the point: resolution is by file name.
+    (tmp_path / "meta" / "index.json").write_text(
+        json.dumps({"files": files, "versions": {"9.9.9": {}}, "remote": {}}), encoding="utf-8"
+    )
 
     monkeypatch.setattr(meta_store, "meta_dir", lambda: tmp_path / "meta")
-    bundle = load_tracked("9.9.9")
-    assert bundle.self_check() == []
-    assert bundle.meta_validator().is_valid({"x-oold-ui-title": "still works"})
+    meta_store.load_index.cache_clear()
+    try:
+        bundle = load_tracked("9.9.9")
+        assert bundle.self_check() == []
+        probe = {"$id": "https://example.org/probe.schema.json", "x-oold-ui-form-hidden": True}
+        assert bundle.meta_validator().is_valid(probe)
+    finally:
+        meta_store.load_index.cache_clear()
 
 
 def test_describe_store_reports_versions_and_cache_state(isolated_cache):

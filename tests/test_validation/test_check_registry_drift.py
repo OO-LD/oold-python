@@ -17,8 +17,10 @@ from oold.validation.report import SKIP
 
 #: One version with no rule catalogue and the newest tracked one, which has one. That is enough
 #: to surface every id the pipeline can emit; adding more tracked versions would only slow the
-#: suite down for no extra coverage.
-_CORPUS_META = ("0.7.0", "1.0.0-rc.1")
+#: suite down for no extra coverage. The newest is read rather than named: written out, it stops
+#: being the newest the next time a version is vendored, and the drift these tests exist to catch
+#: would then be measured against a stale catalogue without anything saying so.
+_CORPUS_META = ("0.7.0", tracked_versions()[-1])
 
 #: These two fire only on an infrastructure failure path the corpus cannot exercise without
 #: corrupting something every other test relies on: a broken vendored meta-schema

@@ -32,13 +32,24 @@ def test_jsonld_keywords_are_tolerated_as_annotations(bundle):
     JSON Schema 2020-12 tolerates unknown keywords as annotations. If it did not, `@context`
     at a schema root would make every OO-LD document invalid.
     """
-    result = validate_against_meta({"@context": {"ex": "https://example.org/"}, "@id": "x", "type": "object"}, bundle)
-    assert result.valid
+    document = {
+        # From 1.0.0-rc.2 the dialect requires $id of a document, so a probe without one is
+        # rejected before the keyword under test is ever reached.
+        "$id": "https://example.org/probe.schema.json",
+        "@context": {"ex": "https://example.org/"},
+        "@id": "x",
+        "type": "object",
+    }
+    result = validate_against_meta(document, bundle)
+    assert result.valid, result.errors
     assert "@context" in result.jsonld_keywords_found
 
 
 def test_a_malformed_keyword_is_rejected(bundle):
-    result = validate_against_meta({"x-oold-instance-rdf-type": "not-an-array"}, bundle)
+    # $id so the keyword is the only thing wrong: from 1.0.0-rc.2 a document without one is
+    # rejected anyway, which would make this pass without asserting anything.
+    document = {"$id": "https://example.org/probe.schema.json", "x-oold-instance-rdf-type": "not-an-array"}
+    result = validate_against_meta(document, bundle)
     assert not result.valid
 
 

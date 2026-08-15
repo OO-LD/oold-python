@@ -4,7 +4,7 @@
   "remote": {
     "ref": "refs/heads/main",
     "base_url": "https://raw.githubusercontent.com/OO-LD/oold-schema/refs/heads/main/meta/",
-    "$comment": "files overrides the top-level default for this source only. main split the dialect meta-schema into a wrapper (oold-meta-schema.json, document-level obligations) and a body ($ref'd from it, oold-meta-schema-base.json, the keyword syntax and $dynamicAnchor). No released version has that split, so it is declared here rather than in the shared default, which tracked versions still read unchanged.",
+    "$comment": "files overrides the top-level default for this source only. main split the dialect meta-schema into a wrapper (oold-meta-schema.json, document-level obligations) and a body ($ref'd from it, oold-meta-schema-base.json, the keyword syntax and $dynamicAnchor). v1.0.0-rc.2 released that split and declares the same four files in its own entry; the shared default below stays at three, for the versions that predate it.",
     "files": [
       "oold-meta-schema.json",
       "oold-meta-schema-base.json",
@@ -50,14 +50,14 @@
       "added": "2026-08-04",
       "id_base": "https://oo-ld.org/latest/meta/",
       "prerelease": true,
-      "notes": "First version to carry oold-rules.json, the catalogue of normative statements, and oold-rules.schema.json, which describes it. The three meta-schemas are verbatim from the v1.0.0-rc.1 tag. The catalogue is provisional: no release has shipped one yet, so it comes from an unmerged oold-schema branch and rules_source records which commit. This refresh brought sentence-scoped `text` with the surrounding block kept as `context`, the `checkable` to `machine_checkable` rename, and the rules split out of lead-in lists. The v1.0.0-rc.1 tag itself will never gain a catalogue, so there is nothing here to refresh from a tag. When a release does ship one, vendor that version as its own entry rather than back-filling this one.",
+      "notes": "First version to carry oold-rules.json, the catalogue of normative statements, and oold-rules.schema.json, which describes it. The three meta-schemas are verbatim from the v1.0.0-rc.1 tag. The catalogue is provisional: no release has shipped one yet, so it comes from an unmerged oold-schema branch and rules_source records which commit. This refresh brought sentence-scoped `text` with the surrounding block kept as `context`, the `checkable` to `machine_checkable` rename, and the rules split out of lead-in lists. The v1.0.0-rc.1 tag itself will never gain a catalogue, so there is nothing here to refresh from a tag. When a release does ship one, vendor that version as its own entry rather than back-filling this one. v1.0.0-rc.2 did, and is vendored below, so this copy is now a record of the catalogue as it stood before that release rather than the one to reach for.",
       "rules_source": {
         "$comment": "Where this catalogue was taken from. `pr` is the durable reference: oold-schema rebases a branch when it merges, so `commit` names a pre-merge SHA that stops existing on main - the entry this replaced pointed at exactly such an orphan. Once the pull request merges, set `merged` to its commit on main and leave `pr` as the record of where it came from.",
         "pr": 124,
         "repository": "https://github.com/OO-LD/oold-schema",
         "branch": "feat/rule-list-scope",
         "commit": "30534ecbb3956afb1022e09c99d2aeec0737ea3c",
-        "merged": null,
+        "merged": "b0a1235a2f1c54a3231d2001be749469c5775b42",
         "released": false
       },
       "sha256": {
@@ -67,11 +67,34 @@
         "oold-rules.json": "4c96768fec8ee16cc9337eeb055fd775f31af6c4c3d3c1c86caa75b0e4880bca",
         "oold-rules.schema.json": "71e0d2e437d05a0a718612ed273993c3e216681c6c4cd426a6b3c1018f07e07a"
       }
+    },
+    "1.0.0-rc.2": {
+      "tag": "v1.0.0-rc.2",
+      "commit": "84c70446d94227b7e626f14adeb62c8c27050276",
+      "committed": "2026-08-15T10:58:56+02:00",
+      "added": "2026-08-15",
+      "id_base": "https://oo-ld.org/latest/meta/",
+      "prerelease": true,
+      "notes": "First released version to carry the rule catalogue. The entry above holds a pre-release copy taken from a branch, because the v1.0.0-rc.1 tag never gained one; every file here is verbatim from the tag, so this entry needs no rules_source. Also the first release to split the dialect meta-schema: oold-meta-schema.json is now a wrapper holding the document-level obligations, and it $refs oold-meta-schema-base.json, which holds the keyword syntax and the $dynamicAnchor that nested subschemas reach through $dynamicRef. A document must therefore carry $id while the subschemas inside it need not, which the single-file form could not express, and that is why this entry declares its own files list. The catalogue grew from 43 rules to 66 with no id reused and none retired; of the 43 already vendored, none changed level, applies or text, and three (OOLD-VER-befc, OOLD-VER-4261, OOLD-EXT-1f92) changed machine_checkable to false after being found undecidable. oold-pattern-lint.schema.json and oold-ui-meta-schema.json are byte-identical to v1.0.0-rc.1.",
+      "files": [
+        "oold-meta-schema.json",
+        "oold-meta-schema-base.json",
+        "oold-pattern-lint.schema.json",
+        "oold-ui-meta-schema.json"
+      ],
+      "sha256": {
+        "oold-meta-schema.json": "7960a4508f8688b74b3096d7ac0828c9fe74089692d370c756eeef58b8785606",
+        "oold-meta-schema-base.json": "d6a42296f13dd5c52e9f4873234901b077e2d9f9f082bb48d1837b8b63e52ef3",
+        "oold-pattern-lint.schema.json": "d89fce19cd2fd42fa740d92968fcf61a1764ea25e741ed5cd4e72040a45c9a86",
+        "oold-ui-meta-schema.json": "dd389d13a5e03268d4a4ff845dec7f4f28238f7edbd9fe0992399b37ac358212",
+        "oold-rules.json": "bf79dffda89063865ff8b7763576fd880655dd636e8720701db3545f27759536",
+        "oold-rules.schema.json": "71e0d2e437d05a0a718612ed273993c3e216681c6c4cd426a6b3c1018f07e07a"
+      }
     }
   },
   "fixtures": {
     "$comment": "Provenance of the fixture slice in tests/data/oold/, which is a copy of the upstream examples/ directory. Recorded here rather than stated in that folder's README, because a tag is data: the README claimed v0.8.0 for a full release after the slice had moved to v1.0.0-rc.1, and nothing noticed. `tag` must name the newest entry in `versions`, so that fixtures and meta-schemas always come from one release; a test asserts it. The locally authored fixtures under broken/ and remote_context/ are not part of this slice and no refresh touches them.",
-    "tag": "v1.0.0-rc.1",
+    "tag": "v1.0.0-rc.2",
     "source": "examples/",
     "destination": "tests/data/oold/"
   }

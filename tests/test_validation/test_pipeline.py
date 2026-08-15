@@ -200,7 +200,11 @@ def test_an_empty_directory_is_reported(tmp_path):
 
 def test_an_instance_without_a_schema_reference_is_reported(tmp_path):
     (tmp_path / "x.instance.json").write_text('{"a": 1}', encoding="utf-8")
-    (tmp_path / "y.schema.json").write_text('{"type": "object"}', encoding="utf-8")
+    # $id so the schema beside the instance is itself valid: from 1.0.0-rc.2 the dialect requires
+    # one, and a second failure here would not be about the missing $schema reference under test.
+    (tmp_path / "y.schema.json").write_text(
+        '{"$id": "https://example.org/y.schema.json", "type": "object"}', encoding="utf-8"
+    )
     report = validate_directory(tmp_path, OFFLINE)
     check = next(c for c in report.checks if c.id == "instance.schema")
     assert check.status == FAIL and "$schema" in check.message

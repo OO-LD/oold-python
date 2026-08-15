@@ -1,0 +1,722 @@
+{
+    "type": "CoinCell",
+    "schema_version": "1.1.9",
+    "schema_product_id": "Empa-bco-000007",
+    "schema_date_created": "16/6/2024",
+    "schema_creator": {
+        "id": "https://orcid.org/0000-0002-5003-1134",
+        "type": "schema:Person",
+        "name": "Corsin Battaglia"
+    },
+    "rdfs_comment": [
+        "BattINFO Converter version: 0.0.1",
+        "Software credit: This JSON-LD was created using BattINFO converter (https://battinfoconverter.streamlit.app/) version: 0.0.1 and the coin cell battery schema version: 1.1.9, this web application was developed at Empa, Swiss Federal Laboratories for Materials Science and Technology in the Laboratory Materials for Energy Conversion",
+        "BattINFO CoinCellSchema version: 1.1.9",
+        "Project: Battery2030+/PREMISE",
+        "Assembled manually or by robot: manually",
+        "Cell assembly sequence: CellCan, NegativeElectrode, Separator, 100.0 uL Electrolyte, PositiveElectrode, 1.0 mm Spacer, Spring, CellLid"
+    ],
+    "has_positive_electrode": {
+        "type": "Electrode",
+        "has_current_collector": {
+            "type": [
+                "CurrentCollector",
+                "Aluminium"
+            ],
+            "has_measured_property": {
+                "type": "Thickness",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 15
+                },
+                "has_measurement_unit": "emmo:MicroMetre"
+            }
+        },
+        "has_coating": {
+            "type": "ElectrodeCoating",
+            "has_active_material": {
+                "rdfs_comment": "LithiumNickelCobaltManganeseOxide",
+                "molecular_formula": {
+                    "rdfs_comment": "LiNi0.6Co0.2Mn0.2O2"
+                },
+                "has_measured_property": [
+                    {
+                        "type": "MassFraction",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 96
+                        },
+                        "has_measurement_unit": "unit:PERCENT"
+                    },
+                    {
+                        "type": "MassLoading",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 6.6
+                        },
+                        "has_measurement_unit": "unit:MilliGM-PER-CentiM2"
+                    },
+                    {
+                        "type": "D50ParticleSize",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 8
+                        },
+                        "has_measurement_unit": "emmo:MicroMetre"
+                    }
+                ]
+            },
+            "has_binder": {
+                "type": [
+                    "Binder",
+                    "PolyvinylideneFluoride"
+                ],
+                "has_measured_property": {
+                    "type": "MassFraction",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 2
+                    },
+                    "has_measurement_unit": "unit:PERCENT"
+                }
+            },
+            "has_conductive_additive": {
+                "type": [
+                    "ConductiveAdditive",
+                    "CarbonBlack"
+                ],
+                "has_measured_property": {
+                    "type": "MassFraction",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 2
+                    },
+                    "has_measurement_unit": "unit:PERCENT"
+                }
+            },
+            "has_measured_property": [
+                {
+                    "type": "CalenderedCoatingThickness",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 16
+                    },
+                    "has_measurement_unit": "emmo:MicroMetre"
+                },
+                {
+                    "type": "Porosity",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 35
+                    },
+                    "has_measurement_unit": "unit:PERCENT"
+                },
+                {
+                    "type": "Tortuosity",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 2.5
+                    },
+                    "has_measurement_unit": "emmo:UnitOne"
+                }
+            ]
+        },
+        "has_measured_property": [
+            {
+                "type": "RatedCapacity",
+                "reverse": {
+                    "has_output": {
+                        "type": "BatteryTest",
+                        "has_test_object": {
+                            "electrochemical_cell": {
+                                "type": "ElectrochemicalCell",
+                                "has_negative_electrode": {
+                                    "type": "Graphite"
+                                }
+                            }
+                        },
+                        "has_measurement_parameter": {
+                            "type": [
+                                "ConstantCurrentConstantVoltageCycling"
+                            ],
+                            "rdfs_label": "GeneratedBatteryTestProcedure",
+                            "rdfs_comment": "A description of a generated battery testing procedure",
+                            "has_task": {
+                                "type": "Charging",
+                                "has_input": [
+                                    {
+                                        "type": "ElectricCurrentDensity",
+                                        "has_numerical_part": {
+                                            "type": "emmo:RealData",
+                                            "number_value": 0.1
+                                        },
+                                        "has_measurement_unit": "emmo:MilliAmperePerSquareCentiMetre"
+                                    },
+                                    {
+                                        "type": [
+                                            "UpperVoltageLimit",
+                                            "TerminationQuantity"
+                                        ],
+                                        "has_numerical_part": {
+                                            "type": "emmo:RealData",
+                                            "number_value": 4.2
+                                        },
+                                        "has_measurement_unit": "emmo:Volt"
+                                    }
+                                ],
+                                "has_next": {
+                                    "type": "Hold",
+                                    "has_input": [
+                                        {
+                                            "type": "Voltage",
+                                            "has_numerical_part": {
+                                                "type": "emmo:RealData",
+                                                "number_value": 4.2
+                                            },
+                                            "has_measurement_unit": "emmo:Volt"
+                                        },
+                                        {
+                                            "type": [
+                                                "LowerCurrentDensityLimit",
+                                                "TerminationQuantity"
+                                            ],
+                                            "has_numerical_part": {
+                                                "type": "emmo:RealData",
+                                                "number_value": 0.01
+                                            },
+                                            "has_measurement_unit": "emmo:MilliAmperePerSquareCentiMetre"
+                                        }
+                                    ],
+                                    "has_next": {
+                                        "type": "Discharging",
+                                        "has_input": [
+                                            {
+                                                "type": "ElectricCurrentDensity",
+                                                "has_numerical_part": {
+                                                    "type": "emmo:RealData",
+                                                    "number_value": 0.1
+                                                },
+                                                "has_measurement_unit": "emmo:MilliAmperePerSquareCentiMetre"
+                                            },
+                                            {
+                                                "type": [
+                                                    "LowerVoltageLimit",
+                                                    "TerminationQuantity"
+                                                ],
+                                                "has_numerical_part": {
+                                                    "type": "emmo:RealData",
+                                                    "number_value": 2.5
+                                                },
+                                                "has_measurement_unit": "emmo:Volt"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "type": "RatedCapacity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 1.1
+                },
+                "has_measurement_unit": "emmo:MilliAmpereHourPerSquareCentiMetre"
+            },
+            {
+                "type": "RatedCapacity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 160
+                },
+                "has_measurement_unit": "unit:MilliA-HR-PER-GM"
+            },
+            {
+                "type": "Diameter",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 12
+                },
+                "has_measurement_unit": "unit:MilliM"
+            }
+        ],
+        "schema_manufacturer": {
+            "id": "https://www.wikidata.org/wiki/Q120784603",
+            "type": "Customcells"
+        },
+        "schema_product_id": {
+            "rdfs_comment": 100000030
+        }
+    },
+    "has_negative_electrode": {
+        "type": "Electrode",
+        "has_current_collector": {
+            "type": [
+                "CurrentCollector",
+                "Copper"
+            ],
+            "has_measured_property": {
+                "type": "Thickness",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 14
+                },
+                "has_measurement_unit": "emmo:MicroMetre"
+            }
+        },
+        "has_coating": {
+            "type": "ElectrodeCoating",
+            "has_active_material": {
+                "type": "Graphite",
+                "has_measured_property": [
+                    {
+                        "type": "MassFraction",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 95
+                        },
+                        "has_measurement_unit": "unit:PERCENT"
+                    },
+                    {
+                        "type": "MassLoading",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 3.4
+                        },
+                        "has_measurement_unit": "unit:MilliGM-PER-CentiM2"
+                    },
+                    {
+                        "type": "D50ParticleSize",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 10
+                        },
+                        "has_measurement_unit": "emmo:MicroMetre"
+                    }
+                ]
+            },
+            "has_binder": {
+                "type": [
+                    "Binder",
+                    "PolyvinylideneFluoride"
+                ],
+                "has_measured_property": {
+                    "type": "MassFraction",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 3
+                    },
+                    "has_measurement_unit": "unit:PERCENT"
+                }
+            },
+            "has_conductive_additive": {
+                "type": [
+                    "ConductiveAdditive",
+                    "CarbonBlack"
+                ],
+                "has_measured_property": {
+                    "type": "MassFraction",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 2
+                    },
+                    "has_measurement_unit": "unit:PERCENT"
+                }
+            },
+            "has_measured_property": [
+                {
+                    "type": "CalenderedCoatingThickness",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 20
+                    },
+                    "has_measurement_unit": "emmo:MicroMetre"
+                },
+                {
+                    "type": "Porosity",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 34
+                    },
+                    "has_measurement_unit": "unit:PERCENT"
+                },
+                {
+                    "type": "Tortuosity",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 2.5
+                    },
+                    "has_measurement_unit": "emmo:UnitOne"
+                }
+            ]
+        },
+        "has_measured_property": [
+            {
+                "type": "RatedCapacity",
+                "reverse": {
+                    "has_output": {
+                        "type": "BatteryTest",
+                        "has_test_object": {
+                            "electrochemical_half_cell": {
+                                "type": "ElectrochemicalHalfCell",
+                                "has_reference_electrode": {
+                                    "type": "LithiumElectrode"
+                                }
+                            }
+                        },
+                        "has_measurement_parameter": {
+                            "type": [
+                                "ConstantCurrentConstantVoltageCycling"
+                            ],
+                            "rdfs_label": "GeneratedBatteryTestProcedure",
+                            "rdfs_comment": "A description of a generated battery testing procedure",
+                            "has_task": {
+                                "type": "Discharging",
+                                "has_input": [
+                                    {
+                                        "type": "ElectricCurrentDensity",
+                                        "has_numerical_part": {
+                                            "type": "emmo:RealData",
+                                            "number_value": 0.1
+                                        },
+                                        "has_measurement_unit": "emmo:MilliAmperePerSquareCentiMetre"
+                                    },
+                                    {
+                                        "type": [
+                                            "LowerVoltageLimit",
+                                            "TerminationQuantity"
+                                        ],
+                                        "has_numerical_part": {
+                                            "type": "emmo:RealData",
+                                            "number_value": 0.01
+                                        },
+                                        "has_measurement_unit": "emmo:Volt"
+                                    }
+                                ],
+                                "has_next": {
+                                    "type": "Hold",
+                                    "has_input": [
+                                        {
+                                            "type": "Voltage",
+                                            "has_numerical_part": {
+                                                "type": "emmo:RealData",
+                                                "number_value": 0.01
+                                            },
+                                            "has_measurement_unit": "emmo:Volt"
+                                        },
+                                        {
+                                            "type": [
+                                                "LowerCurrentDensityLimit",
+                                                "TerminationQuantity"
+                                            ],
+                                            "has_numerical_part": {
+                                                "type": "emmo:RealData",
+                                                "number_value": 0.01
+                                            },
+                                            "has_measurement_unit": "emmo:MilliAmperePerSquareCentiMetre"
+                                        }
+                                    ],
+                                    "has_next": {
+                                        "type": "Charging",
+                                        "has_input": [
+                                            {
+                                                "type": "ElectricCurrentDensity",
+                                                "has_numerical_part": {
+                                                    "type": "emmo:RealData",
+                                                    "number_value": 0.1
+                                                },
+                                                "has_measurement_unit": "emmo:MilliAmperePerSquareCentiMetre"
+                                            },
+                                            {
+                                                "type": [
+                                                    "LowerVoltageLimit",
+                                                    "TerminationQuantity"
+                                                ],
+                                                "has_numerical_part": {
+                                                    "type": "emmo:RealData",
+                                                    "number_value": 0.01
+                                                },
+                                                "has_measurement_unit": "emmo:Volt"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "type": "RatedCapacity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 1.2
+                },
+                "has_measurement_unit": "emmo:MilliAmpereHourPerSquareCentiMetre"
+            },
+            {
+                "type": "RatedCapacity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 350
+                },
+                "has_measurement_unit": "unit:MilliA-HR-PER-GM"
+            },
+            {
+                "type": "Diameter",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 14
+                },
+                "has_measurement_unit": "unit:MilliM"
+            }
+        ],
+        "schema_manufacturer": {
+            "id": "https://www.wikidata.org/wiki/Q120784603",
+            "type": "Customcells"
+        },
+        "schema_product_id": {
+            "rdfs_comment": "11113, A-1594"
+        }
+    },
+    "has_electrolyte": {
+        "type": "OrganicElectrolyte",
+        "has_solvent": {
+            "has_constituent": [
+                {
+                    "type": "EthyleneCarbonate",
+                    "has_measured_property": {
+                        "type": "VolumeFraction",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 30
+                        },
+                        "has_measurement_unit": "unit:PERCENT"
+                    }
+                },
+                {
+                    "type": "EthylMethylCarbonate",
+                    "has_measured_property": {
+                        "type": "VolumeFraction",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 70
+                        },
+                        "has_measurement_unit": "unit:PERCENT"
+                    }
+                }
+            ]
+        },
+        "has_solute": {
+            "type": "Solute",
+            "has_constituent": [
+                {
+                    "type": "LithiumHexafluorophosphate",
+                    "has_measured_property": {
+                        "type": "AmountConcentration",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 1
+                        },
+                        "has_measurement_unit": "unit:MOL-PER-L"
+                    }
+                },
+                {
+                    "type": "LithiumBisfluorosulfonylimide",
+                    "has_measured_property": {
+                        "type": "AmountConcentration",
+                        "has_numerical_part": {
+                            "type": "emmo:RealData",
+                            "number_value": 0
+                        },
+                        "has_measurement_unit": "unit:MOL-PER-L"
+                    }
+                }
+            ],
+            "has_additive": {
+                "type": "Additive",
+                "has_constituent": [
+                    {
+                        "type": "VinyleneCarbonate",
+                        "has_measured_property": {
+                            "type": "AmountConcentration",
+                            "has_numerical_part": {
+                                "type": "emmo:RealData",
+                                "number_value": 0.16
+                            },
+                            "has_measurement_unit": "unit:MOL-PER-L"
+                        }
+                    },
+                    {
+                        "type": "TrisTrimethylsilyPhosphite",
+                        "has_measured_property": {
+                            "type": "AmountConcentration",
+                            "has_numerical_part": {
+                                "type": "emmo:RealData",
+                                "number_value": 0
+                            },
+                            "has_measurement_unit": "unit:MOL-PER-L"
+                        }
+                    }
+                ]
+            }
+        },
+        "has_measured_property": [
+            {
+                "type": "ElectrolyticConductivity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 8
+                },
+                "has_measurement_unit": "unit:MilliS-PER-CentiM"
+            },
+            {
+                "type": "DynamicViscosity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 3
+                },
+                "has_measurement_unit": "unit:MilliPA-SEC"
+            },
+            {
+                "type": "Density",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 1.3
+                },
+                "has_measurement_unit": "emmo:GramPerCubicCentiMetre"
+            },
+            {
+                "type": "CelsiusTemperature",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 25
+                },
+                "has_measurement_unit": "emmo:CelsiusTemperature"
+            }
+        ],
+        "schema_manufacturer": {
+            "id": "https://www.wikidata.org/wiki/Q30285492",
+            "type": "Solvionic"
+        }
+    },
+    "has_separator": {
+        "type": [
+            "Separator",
+            "Polypropylene"
+        ],
+        "has_measured_property": [
+            {
+                "type": "Thickness",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 25
+                },
+                "has_measurement_unit": "emmo:MicroMetre"
+            },
+            {
+                "type": "Porosity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 55
+                },
+                "has_measurement_unit": "unit:PERCENT"
+            },
+            {
+                "type": "Tortuosity",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 2.5
+                },
+                "has_measurement_unit": "emmo:UnitOne"
+            },
+            {
+                "type": "Diameter",
+                "has_numerical_part": {
+                    "type": "emmo:RealData",
+                    "number_value": 16
+                },
+                "has_measurement_unit": "unit:MilliM"
+            }
+        ],
+        "schema_manufacturer": {
+            "id": "https://www.wikidata.org/wiki/Q122199856",
+            "type": "Celgard"
+        },
+        "schema_product_id": {
+            "rdfs_comment": 2500
+        }
+    },
+    "has_case": {
+        "type": [
+            "R2032",
+            "StainlessSteel"
+        ],
+        "has_constituent": {
+            "cell_lid": {
+                "type": "CellLid",
+                "has_coating": {
+                    "rdfs_comment": "none"
+                }
+            },
+            "cell_can": {
+                "type": "CellCan",
+                "has_coating": {
+                    "type": "Aluminium"
+                }
+            }
+        },
+        "schema_manufacturer": {
+            "type": "Hosen"
+        },
+        "schema_product_id": {
+            "rdfs_comment": "2032, SUS316L"
+        }
+    },
+    "has_constituent": {
+        "spring": {
+            "type": "Spring",
+            "has_measured_property": [
+                {
+                    "type": "Diameter",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 15
+                    },
+                    "has_measurement_unit": "unit:MilliM"
+                },
+                {
+                    "type": "Thickness",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 1.4
+                    },
+                    "has_measurement_unit": "unit:MilliM"
+                }
+            ]
+        },
+        "spacer": {
+            "type": "Spacer",
+            "has_measured_property": [
+                {
+                    "type": "Diameter",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 16
+                    },
+                    "has_measurement_unit": "unit:MilliM"
+                },
+                {
+                    "type": "Thickness",
+                    "has_numerical_part": {
+                        "type": "emmo:RealData",
+                        "number_value": 1
+                    },
+                    "has_measurement_unit": "unit:MilliM"
+                }
+            ]
+        }
+    }
+}

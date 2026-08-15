@@ -1,0 +1,274 @@
+{
+  "@context": [
+    "https://w3id.org/emmo/domain/battery/context",
+    {
+      "id": "@id",
+      "type": "@type",
+      "schema": "https://schema.org",
+      "emmo": "https://w3id.org/emmo#",
+      "echem": "https://w3id.org/emmo/domain/electrochemistry#",
+      "battery": "https://w3id.org/emmo/domain/battery#",
+      "chemical": "https://w3id.org/emmo/domain/chemical-substance/context",
+      "unit": "https://qudt.org/vocab/unit/",
+      "rdfs": "https://www.w3.org/TR/rdf-schema/#ch_comment"
+    }
+  ],
+  "type": "CoinCell",
+  "hasConstituent": {
+    "Spacer": {
+      "type": "Spacer",
+      "hasMeasuredProperty": [
+        {
+          "type": "Diameter"
+        },
+        {
+          "type": "Thickness"
+        }
+      ]
+    },
+    "Spring": {
+      "type": "Spring",
+      "hasMeasuredProperty": [
+        {
+          "type": "Diameter"
+        },
+        {
+          "type": "Thickness"
+        }
+      ]
+    }
+  },
+  "hasElectrolyte": {
+    "type": "OrganicElectrolyte",
+    "hasMeasuredProperty": [
+      {
+        "type": "ElectrolyticConductivity"
+      },
+      {
+        "type": "DynamicViscosity"
+      },
+      {
+        "type": "Density"
+      },
+      {
+        "type": "CelsiusTemperature"
+      }
+    ],
+    "hasSolvent": {
+      "hasConstituent": [
+        {
+          "type": "EthyleneCarbonate",
+          "hasMeasuredProperty": {
+            "type": "VolumeFraction"
+          }
+        },
+        {
+          "type": "EthylMethylCarbonate",
+          "hasMeasuredProperty": {
+            "type": "VolumeFraction"
+          }
+        }
+      ]
+    },
+    "hasSolute": {
+      "type": "Solute",
+      "hasConstituent": [
+        {
+          "type": "LithiumHexafluorophosphate",
+          "hasMeasuredProperty": {
+            "type": "AmountConcentration"
+          }
+        },
+        {
+          "type": "LithiumBisfluorosulfonylimide",
+          "hasMeasuredProperty": {
+            "type": "AmountConcentration"
+          }
+        }
+      ],
+      "hasAdditive": {
+        "type": "Additive",
+        "hasConstituent": [
+          {
+            "type": "VinyleneCarbonate",
+            "hasMeasuredProperty": {
+              "type": "AmountConcentration"
+            }
+          },
+          {
+            "type": "TrisTrimethylsilyPhosphite",
+            "hasMeasuredProperty": {
+              "type": "AmountConcentration"
+            }
+          }
+        ]
+      }
+    },
+    "schema:manufacturer": {
+      "id": "https://www.wikidata.org/wiki/Q30285492",
+      "type": "Solvionic"
+    }
+  },
+  "hasCase": {
+    "type": [
+      "R2032",
+      "StainlessSteel"
+    ],
+    "hasConstituent": {
+      "CellLid": {
+        "type": "CellLid",
+        "hasCoating": {
+          "rdfs:comment": "none"
+        }
+      },
+      "CellCan": {
+        "type": "CellCan",
+        "hasCoating": {
+          "type": "Aluminium"
+        }
+      }
+    },
+    "schema:manufacturer": {
+      "type": "Hosen"
+    },
+    "schema:productID": {
+      "rdfs:comment": "2032, SUS316L"
+    }
+  },
+  "hasNegativeElectrode": {
+    "type": "Electrode",
+    "schema:productID": {
+      "rdfs:comment": "11113, A-1594"
+    }
+  },
+  "hasPositiveElectrode": {
+    "type": "Electrode",
+    "hasMeasuredProperty": [
+      {
+        "type": "RatedCapacity"
+      },
+      {
+        "type": "RatedCapacity"
+      },
+      {
+        "type": "RatedCapacity"
+      },
+      {
+        "type": "Diameter"
+      }
+    ],
+    "hasCoating": {
+      "type": "ElectrodeCoating",
+      "hasMeasuredProperty": [
+        {
+          "type": "CalenderedCoatingThickness"
+        },
+        {
+          "type": "Porosity"
+        },
+        {
+          "type": "Tortuosity"
+        }
+      ],
+      "hasBinder": {
+        "type": [
+          "Binder",
+          "PolyvinylideneFluoride"
+        ],
+        "hasMeasuredProperty": {
+          "type": "MassFraction"
+        }
+      },
+      "hasActiveMaterial": {
+        "molecularFormula": {
+          "rdfs:comment": "LiNi0.6Co0.2Mn0.2O2"
+        },
+        "hasMeasuredProperty": [
+          {
+            "type": "MassFraction"
+          },
+          {
+            "type": "MassLoading"
+          },
+          {
+            "type": "D50ParticleSize"
+          }
+        ],
+        "rdfs:comment": "LithiumNickelCobaltManganeseOxide"
+      },
+      "hasConductiveAdditive": {
+        "type": [
+          "ConductiveAdditive",
+          "CarbonBlack"
+        ],
+        "hasMeasuredProperty": {
+          "type": "MassFraction"
+        }
+      }
+    },
+    "hasCurrentCollector": {
+      "type": [
+        "CurrentCollector",
+        "Aluminium"
+      ],
+      "hasMeasuredProperty": {
+        "type": "Thickness",
+        "hasNumericalPart": {
+          "type": "emmo:RealData",
+          "hasNumberValue": 15
+        },
+        "emmo:EMMO_bed1d005_b04e_4a90_94cf_02bc678a8569": "emmo:MicroMetre"
+      }
+    },
+    "schema:manufacturer": {
+      "id": "https://www.wikidata.org/wiki/Q120784603",
+      "type": "Customcells"
+    },
+    "schema:productID": {
+      "rdfs:comment": 100000030
+    }
+  },
+  "hasSeparator": {
+    "type": [
+      "Separator",
+      "Polypropylene"
+    ],
+    "hasMeasuredProperty": [
+      {
+        "type": "Thickness"
+      },
+      {
+        "type": "Porosity"
+      },
+      {
+        "type": "Tortuosity"
+      },
+      {
+        "type": "Diameter"
+      }
+    ],
+    "schema:manufacturer": {
+      "id": "https://www.wikidata.org/wiki/Q122199856",
+      "type": "Celgard"
+    },
+    "schema:productID": {
+      "rdfs:comment": 2500
+    }
+  },
+  "rdfs:comment": [
+    "BattINFO Converter version: 0.0.1",
+    "Software credit: This JSON-LD was created using BattINFO converter (https://battinfoconverter.streamlit.app/) version: 0.0.1 and the coin cell battery schema version: 1.1.9, this web application was developed at Empa, Swiss Federal Laboratories for Materials Science and Technology in the Laboratory Materials for Energy Conversion",
+    "BattINFO CoinCellSchema version: 1.1.9",
+    "Project: Battery2030+/PREMISE",
+    "Assembled manually or by robot: manually",
+    "Cell assembly sequence: CellCan, NegativeElectrode, Separator, 100.0 uL Electrolyte, PositiveElectrode, 1.0 mm Spacer, Spring, CellLid"
+  ],
+  "schema:creator": {
+    "id": "https://orcid.org/0000-0002-5003-1134",
+    "type": "schema:Person",
+    "schema:name": "Corsin Battaglia"
+  },
+  "schema:dateCreated": "16/6/2024",
+  "schema:productID": "Empa-bco-000007",
+  "schema:version": "1.1.9"
+}

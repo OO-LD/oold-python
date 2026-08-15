@@ -47,7 +47,7 @@ class WikiDataEntity(LinkedBaseModel):
     name: Optional[str] = None
 
     @classmethod
-    def get_class_iri(cls):
+    def get_cls_iri(cls):
         # return default value of field 'type' if not set
         if (
             cls.model_fields.get("type")

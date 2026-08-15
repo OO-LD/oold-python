@@ -171,6 +171,35 @@ class Generator:
                 with open(output, "w", encoding="utf-8") as f:
                     f.write(content)
 
+    # iterate over a jsonschema
+    # follow allOf and $ref
+    # store all property schemas in a dict with
+    # the property path as key (e.g. "foo", "foo.bar")
+    # if a property path is already in the dict,
+    # merge the new schema with the existing one
+    def merge_property_schemas(self, schema, path="", schemas={}):
+        if "properties" in schema:
+            for key in schema["properties"]:
+                new_path = path + "." + key if path else key
+                self.merge_property_schemas(
+                    schema["properties"][key],
+                    new_path,
+                    schemas,
+                )
+
+                if new_path in schemas:
+                    schema["properties"][key] = {
+                        **schemas[path],
+                        **schema["properties"][key],
+                    }
+
+        if "allOf" in schema:
+            for sub_schema in schema["allOf"]:
+                self.merge_property_schemas(sub_schema, path, schemas)
+        if "items" in schema:
+            self.merge_property_schemas(schema["items"], path, schemas)
+        return schema
+
     class PreprocessParams(BaseModel):
         json_schemas: List[Dict]
         """JSON SCHEMA source(s)"""

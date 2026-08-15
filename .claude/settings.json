@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(python -c \"from datamodel_code_generator.model import pydantic as p; print\\(dir\\(p\\)\\)\")",
+      "Bash(python -c \":*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(pip install:*)",
+      "Bash(pip index:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python -c \"from pydantic_core import PydanticUndefined; print\\(type\\(PydanticUndefined\\)\\)\")",
+      "Bash(python -c \"import sys; print\\(sys.executable\\); print\\(sys.version\\)\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/OpenSemanticLab/mediawiki-extensions-OpenSemanticLab/main/modules/ext.OpenSemanticLab/prefect.js\")",
+      "Bash(python -c \"from opensemantic.base.v1 import PrefectFlow, Software, Label, Description; print\\(''All available''\\)\")",
+      "Bash(curl -s https://api.github.com/repos/OpenSemanticLab/mediawiki-extensions-ApiGateway/contents/src)",
+      "Bash(curl -s https://api.github.com/repos/OpenSemanticLab/mediawiki-extensions-ApiGateway/contents/src?ref=main)",
+      "Bash(curl -s https://api.github.com/repos/OpenSemanticLab/mediawiki-extensions-ApiGateway/git/trees/main?recursive=1)",
+      "Bash(export PREFECT_API_URL=\"https://stacktest.digital.isc.fraunhofer.de/w/rest.php/apigateway/v1/prefect\")",
+      "Bash(export OSW_USER=\"Admin\")",
+      "Bash(export OSW_SERVER=\"stacktest.digital.isc.fraunhofer.de\")",
+      "Bash(export OSW_PASSWORD=\"change_me123123\")",
+      "Bash(C:/Users/Stier/ownCloud/Git/OO-LD/.venv/Scripts/python.exe \"c:/Users/Stier/ownCloud/Git/OO-LD/osw-python/examples/prefect/hello_world.py\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"https://stacktest.digital.isc.fraunhofer.de/w/rest.php/apigateway/v1/prefect?path=flows%2F\" -H \"Content-Type: application/json\" -d '{\"\"name\"\":\"\"test\"\"}')",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/OpenSemanticLab/mediawiki-extensions-ApiGateway/main/src/Rest/GatewayHandler.php\")"
+    ]
+  }
+}

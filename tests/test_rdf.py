@@ -113,6 +113,9 @@ def _run(pydantic_version):
 
     p1 = Person(name="Alice")
     p2 = Person(name="Bob", knows=[p1])
+    test = hasattr(Person, "type")
+    # p3 = Person(name="Charlie", knows=[p1, p2])
+    # p2.knows.append(p3)
     print(p2.to_jsonld())
 
     # load the rdf into a rdflib graph

@@ -1,0 +1,249 @@
+"""Prototype of the notations proposed in issue #107 review comments.
+
+Three proposals are implemented and exercised here:
+
+1. ``OoldField()`` / ``OoldField(link=True)`` - no ``range=`` argument. The link
+   target is inferred from the annotation, so the schema IRI is not repeated in
+   Python. ``OoldField()`` with no arguments at all is equivalent for a
+   non-literal target.
+2. ``Link[T]`` **inside** the annotation, e.g.
+   ``employer: Optional[Link[Organization]]`` or
+   ``friends: Optional[List[Link["Person"]]]``. ``Link[T]`` is
+   ``Annotated[T, LinkMarker()]``, so a type checker reads it as ``T`` - and,
+   unlike the rejected ``Annotated``-over-``Ref`` form, the runtime value really
+   *is* a ``T``, because the descriptor returns the resolved object.
+3. **Union forms** mixing literal, inline object and reference, e.g.
+   ``location: Union[str, Location, Link[Location]]``.
+
+Everything reuses the descriptor machinery from
+:mod:`oold.experimental.auto_descriptor_binding`.
+"""
+
+from __future__ import annotations
+
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+)
+
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
+
+from oold.experimental.auto_descriptor_binding import (
+    _TYPE_REGISTRY,
+    LinkedQueryMeta,
+    OoldExtra,
+    _AutoLink,
+)
+
+T = TypeVar("T")
+
+_LITERAL_TYPES = (str, int, float, bool, bytes)
+
+
+class LinkMarker:
+    """``Annotated`` metadata marking a property as an IRI-valued link."""
+
+    __slots__ = ("required_iri",)
+
+    def __init__(self, required_iri: bool = False):
+        self.required_iri = required_iri
+
+    def __repr__(self) -> str:
+        return f"LinkMarker(required_iri={self.required_iri})"
+
+
+if TYPE_CHECKING:
+    # For type checkers Link[X] is Annotated[X, ...], which reads as X.
+    Link = Annotated[T, "oold-link"]
+else:
+
+    class _LinkAlias:
+        def __getitem__(self, item: Any) -> Any:
+            return Annotated[item, LinkMarker()]
+
+    Link = _LinkAlias()
+
+
+def OoldField(
+    *,
+    link: Optional[bool] = None,
+    range: Optional[str] = None,
+    required_iri: Optional[bool] = None,
+    **kwargs: Any,
+) -> Any:
+    """``Field`` wrapper marking a property as a link.
+
+    ``range`` is optional: when omitted the target is taken from the
+    annotation. ``OoldField()`` therefore suffices in the common case.
+    """
+    extra: Dict[str, Any] = {}
+    if range is not None:
+        extra = dict(OoldExtra(range=range, required_iri=required_iri))
+    else:
+        extra["x-oold-link"] = True if link is None else bool(link)
+        if required_iri is not None:
+            extra["x-oold-required-iri"] = required_iri
+    # Link values are routed out of the payload before pydantic validates, so a
+    # link field must not be required at the pydantic level. This also makes the
+    # bare OoldField() form work with no arguments at all.
+    kwargs.setdefault("default", None)
+    return Field(**kwargs, json_schema_extra=extra)
+
+
+def _unwrap(annotation: Any) -> "tuple[Any, bool, bool, List[Any]]":
+    """Return (target, many, has_link_marker, literal_arms) for an annotation.
+
+    Understands ``Optional[...]``, ``List[...]``, ``Annotated[...]`` and unions
+    mixing a literal arm, an inline-object arm and a ``Link[...]`` arm.
+    """
+    many = False
+    marked = False
+    literals: List[Any] = []
+    target = annotation
+
+    def strip(tp: Any) -> Any:
+        nonlocal marked
+        while get_origin(tp) is Annotated:
+            args = get_args(tp)
+            if any(isinstance(m, LinkMarker) for m in args[1:]):
+                marked = True
+            tp = args[0]
+        return tp
+
+    changed = True
+    while changed:
+        changed = False
+        target = strip(target)
+        origin = get_origin(target)
+        if origin is Union:
+            arms = [a for a in get_args(target) if a is not type(None)]
+            model_arms, other = [], []
+            for arm in arms:
+                bare = strip(arm)
+                if isinstance(bare, type) and issubclass(bare, BaseModel):
+                    model_arms.append(bare)
+                elif bare in _LITERAL_TYPES:
+                    other.append(bare)
+                else:
+                    model_arms.append(bare)
+            literals.extend(other)
+            if len(model_arms) >= 1:
+                target, changed = model_arms[0], True
+            elif other:
+                target, changed = other[0], True
+        elif origin in (list, List):
+            args = get_args(target)
+            if args:
+                target, many, changed = strip(args[0]), True, True
+    return target, many, marked, literals
+
+
+class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
+    """Model base supporting the proposed link notations."""
+
+    model_config = ConfigDict(ignored_types=(_AutoLink,))
+
+    _links: Dict[str, Any] = PrivateAttr(default_factory=dict)
+    __link_fields__: ClassVar[Dict[str, _AutoLink]] = {}
+    __link_literals__: ClassVar[Dict[str, List[Any]]] = {}
+
+    @classmethod
+    def oold_query(cls, item: Any) -> Any:
+        return ("query", cls.__name__, item)
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        super().__pydantic_init_subclass__(**kwargs)
+        links: Dict[str, _AutoLink] = dict(getattr(cls, "__link_fields__", {}))
+        literals: Dict[str, List[Any]] = dict(getattr(cls, "__link_literals__", {}))
+        for name, field in cls.model_fields.items():
+            extra = field.json_schema_extra
+            extra = extra if isinstance(extra, dict) else {}
+            explicit_range = extra.get("x-oold-range") or extra.get("range")
+            flagged = bool(extra.get("x-oold-link"))
+            target, many, marked, lits = _unwrap(field.annotation)
+            # a top-level Annotated marker is moved into field.metadata by pydantic
+            if any(isinstance(m, LinkMarker) for m in getattr(field, "metadata", [])):
+                marked = True
+            if not (explicit_range or flagged or marked):
+                continue
+            if explicit_range and not isinstance(target, type):
+                target = explicit_range
+            descr = _AutoLink(name, target, many)
+            setattr(cls, name, descr)
+            links[name] = descr
+            if lits:
+                literals[name] = lits
+        cls.__link_fields__ = links
+        cls.__link_literals__ = literals
+        type_field = cls.model_fields.get("type")
+        if type_field is not None and isinstance(type_field.default, str):
+            _TYPE_REGISTRY[type_field.default] = cls
+
+    def __init__(self, **data: Any) -> None:
+        lf = type(self).__link_fields__
+        lits = type(self).__link_literals__
+        link_data = {k: data.pop(k) for k in list(data) if k in lf}
+        super().__init__(**data)
+        for key, value in link_data.items():
+            # union arms: a bare string stays a literal when the field also
+            # declares a literal arm; a reference then arrives as {"@id": ...}
+            arms = lits.get(key)
+            if arms and isinstance(value, str):
+                object.__setattr__(self, key, value)
+                self._links.pop(key, None)
+                continue
+            lf[key].set_value(self, self._coerce(value))
+
+    @staticmethod
+    def _coerce(value: Any) -> Any:
+        def one(v: Any) -> Any:
+            if isinstance(v, dict) and set(v) == {"@id"}:
+                return v["@id"]  # pure reference object
+            return v
+
+        if isinstance(value, list):
+            return [one(v) for v in value]
+        return one(value)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        descr = type(self).__link_fields__.get(name)
+        if descr is not None:
+            arms = type(self).__link_literals__.get(name)
+            if arms and isinstance(value, str):
+                object.__setattr__(self, name, value)
+                self._links.pop(name, None)
+                return
+            descr.set_value(self, self._coerce(value))
+        else:
+            super().__setattr__(name, value)
+
+    def get_iri(self) -> Optional[str]:
+        return getattr(self, "id", None)
+
+    def link_iris(self, name: str) -> Any:
+        return type(self).__link_fields__[name].iris(self)
+
+    @model_serializer(mode="wrap")
+    def _serialize_links(self, handler: Any) -> Dict[str, Any]:
+        d = handler(self)
+        for name, descr in type(self).__link_fields__.items():
+            iris = descr.iris(self)
+            if iris:
+                d[name] = iris
+            elif (
+                name in d
+                and self._links.get(name) is None
+                and name not in self.__dict__
+            ):
+                d.pop(name, None)
+        return d

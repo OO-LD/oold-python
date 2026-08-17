@@ -1,9 +1,8 @@
-"""``format`` assertion, matching the reference harness.
+"""``format`` assertion.
 
-``format`` is an annotation by default in JSON Schema 2020-12. The OO-LD harness turns it into
-a real assertion (ajv's ``validateFormats: true`` plus ``ajv-formats`` and
-``ajv-formats-draft2019``), so a generated instance that violates a declared ``format`` is a
-failure rather than a silent pass. This module is the Python equivalent.
+``format`` is an annotation by default in JSON Schema 2020-12: on its own, a value violating a
+declared ``format`` is not an error. This module asserts it instead, so a generated instance that
+violates a declared ``format`` is a failure rather than a silent pass.
 
 Two reasons it implements the formats itself instead of relying on ``jsonschema[format]``:
 
@@ -13,7 +12,7 @@ Two reasons it implements the formats itself instead of relying on ``jsonschema[
 * ``iri`` and ``iri-reference`` need a deliberate *override* rather than a strict RFC 3987
   implementation. See :func:`is_iri_reference`.
 
-Formats not implemented here stay annotations, exactly as an unknown format does in ajv.
+Formats not implemented here stay annotations: an unrecognized ``format`` value is not an error.
 """
 
 from __future__ import annotations
@@ -27,13 +26,12 @@ from jsonschema import FormatChecker
 
 # ---------------------------------------------------------------------------- IRI
 
-# Corrected IRI formats (RFC 3987), ported from oold-schema scripts/validate.mjs.
+# Corrected IRI formats (RFC 3987).
 #
 # ajv-formats-draft2019 ships buggy iri / iri-reference regexes: they reject valid compact IRIs
 # such as `ex:alice` (any URI/IRI grammar accepts those - an IRI is a superset of a URI) and are
-# mutually inconsistent (`iri` accepts `urn:uuid:...` while `iri-reference` does not). The
-# reference harness overrides both, and so does this module, or the two implementations would
-# disagree on the majority of OO-LD schemas: an IRI reference excludes ASCII controls, space and
+# mutually inconsistent (`iri` accepts `urn:uuid:...` while `iri-reference` does not). This module
+# implements both formats corrected instead: an IRI reference excludes ASCII controls, space and
 # the delimiters RFC 3987 disallows, while non-ASCII ucschar stays allowed; an absolute IRI
 # additionally begins with a scheme. Upstream bug: luzlab/ajv-formats-draft2019#31.
 _IRI_EXCLUDED = re.compile(r"[\s<>\"{}|\\^`]")
@@ -63,9 +61,9 @@ _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME = re.compile(r"^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|[+-]\d\d(?::?\d\d)?)?$", re.IGNORECASE)
 _DATE_TIME_SPLIT = re.compile(r"^(.+?)[t ](.+)$", re.IGNORECASE)
 _DURATION = re.compile(r"^P(?!$)((\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?|(\d+W)?)$")
-# ajv-formats' *full* email, which is what `addFormats(ajv)` installs by default and therefore
-# what the reference harness asserts. It differs from the fast variant by requiring a dotted
-# domain, so `a@b` is rejected, and by only allowing dots between local-part atoms.
+# ajv-formats' *full* email pattern, the variant `addFormats(ajv)` installs by default. It
+# differs from the fast variant by requiring a dotted domain, so `a@b` is rejected, and by only
+# allowing dots between local-part atoms.
 _EMAIL = re.compile(
     r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
     r"@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
@@ -129,12 +127,11 @@ def _valid_date(value: str) -> bool:
 
 
 def _valid_time(value: str, require_offset: bool = True) -> bool:
-    """RFC 3339 full-time, with the field ranges checked numerically as ajv does.
+    """RFC 3339 full-time, with the field ranges checked numerically as ajv-formats does.
 
-    The offset is *required*, matching ajv-formats in full mode - which is what
-    ``addFormats(ajv)`` installs by default and therefore what the reference harness asserts.
-    The fast-mode variant makes it optional, and following that would let ``03:04:05`` pass
-    here while failing upstream.
+    The offset is *required*, matching ajv-formats' full mode - the variant ``addFormats(ajv)``
+    installs by default. Its fast-mode variant makes the offset optional, and following that
+    would let ``03:04:05`` pass here.
     """
     match = _TIME.match(value)
     if not match:

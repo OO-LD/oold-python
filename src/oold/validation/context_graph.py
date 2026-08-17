@@ -1,7 +1,7 @@
 """Detection of cyclic scoped ``@context`` references.
 
-Ports ``validate.mjs`` lines 195-227. This module *detects*; it does not resolve. Context
-resolution lives in :mod:`~oold.validation.context_resolution` and the pyld document loader.
+This module *detects*; it does not resolve. Context resolution lives in
+:mod:`~oold.validation.context_resolution` and the pyld document loader.
 
 A schema's ``@context`` can reference other schema files, both as a parent context and as a
 term's scoped context. When those references form a cycle - a value type whose scoped context
@@ -54,8 +54,7 @@ def build_graph(schemas: dict[str, Any]) -> dict[str, list[str]]:
     """Map each schema file name to the schema files its ``@context`` references.
 
     ``schemas`` is keyed by file name, as the checks operate on a directory of schemas. A
-    document that cannot be read contributes an empty edge list rather than aborting, matching
-    the reference harness.
+    document that cannot be read contributes an empty edge list rather than aborting the run.
     """
     graph: dict[str, list[str]] = {}
     for name, document in schemas.items():

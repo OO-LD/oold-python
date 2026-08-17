@@ -1,11 +1,11 @@
 """Command line interface for OO-LD validation.
 
 Exposed twice, from one implementation: as ``oold validate ...`` (see :mod:`oold.cli`) and as
-``oold-validate ...``, whose name and directory-argument behaviour match the reference
-harness's ``npx oold-validate <dir>`` so documentation and CI snippets carry across between the
-two repositories.
+``oold-validate ...``, whose name and directory-argument behaviour match oold-schema's own
+``npx oold-validate <dir>`` so documentation and CI snippets carry across between the two
+repositories.
 
-Exit code is 0 only when no check failed. Warnings do not fail a run, matching the reference.
+Exit code is 0 only when no check failed. Warnings do not fail a run.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def validate(target: Path, meta, offline: bool, as_json: bool, verbose: bool, ou
     """Validate an OO-LD schema, or every schema and instance in a directory.
 
     TARGET is a *.schema.json file or a directory. A directory runs the same general-workflow
-    tier as `oold-validate <dir>` in the reference harness.
+    checks over every schema and instance it contains.
     """
     try:
         options = _options(meta, offline)
@@ -336,7 +336,7 @@ def checks_group() -> None:
     Check ids (``lint.container``, ``rule.id-fragment``) name which check produced a finding;
     rule ids (``OOLD-RT-08f2``, see ``oold rules``) name the specification requirement it
     enforces, when it enforces one at all. The two are not peers: see
-    ``specs/2026-08-04-check-registry-design.md`` for why.
+    ``docs/architecture.md``, "Validation subsystem design", for why.
     """
 
 
@@ -425,7 +425,7 @@ def _detection_site(check) -> str:
 
     Never the emitting site: that is what names the check id and reports the finding, which is
     findable by grepping the id and would otherwise be a second, unmaintained field to keep in
-    step (see ``specs/2026-08-04-check-registry-design.md``, "The command").
+    step.
     """
     fn = check.detects or check.run
     if fn is None:

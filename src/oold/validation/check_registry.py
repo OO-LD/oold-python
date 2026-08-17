@@ -434,12 +434,12 @@ def _dialect_not_2020_12(schema: dict[str, Any], context: ContextView) -> list[s
 def _context_array_order_mismatched(schema: dict[str, Any], context: ContextView) -> list[str]:
     """`allOf`'s `$ref` targets must appear in `@context`, as an array, in the same order.
 
-    Deliberate exception to "judge the resolved context" (see CLAUDE.md): this rule is about
-    whether the schema *as authored* stays directly usable as a remote `@context` without further
-    processing, which is a statement about its own array and the order of its own entries, not
-    about what a term means once resolution and inheritance are applied. So, on purpose, this
-    predicate reads `schema["@context"]` and `schema["allOf"]` literally rather than taking the
-    resolved `ContextView`.
+    Deliberately reads the literal schema rather than the resolved context, unlike most checks in
+    this module: this rule is about whether the schema *as authored* stays directly usable as a
+    remote `@context` without further processing, which is a statement about its own array and
+    the order of its own entries, not about what a term means once resolution and inheritance are
+    applied. So, on purpose, this predicate reads `schema["@context"]` and `schema["allOf"]`
+    literally rather than taking the resolved `ContextView`.
     """
     allof = schema.get("allOf")
     if not isinstance(allof, list):
@@ -496,7 +496,7 @@ def _version_not_in_schema_location(schema: dict[str, Any], context: ContextView
 def _root_ref_missing_from_context(schema: dict[str, Any], context: ContextView) -> list[str]:
     """A schema's single root-level `allOf` `$ref` must be reflected in its own `@context`.
 
-    Deliberate exception to "judge the resolved context" (see CLAUDE.md), for the same reason as
+    Deliberately reads the literal schema rather than the resolved context, for the same reason as
     `rule.context-array-order`: whether a schema stays directly usable as a remote `@context` with
     no further processing is a statement about its own, authored `@context`, not about what a term
     means once inheritance is applied. So this predicate reads `schema["@context"]` and

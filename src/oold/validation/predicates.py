@@ -1,7 +1,7 @@
 """Per-property attribution: which declared property produced which RDF predicate.
 
-This check has no counterpart in the reference harness. It exists because there are two ways a
-``@context`` can fail a property, and looking only for the first misses the worse half.
+This check exists because there are two ways a ``@context`` can fail a property, and looking
+only for the first misses the worse half.
 
 **Dropped** - the term has no context definition at all, so the key vanishes on expansion. The
 round-trip check catches this too, via a lost key.

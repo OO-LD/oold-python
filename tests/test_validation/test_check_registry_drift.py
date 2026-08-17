@@ -2,8 +2,8 @@
 
 `test_check_registry.py` exercises the ten self-contained `rule.*` predicates in isolation. These
 run the fixture corpus end to end instead, and compare what came out against what
-`check_registry.CHECKS` claims exists. See `specs/2026-08-04-check-registry-design.md`, "Why this
-will not drift", for the design these four tests implement.
+`check_registry.CHECKS` claims exists. See `docs/architecture.md`, "Validation subsystem design",
+for the design these four tests implement.
 """
 
 from __future__ import annotations
@@ -24,10 +24,11 @@ _CORPUS_META = ("0.7.0", tracked_versions()[-1])
 
 #: These two fire only on an infrastructure failure path the corpus cannot exercise without
 #: corrupting something every other test relies on: a broken vendored meta-schema
-#: (`meta.self-check`, and those files must stay byte-exact - see CLAUDE.md) or an unreadable
-#: compliance fixture file (`compliance.suite`, and corrupting one would also break every test
-#: that expects the compliance suite to run cleanly). Exempted from test 2 rather than faked with
-#: a fixture that would compromise something else.
+#: (`meta.self-check`, and those files must stay byte-exact - see
+#: `docs/maintaining-meta-schemas.md`) or an unreadable compliance fixture file
+#: (`compliance.suite`, and corrupting one would also break every test that expects the
+#: compliance suite to run cleanly). Exempted from test 2 rather than faked with a fixture that
+#: would compromise something else.
 _ONLY_ON_FAILURE_PATHS = frozenset({"meta.self-check", "compliance.suite"})
 
 

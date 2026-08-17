@@ -1,8 +1,7 @@
 """The deterministic per-feature compliance suite.
 
-Ports tier 2 of the reference harness (``validate.mjs`` lines 536-634). Where the general
-workflow runs generic checks over any schema, this runs *fixtures with exact expected
-outcomes*, so it catches behaviour a generic check cannot express.
+Where the general workflow runs generic checks over any schema, this runs *fixtures with exact
+expected outcomes*, so it catches behaviour a generic check cannot express.
 
 A suite is a directory of JSON files, each holding a list of groups. A group is one of three
 shapes:
@@ -45,7 +44,7 @@ from .pattern_lint import lint
 from .roundtrip import canonical, json_equal
 from .schema_checks import validate_against_meta
 
-#: Base the reference harness uses for inline compliance fixtures.
+#: Base IRI assumed for inline compliance fixtures that declare no base of their own.
 RDF_BASE = "https://oo-ld.test/"
 
 #: Keyword prefixes the vocabulary-coverage check tracks.

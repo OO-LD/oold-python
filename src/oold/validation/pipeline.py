@@ -6,8 +6,8 @@ generation, RDF round-trip, predicate attribution - is version independent. So t
 independent work runs *once* and only the two dependent checks fan out across the selected
 versions. With ``--meta all`` that is the difference between linear and near-constant cost.
 
-Check ids are stable and dotted, so results can be filtered, compared across runs, and lined up
-against the reference harness's sections. See ``docs/how-to/validation.md``.
+Check ids are stable and dotted, so results can be filtered and compared across runs. See
+``docs/how-to/validation.md``.
 """
 
 from __future__ import annotations

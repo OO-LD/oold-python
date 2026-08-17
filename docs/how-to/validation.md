@@ -83,7 +83,7 @@ catch. The `[0.7.0]` tag is what tells you this is a version difference rather t
 `remote` fetches the unreleased `main` state into `~/.cache/oold/meta/` (override with
 `OOLD_CACHE_DIR`). It never writes into the tracked history, so a released version cannot change
 meaning behind your back. Adding a version is documented in
-`src/oold/validation/meta/README.md`.
+[Maintaining the vendored meta-schemas and fixtures](../maintaining-meta-schemas.md).
 
 ## Rule citations
 

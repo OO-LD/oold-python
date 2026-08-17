@@ -2,8 +2,8 @@
 
 The meta-schemas are owned by `oold-schema <https://github.com/OO-LD/oold-schema>`_. This
 package keeps a hand-curated copy of each released version under ``meta/<version>/`` (see
-``meta/README.md``) so validation works offline, and so one schema can be checked against
-several meta-schema versions in a single run.
+``docs/maintaining-meta-schemas.md``) so validation works offline, and so one schema can be
+checked against several meta-schema versions in a single run.
 
 Selection is by name:
 
@@ -217,9 +217,8 @@ class MetaBundle:
     def self_check(self) -> list[str]:
         """Problems with the meta-schemas themselves, as data rather than exceptions.
 
-        The reference harness gets this for free when ajv compiles the meta-schema
-        (``validate.mjs`` line 68). Here it is explicit, so a badly curated version folder is
-        reported as a failing check rather than crashing mid-run.
+        Checked explicitly, so a badly curated version folder is reported as a failing check
+        rather than crashing mid-run.
 
         The rule catalog is judged too, when this version vendors the schema for it. It is not a
         schema itself but data the validator trusts, and trusting it silently is the failure this

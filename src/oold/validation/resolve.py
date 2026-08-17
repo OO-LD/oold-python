@@ -5,10 +5,8 @@ string, or a URL. Everything normalises to a :class:`ResolvedSchema`, whose ``ba
 relative ``$ref`` and relative ``@context`` entries resolve against. Local files get a
 ``file://`` base URI so one code path covers local and remote alike.
 
-Remote documents are cached on disk. The reference harness
-(``json-schema-ref-parser`` inside ``scripts/validate.mjs``) also follows remote ``$ref``s, but
-refetches them on every run; caching is the one behavioural difference here, and
-``offline=True`` restricts resolution to local files and the warm cache.
+Remote documents are cached on disk, so a repeated run does not refetch them. ``offline=True``
+restricts resolution to local files and the warm cache, with the network refused.
 
 :func:`dereference` deliberately produces a *graph*, with shared and circular references, the
 way ``json-schema-ref-parser`` does. :func:`bound_schema` then turns that graph back into a
@@ -31,7 +29,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 #: Matches the `/C:` a Windows drive letter gets in a file URI path.
 _DRIVE_PREFIX = re.compile(r"^/[A-Za-z]:")
 
-#: Cut marker substituted for a cycle or an over-deep node. Ported verbatim from validate.mjs.
+#: Cut marker substituted for a cycle or an over-deep node.
 #:
 #: It must stay permissive for validation: a *typed* cut would reject legitimate values at a node
 #: that is shared with an intact path. Carrying only a custom ``format`` gives two properties at
@@ -408,8 +406,6 @@ def apply_json_pointer(document: Any, fragment: str, ref: str) -> Any:
 def bound_schema(root: Any, max_depth: int = DEFAULT_MAX_DEPTH) -> Any:
     """Return a finite, acyclic copy of a dereferenced schema.
 
-    Ported from ``boundSchema`` in oold-schema ``scripts/validate.mjs``.
-
     Dereferencing inlines ``$ref``s, so a schema with cyclic embeds (a value type that embeds
     itself, for example schema.org ``QuantitativeValue.valueReference``) becomes a graph with
     circular references, and one where many properties share the same referenced leaf nodes.
@@ -423,15 +419,16 @@ def bound_schema(root: Any, max_depth: int = DEFAULT_MAX_DEPTH) -> Any:
     inherited property constraints - turning them permissive - on any schema a few subclass
     levels deep.
 
-    One observed subtlety, verified against the reference implementation rather than inferred:
-    nesting through ``properties`` does **not** in practice consume the budget. The map is
-    enqueued at the current depth alongside its members at ``depth + 1``, and when the map is
-    later dequeued it is walked as an ordinary object, re-enqueueing those same members at the
-    current depth; the relaxation then keeps the smaller value. So only the keywords in
-    :data:`INSTANCE_KEYWORDS` and ``prefixItems`` actually cut on depth. Termination does not
-    depend on it either way, since cycles are cut path-locally. This port reproduces the
-    behaviour deliberately, because the goal is verdict parity with the reference harness;
-    changing it here would make the two disagree on deeply nested schemas.
+    One subtlety is worth stating explicitly: nesting through ``properties`` does **not** in
+    practice consume the budget. The map is enqueued at the current depth alongside its members
+    at ``depth + 1``, and when the map is later dequeued it is walked as an ordinary object,
+    re-enqueueing those same members at the current depth; the relaxation then keeps the smaller
+    value. So only the keywords in :data:`INSTANCE_KEYWORDS` and ``prefixItems`` actually cut on
+    depth. Termination does not depend on it either way, since cycles are cut path-locally. This
+    is kept deliberately rather than corrected, because it already produces the instance-depth
+    semantics described above: making ``properties`` nesting consume the budget too would start
+    cutting inherited property constraints on schemas a few subclass levels deep, the exact
+    failure the instance-versus-JSON-depth distinction above exists to avoid.
     """
     # Pass 1: each node's minimum instance depth over all paths reaching it. A shared node is
     # then cut, or kept, identically everywhere rather than depending on which path happened to

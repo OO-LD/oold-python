@@ -1,20 +1,23 @@
 """Flattening an OO-LD ``@context`` chain into a plain JSON-LD context.
 
-Most checks reference a context *by URL* and let the document loader fetch it, which is what
-the reference harness does and what keeps relative IRIs resolving against the right base. This
-module exists for the cases that need the context as a single in-memory value instead: reporting
-which terms a schema defines, and the per-property attribution in
-:mod:`~oold.validation.predicates`.
+Most checks reference a context *by URL* and let the document loader fetch it, which keeps
+relative IRIs resolving against the right base. An OO-LD schema is itself a valid JSON-LD remote
+context - per JSON-LD 1.1, a remote context document only needs a top-level ``@context``, and its
+other keys are ignored - so a JSON-LD processor can already follow one straight through, which is
+exactly what OO-LD's rule ``OOLD-CMP-b926`` guarantees by requiring a schema to be directly usable
+as a context.
 
-It is needed because OO-LD ``@context`` entries are not JSON-LD context documents. They are
-references to *other OO-LD schemas*, usually relative siblings::
+What a processor does not expose is the *flattened active context itself* as a value a caller can
+inspect. Expanding a document tells you the resulting triples, not which terms were in scope or
+where each came from. This module exists for the callers that need that: reporting which terms a
+schema defines, and the per-property attribution in :mod:`~oold.validation.predicates`.
+
+``@context`` entries are usually relative siblings, referencing *other OO-LD schemas*::
 
     "@context": ["StructuredValue.schema.json", {"latitude": "schema:latitude"}]
 
-Handing that straight to a JSON-LD processor fetches a JSON Schema where a context was expected,
-so nothing resolves and every property looks dropped. In the schema.org-derived corpus the
-prefixes that make those terms meaningful (``schema:``, ``xsd:``) are only defined several hops
-up the chain, in ``Thing.schema.json``.
+In the schema.org-derived corpus the prefixes that make those terms meaningful (``schema:``,
+``xsd:``) are only defined several hops up the chain, in ``Thing.schema.json``.
 
 The same pattern appears inside term definitions, where a scoped context is also a schema
 reference::
@@ -24,6 +27,10 @@ reference::
 :func:`resolve_context` walks both forms. Entry order is preserved and the result stays a *list*
 of context objects rather than being merged by hand, so JSON-LD's own override semantics still
 apply.
+
+Replacing this walk with a JSON-LD processor's own context resolution is worth evaluating, if a
+future need exposes that flattened form through a stable API; this module exists because none
+does today, not because a processor could not in principle resolve the chain itself.
 """
 
 from __future__ import annotations

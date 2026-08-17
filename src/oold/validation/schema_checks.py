@@ -1,8 +1,7 @@
 """Schema-level checks: meta-schema well-formedness and ``$ref`` composition.
 
-Ports the first section of the reference harness (``validate.mjs`` lines 377-383): a schema is
-a well-formed OO-LD schema when it validates against the OO-LD meta-schema, and its standard
-``$ref`` composition resolves.
+A schema is a well-formed OO-LD schema when it validates against the OO-LD meta-schema, and its
+standard ``$ref`` composition resolves.
 
 The OO-LD meta-schema is 2020-12 plus the OO-LD and UI vocabularies, and it declares those
 vocabularies optional so a generic 2020-12 validator still processes OO-LD schemas. Validating
@@ -110,7 +109,7 @@ def check_usable_as_validator(schema: Any) -> list[str]:
 
     Meta-schema validity and usability are not the same thing. A schema can satisfy the
     meta-schema and still fail to compile, for instance through a malformed regex in
-    ``pattern``. The reference harness gets this implicitly from ``ajv.compile``.
+    ``pattern``, so this is checked separately and explicitly.
     """
     try:
         Draft202012Validator.check_schema(schema)
@@ -122,8 +121,7 @@ def check_usable_as_validator(schema: Any) -> list[str]:
 def check_refs_resolve(resolver: Resolver, resolved: ResolvedSchema) -> tuple[DereferenceResult, list[str]]:
     """Dereference a schema's ``$ref`` composition, reporting anything that did not resolve.
 
-    The equivalent of ``$RefParser.dereference`` in the reference harness. Like it, this
-    follows remote references as well as local ones; unlike it, results are cached.
+    Follows remote references as well as local ones. Results are cached.
     """
     result = resolver.dereference(resolved)
     return result, list(result.unresolved)

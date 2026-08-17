@@ -1,15 +1,11 @@
 """A JSON-LD document loader backed by the schema resolver.
 
-The reference harness installs a loader that maps ``https://oo-ld.test/examples/<file>`` onto
-the directory under test and refuses every other fetch (``validate.mjs`` lines 236-243). That
-makes the run deterministic, but it also means a schema whose ``@context`` chain leaves the
-directory cannot be processed at all.
-
-This loader keeps the synthetic base mapping - it is what makes relative ``@context`` entries
-resolve on disk - and additionally serves ``http(s)`` and ``file:`` references through
-:class:`~oold.validation.resolve.Resolver`, so they are cached rather than refetched. Passing
-``offline=True`` on the resolver restores the reference behaviour exactly: local files and warm
-cache only, with the network refused.
+This loader maps ``https://oo-ld.test/examples/<file>`` onto the directory under test, which is
+what makes relative ``@context`` entries resolve on disk. It additionally serves ``http(s)`` and
+``file:`` references through :class:`~oold.validation.resolve.Resolver`, so they are cached
+rather than refetched. Passing ``offline=True`` on the resolver restricts resolution to local
+files and the warm cache, with the network refused, which also means a schema whose ``@context``
+chain leaves the directory cannot be processed at all.
 
 The loader is passed per call via pyld's ``documentLoader`` option rather than installed with
 ``jsonld.set_document_loader``, so validating two directories in one process (or two MCP tool
@@ -31,10 +27,10 @@ from pyld import jsonld
 
 from .resolve import Resolver, SchemaResolutionError
 
-#: Synthetic host standing in for the filesystem. The reference harness uses
-#: ``https://oo-ld.test/examples/`` as its base; mounting the *parent* of the directory under
-#: test at the host root reproduces that exactly whenever the directory is called ``examples``,
-#: while also giving ``../`` references somewhere to land.
+#: Synthetic host standing in for the filesystem, using ``https://oo-ld.test/examples/`` as its
+#: base. Mounting the *parent* of the directory under test at the host root matches that base
+#: exactly whenever the directory is called ``examples``, while also giving ``../`` references
+#: somewhere to land.
 DEFAULT_HOST = "https://oo-ld.test/"
 
 #: Used when no directory is under test, so ``url_for`` still returns something well-formed.

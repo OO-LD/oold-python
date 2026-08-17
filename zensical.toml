@@ -24,7 +24,10 @@ nav = [
         { "BaseController" = "how-to/controller.md" },
     ]},
     { "Architecture" = "architecture.md" },
-    { "Contributing" = "contributing.md" },
+    { "Contributing" = [
+        { "Contributing" = "contributing.md" },
+        { "Maintaining meta-schemas" = "maintaining-meta-schemas.md" },
+    ]},
     { "API Reference" = "api.md" },
 ]
 

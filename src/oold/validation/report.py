@@ -4,9 +4,8 @@ One serialisable shape carries a whole run, so there is no second representation
 sync. A run is a flat list of :class:`Check` records; grouping (by target, by check id, by
 meta-schema version) is done at render time rather than baked into the structure.
 
-Statuses follow the reference harness (``scripts/validate.mjs`` in oold-schema): only ``fail``
-is fatal to the verdict. ``warn`` marks a SHOULD-level finding, ``skip`` marks a check that
-could not run for a documented reason (a cyclic scoped ``@context``, for instance).
+Only ``fail`` is fatal to the verdict. ``warn`` marks a SHOULD-level finding, ``skip`` marks a
+check that could not run for a documented reason (a cyclic scoped ``@context``, for instance).
 """
 
 from __future__ import annotations
@@ -65,7 +64,9 @@ class Check:
         return payload
 
     def line(self) -> str:
-        """A single-line rendering, in the reference harness's column style."""
+        """A single-line rendering: status, rule, check id, target, version and message, each in
+        a fixed-width column.
+        """
         label = self.status.upper().ljust(4)
         rule = f" {self.rule}" if self.rule else ""
         version = f" [{self.meta_version}]" if self.meta_version else ""

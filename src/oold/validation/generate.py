@@ -1,26 +1,24 @@
 """Deterministic instance generation.
 
-The reference harness generates instances with json-schema-faker configured as
-``{alwaysFakeOptionals: true, useExamplesValue: true, useDefaultValue: true, maxItems: 1,
-maxLength: 40}`` (``validate.mjs`` lines 112-120). ``alwaysFakeOptionals`` is the important part:
-it means every property is populated, not a random subset. So the reference is already
-generating a *maximal* instance, and this module reproduces that deterministically instead of
-sampling.
+Every property is populated, not a random subset, which produces a *maximal* instance. This
+module builds that same maximal shape deterministically instead of sampling: string and array
+lengths are capped (see :data:`MAX_LENGTH`, :data:`MAX_ITEMS`) and example or default values are
+preferred where a schema provides them.
 
 Determinism is a real gain rather than a compromise. The generated instance is what the
 satisfiability and round-trip checks run on, and a randomised one turns a round-trip bug into a
 flaky CI failure that reproduces only sometimes.
 
-Two things the generator must get right, both learned from the reference implementation:
+Two things the generator must get right:
 
 * a cut node (:data:`~oold.validation.resolve.CUT_SCHEMA`) must produce a *string*. At a typeless
   node a random generator is free to emit a boolean or a number, and a non-string under an
   ``@type: "@id"`` term becomes an RDF literal that cannot compact back, which reads as a false
   round-trip loss.
-* generated ``id`` values must be unique. The reference's faker draws URLs from a small pool, so
-  two ``id`` values in one document can collide, and in RDF the same IRI is the same node: a
-  colliding embed merges into its parent and the round-trip then faithfully reports the merged
-  graph, which reads as a false schema failure. See :func:`uniquify_ids`.
+* generated ``id`` values must be unique. A generator drawing from a small pool of candidate
+  values can otherwise produce duplicates, and in RDF the same IRI is the same node: a colliding
+  embed merges into its parent and the round-trip then faithfully reports the merged graph, which
+  reads as a false schema failure. See :func:`uniquify_ids`.
 """
 
 from __future__ import annotations
@@ -32,12 +30,13 @@ from typing import Any
 from .formats import FORMAT_SAMPLES
 from .resolve import CUT_FORMAT
 
-#: Matches the reference faker's ``maxLength``/``maxItems`` settings.
+#: Caps generated string length and array length, keeping instances small. See the module
+#: docstring.
 MAX_LENGTH = 40
 MAX_ITEMS = 1
 
 #: How many oneOf/anyOf branches to enumerate per schema. A large schema can have hundreds, and
-#: each one means a full schema copy, so the reference caps this and notes when it does.
+#: each one means a full schema copy, so this caps enumeration and notes when the cap is hit.
 MAX_VARIANTS = 50
 
 #: Guard against a schema that is deep but not cyclic. ``bound_schema`` has already cut cycles,
@@ -298,15 +297,14 @@ def _is_authored(subschema: Any) -> bool:
 def uniquify_ids(value: Any, counter: _Counter) -> Any:
     """Give every generated ``id`` a distinct value.
 
-    Port of ``uniquifyIds`` (``validate.mjs`` lines 422-432). Colliding ``id`` values are not a
-    cosmetic problem: in RDF the same IRI is the same node, so a colliding embed merges into its
-    parent and the round-trip then faithfully reports the merged graph, which reads as a false
-    schema failure.
+    Colliding ``id`` values are not a cosmetic problem: in RDF the same IRI is the same node, so
+    a colliding embed merges into its parent and the round-trip then faithfully reports the
+    merged graph, which reads as a false schema failure.
 
-    One deliberate refinement over the reference, which rewrites unconditionally: an ``id`` the
-    schema pinned itself (``const``, ``enum``, ``default``, ``examples``) is left alone.
-    Overwriting it would make the generated instance violate its own schema and report a
-    satisfiability failure that says nothing about the schema.
+    An ``id`` the schema pinned itself (``const``, ``enum``, ``default``, ``examples``) is left
+    alone rather than rewritten unconditionally. Overwriting it would make the generated instance
+    violate its own schema and report a satisfiability failure that says nothing about the
+    schema.
     """
     if isinstance(value, list):
         for item in value:
@@ -353,11 +351,9 @@ _SUB_LIST = ("allOf", "oneOf", "anyOf", "prefixItems")
 def collect_variants(schema: dict[str, Any], limit: int = MAX_VARIANTS) -> tuple[list[Variant], int]:
     """Enumerate one schema variant per ``oneOf``/``anyOf`` branch.
 
-    Port of ``collectVariants`` (``validate.mjs`` lines 329-356). Each variant pins one branch by
-    replacing the alternatives with a single-element list, which is how the reference gets
-    deterministic per-branch coverage out of a random generator. Here generation is already
-    deterministic, but pinning is still what makes the *other* branches reachable at all: without
-    it only branch 0 is ever exercised.
+    Each variant pins one branch by replacing the alternatives with a single-element list.
+    Generation is already deterministic, but pinning is still what makes the *other* branches
+    reachable at all: without it only branch 0 is ever exercised.
 
     Returns the variants (capped at ``limit``) and the total number found, so a caller can report
     that it truncated.

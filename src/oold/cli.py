@@ -2,8 +2,9 @@
 
 A thin group that currently hosts the validation commands and leaves room for future
 non-validation subcommands. The implementation lives in :mod:`oold.validation.cli`, which is
-also bound directly to ``oold-validate`` for compatibility with the reference harness's
-``npx oold-validate <dir>``.
+also bound directly to ``oold-validate``, matching the command name oold-schema itself installs
+(``npx oold-validate <dir>``), so a script or CI snippet written against either package keeps
+working with the other.
 
 Validation needs the ``validation`` extra, so an import failure is reported as an actionable
 message rather than a traceback.

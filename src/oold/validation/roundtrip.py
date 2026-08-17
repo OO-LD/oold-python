@@ -1,7 +1,5 @@
 """Projecting an instance to RDF and reconstructing it.
 
-Ports ``canonical``, ``lostKeys`` and ``roundtrip`` from ``validate.mjs`` (lines 253-324).
-
 Two different comparisons are needed, because two different questions are being asked.
 
 :func:`lost_keys` answers "did any property fall out?" It compares keys only and ignores leaf

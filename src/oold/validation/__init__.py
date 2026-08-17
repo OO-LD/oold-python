@@ -1,7 +1,6 @@
 """OO-LD schema and instance validation.
 
-A native Python port of the reference harness in `oold-schema
-<https://github.com/OO-LD/oold-schema>`_ (``scripts/validate.mjs``). It answers two questions:
+Answers two questions:
 
 * is this a well-formed OO-LD schema, whose ``@context`` carries every property it declares
   into RDF without loss?

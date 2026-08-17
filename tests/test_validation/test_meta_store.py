@@ -156,15 +156,16 @@ def test_a_version_without_a_catalogue_schema_still_loads():
 def test_the_fixture_slice_records_the_release_it_came_from():
     """The tag is data, and it belongs beside the other provenance rather than in prose.
 
-    `tests/data/oold/README.md` claimed v0.8.0 for a full release after the slice had already
-    moved to v1.0.0-rc.1, because a vendoring updated the files and not the sentence describing
-    them. A compliance fixture asserts the rules of the version that introduced it, so a slice and
-    a meta-schema from different releases produce failures that say nothing about this code.
+    The fixture directory's own README used to claim v0.8.0 for a full release after the slice
+    had already moved to v1.0.0-rc.1, because a vendoring updated the files and not the sentence
+    describing them. A compliance fixture asserts the rules of the version that introduced it, so
+    a slice and a meta-schema from different releases produce failures that say nothing about
+    this code.
     """
     fixtures = meta_store.load_index()["fixtures"]
     assert fixtures["tag"] == f"v{tracked_versions()[-1]}", (
         "tests/data/oold/ and the newest tracked meta-schema version must come from one release; "
-        "refresh the slice (see its README) or vendor the matching version"
+        "refresh the slice (see docs/maintaining-meta-schemas.md) or vendor the matching version"
     )
 
 

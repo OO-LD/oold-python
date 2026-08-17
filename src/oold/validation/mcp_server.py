@@ -142,8 +142,9 @@ def validate_oold_directory(
 ) -> dict[str, Any]:
     """Validate every *.schema.json and *.instance.json in a directory.
 
-    The same general-workflow tier the reference harness exposes as `oold-validate <dir>`, so a
-    downstream repository can conformance-check its generated schemas.
+    Runs the same general-workflow checks as validating a single schema, over every schema and
+    instance the directory contains, so a downstream repository can conformance-check its
+    generated schemas.
 
     Args:
         directory: The directory to validate.

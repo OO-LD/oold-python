@@ -1,11 +1,7 @@
 """Checks on a committed instance document.
 
-Ports two sections of the reference harness:
-
-* ``validate.mjs`` lines 408-416 - the instance validates against its schema, with ``format``
-  asserted rather than annotated;
-* ``validate.mjs`` lines 476-503 - the instance survives ``instance -> RDF -> instance``
-  unchanged.
+Two checks: the instance validates against its schema, with ``format`` asserted rather than
+annotated; and the instance survives ``instance -> RDF -> instance`` unchanged.
 
 An instance names its schema with ``$schema``, resolved relative to the instance's own location,
 so a directory of instances validates with no further configuration. The round-trip here uses
@@ -73,8 +69,7 @@ def validate_instance(instance: Any, schema: dict[str, Any]) -> InstanceCheckRes
     """Validate an instance against its dereferenced, bounded schema.
 
     The whole document is validated, ``@context`` and ``$schema`` included. OO-LD schemas allow
-    additional properties, so those keys pass as unconstrained extras, exactly as they do under
-    the reference harness.
+    additional properties, so those keys pass as unconstrained extras.
     """
     result = InstanceCheckResult(schema_ref=instance.get("$schema") if isinstance(instance, dict) else None)
     try:

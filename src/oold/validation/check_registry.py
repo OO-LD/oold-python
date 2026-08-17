@@ -38,7 +38,7 @@ from .formats import is_iri
 from .frame import collect_composed_properties, instance_rdf_types
 from .generate import generate
 from .instance_checks import roundtrip_instance, validate_instance
-from .meta_store import MetaBundle
+from .meta_store import MetaBundle, Rule
 from .pattern_lint import array_properties_missing_container, iri_references_missing_format
 from .pattern_lint import lint as _lint_pattern
 from .predicates import check_predicates
@@ -107,7 +107,7 @@ _MUST_LEVELS = frozenset({"MUST", "MUST NOT", "SHALL", "SHALL NOT", "REQUIRED"})
 DEFAULT_LEVEL: Status = FAIL
 
 
-def severity(rule: dict[str, Any] | None, fallback: Status = DEFAULT_LEVEL) -> Status:
+def severity(rule: Rule | None, fallback: Status = DEFAULT_LEVEL) -> Status:
     """How hard a violation of this rule should land, taken from the specification.
 
     The level is the specification's own, not a taste judgement made here, so relaxing a MUST to
@@ -116,7 +116,7 @@ def severity(rule: dict[str, Any] | None, fallback: Status = DEFAULT_LEVEL) -> S
     """
     if not rule:
         return fallback
-    return FAIL if rule.get("level") in _MUST_LEVELS else WARN
+    return FAIL if rule.level in _MUST_LEVELS else WARN
 
 
 # ---------------------------------------------------------------------------- individual rules
@@ -1179,7 +1179,7 @@ def rule_map() -> dict[str, str]:
 _BY_ID: dict[str, CheckInfo] = {c.id: c for c in CHECKS}
 
 
-def catalog_gate(check: CheckInfo, catalog: dict[str, dict[str, Any]] | None) -> RuleFinding | None:
+def catalog_gate(check: CheckInfo, catalog: dict[str, Rule] | None) -> RuleFinding | None:
     """Whether ``check`` must be skipped against ``catalog``, or None to mean "run it".
 
     This is the one place the presence/deprecation gating lives, shared by the self-contained
@@ -1212,8 +1212,8 @@ def catalog_gate(check: CheckInfo, catalog: dict[str, dict[str, Any]] | None) ->
             SKIP,
             f"{check.rule} is not stated by this meta-schema version",
         )
-    if rule.get("deprecated"):
-        superseded = ", ".join(rule.get("superseded_by") or []) or "nothing"
+    if rule.deprecated:
+        superseded = ", ".join(rule.superseded_by or []) or "nothing"
         return RuleFinding(
             check.id,
             check.rule,
@@ -1226,7 +1226,7 @@ def catalog_gate(check: CheckInfo, catalog: dict[str, dict[str, Any]] | None) ->
 def run_rule_checks(
     schema: dict[str, Any],
     context: ContextView,
-    catalog: dict[str, dict[str, Any]] | None = None,
+    catalog: dict[str, Rule] | None = None,
     resolved: dict[str, Any] | None = None,
 ) -> list[RuleFinding]:
     """Apply the rule checks that the selected specification version actually states.

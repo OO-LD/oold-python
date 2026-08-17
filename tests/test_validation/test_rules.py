@@ -28,9 +28,11 @@ SAMPLE_RULES = {
             "section": "round-trip",
             "summary": "A strictly array-typed property must declare @container @set or @list.",
             "text": "Because the reconstruction MUST re-validate, a property that is strictly an array MUST declare @container.",
+            "text_sha256": "0" * 64,
             "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": False,
+            "source": "sample.md:1",
         },
         {
             "id": "OOLD-INS-7cd1",
@@ -40,9 +42,11 @@ SAMPLE_RULES = {
             "section": "identity",
             "summary": "An exported identifiable entity must carry an IRI.",
             "text": "When it exports an identifiable entity it MUST assign an @id.",
+            "text_sha256": "1" * 64,
             "machine_checkable": False,
             "since": "0.8.0",
             "deprecated": False,
+            "source": "sample.md:2",
         },
         {
             "id": "OOLD-VER-3b96",
@@ -52,9 +56,11 @@ SAMPLE_RULES = {
             "section": "identification",
             "summary": "A schema must have a $id.",
             "text": "OO-LD schemas MUST have a $id.",
+            "text_sha256": "2" * 64,
             "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": False,
+            "source": "sample.md:3",
         },
         {
             # Nothing enforces @propagate, so this is the sample's coverage gap. It must stay
@@ -67,9 +73,11 @@ SAMPLE_RULES = {
             "section": "merge-and-override-model",
             "summary": "A scoped context that must apply only to the immediate node sets @propagate false.",
             "text": "The schema MUST set @propagate false on that scoped context.",
+            "text_sha256": "3" * 64,
             "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": False,
+            "source": "sample.md:4",
         },
         {
             "id": "OOLD-RT-4f18",
@@ -79,10 +87,12 @@ SAMPLE_RULES = {
             "section": "round-trip",
             "summary": "A retired rule.",
             "text": "This rule MUST no longer be applied.",
+            "text_sha256": "4" * 64,
             "machine_checkable": True,
             "since": "0.8.0",
             "deprecated": True,
             "superseded_by": ["OOLD-RT-08f2"],
+            "source": "sample.md:5",
         },
     ],
 }
@@ -138,7 +148,7 @@ def test_a_version_without_a_catalog_still_loads():
 def test_catalog_is_loaded_when_present(catalog_version):
     bundle = load_tracked(catalog_version)
     assert bundle.has_rules
-    assert bundle.rule("OOLD-RT-08f2")["level"] == "MUST"
+    assert bundle.rule("OOLD-RT-08f2").level == "MUST"
     assert bundle.rule("OOLD-NOPE-001") is None
 
 
@@ -152,7 +162,7 @@ def test_a_malformed_catalog_is_treated_as_absent(catalog_version, tmp_path):
 
 
 def test_checkable_rules_exclude_implementation_advisory_and_deprecated(catalog_version):
-    ids = [r["id"] for r in load_tracked(catalog_version).machine_checkable_rules()]
+    ids = [r.id for r in load_tracked(catalog_version).machine_checkable_rules()]
     assert ids == ["OOLD-RT-08f2", "OOLD-VER-3b96", "OOLD-CMP-9a44"]
     assert "OOLD-INS-7cd1" not in ids, "an implementation rule is not checkable by a validator"
     assert "OOLD-RT-4f18" not in ids, "a deprecated rule is not counted"

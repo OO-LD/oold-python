@@ -29,7 +29,7 @@ from .generate import MAX_VARIANTS, collect_variants, generate
 from .instance_checks import roundtrip_instance
 from .instance_checks import validate_instance as _validate_instance_doc
 from .loader import DocumentLoader
-from .meta_store import MetaBundle, MetaSchemaError, resolve_selection
+from .meta_store import MetaBundle, MetaSchemaError, Rule, resolve_selection
 from .pattern_lint import lint
 from .predicates import check_predicates
 from .report import FAIL, OK, SKIP, WARN, Report
@@ -118,7 +118,7 @@ class _Run:
         check = _check_info(check_id)
         if check is None:
             return None
-        catalog = {r["id"]: r for r in bundle.rules} if bundle.has_rules else None
+        catalog: dict[str, Rule] | None = {r.id: r for r in bundle.rules} if bundle.has_rules else None
         return catalog_gate(check, catalog)
 
 
@@ -470,7 +470,7 @@ def _run_rule_checks(run: _Run, name: str, raw: dict[str, Any], resolved: dict[s
                 meta_version=bundle.version,
             )
             continue
-        catalog = {r["id"]: r for r in bundle.rules}
+        catalog = {r.id: r for r in bundle.rules}
         for finding in run_rule_checks(raw, context, catalog, resolved=resolved):
             run.add(
                 finding.check_id,
@@ -734,7 +734,7 @@ def _check_rule_coverage(run: _Run, target: str, bundle: MetaBundle) -> None:
     mapped = set(rule_map().values())
     unknown = sorted({r for r in mapped if not bundle.rule(r)})
     checkable = bundle.machine_checkable_rules()
-    missing = sorted(r["id"] for r in checkable if r["id"] not in mapped)
+    missing = sorted(r.id for r in checkable if r.id not in mapped)
 
     notes: list[str] = []
     if missing:

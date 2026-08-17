@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from oold.validation import meta_store
 from oold.validation.meta_store import (
@@ -132,7 +132,7 @@ def test_a_damaged_catalogue_is_reported_rather_than_read_as_a_shorter_specifica
     damaged["rules"] = damaged["rules"][:5]
     damaged["rules"][0]["text_sha256"] = "deadbeef"
 
-    problems = replace(bundle, rules_document=damaged)._catalog_problems()
+    problems = bundle.model_copy(update={"rules_document": damaged})._catalog_problems()
     assert problems, "a corrupted catalogue passed self-check"
     assert any("text_sha256" in p for p in problems), problems
 
@@ -143,6 +143,68 @@ def test_an_unreadable_catalogue_is_reported_not_swallowed(tmp_path):
     catalog, error = meta_store._read_rules(tmp_path)
     assert catalog is None
     assert error and meta_store.RULES_FILE in error
+
+
+def test_a_malformed_catalog_is_treated_as_absent():
+    """Entries that do not parse as `Rule` must not crash a run or half-populate `bundle.rules`.
+
+    Mirrors `test_an_unreadable_catalogue_is_reported_not_swallowed` one level up: there the file
+    itself could not be read, here it reads fine as JSON but its entries do not match `Rule`'s
+    shape. Both must be treated the same way - no rules, and a reason recorded for
+    `MetaBundle.self_check` to report - rather than raising or silently keeping the entries that
+    do happen to parse.
+    """
+    catalog = {"spec_version": "9.9.9", "rules": [{"id": "OOLD-VER-0000"}]}  # missing every other field
+    rules, error = meta_store._parse_rules(catalog, None)
+    assert rules == []
+    assert error and meta_store.RULES_FILE in error
+
+
+def test_a_rule_entry_missing_level_is_rejected_at_parse_time():
+    """Closes the hazard at its source: `check_registry.severity()` reads `rule.level` and falls
+    back to WARN when it is absent, so a rule missing that field must fail to parse rather than
+    quietly becoming a rule nothing can ever fail against.
+    """
+    entry = {
+        "id": "OOLD-VER-0000",
+        "area": "VER",
+        # "level" is deliberately omitted.
+        "applies_to": "document",
+        "section": "x",
+        "summary": "x",
+        "text": "x",
+        "text_sha256": "0" * 64,
+        "machine_checkable": True,
+        "since": "1.0.0",
+        "deprecated": False,
+        "source": "x:1",
+    }
+    with pytest.raises(ValidationError):
+        meta_store.Rule.model_validate(entry)
+
+
+def test_the_rule_model_requires_exactly_what_the_vendored_schema_requires():
+    """Ties `Rule`'s required fields to the vendored `oold-rules.schema.json`'s, for every version
+    that ships one, so an upstream rename or drop of a required field (`level` above all - see
+    `check_registry.severity`) fails this test loudly instead of silently downgrading every MUST
+    to a warning.
+    """
+    checked_any = False
+    for version in tracked_versions():
+        schema = meta_store._read_rules_schema(meta_store.meta_dir() / version)
+        if schema is None:
+            continue
+        checked_any = True
+        expected = set(schema["$defs"]["rule"]["required"])
+        actual = {name for name, info in meta_store.Rule.model_fields.items() if info.is_required()}
+        assert actual == expected, (
+            f"{version}/{meta_store.RULES_SCHEMA_FILE} requires {sorted(expected)} for a rule "
+            f"entry, but meta_store.Rule requires {sorted(actual)}. A silent mismatch here is "
+            "exactly the hazard this test exists to catch: check_registry.severity() reads "
+            "rule.level, and a renamed or dropped required field must fail loudly here rather "
+            "than let severity() fall back to WARN unnoticed."
+        )
+    assert checked_any, "no tracked version vendors oold-rules.schema.json, so this test checked nothing"
 
 
 def test_a_version_without_a_catalogue_schema_still_loads():

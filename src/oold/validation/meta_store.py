@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -30,6 +29,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
@@ -152,25 +152,58 @@ def latest_version() -> str:
     return versions[-1]
 
 
+# ---------------------------------------------------------------------------- rule catalog
+
+
+class Rule(BaseModel):
+    """One entry in the rule catalog, shaped by ``oold-rules.schema.json``'s ``$defs/rule``.
+
+    Parsed through this model rather than read as a plain dict so that a rule missing a required
+    field - ``level`` above all, which :func:`check_registry.severity` reads to decide whether a
+    violation fails or warns - is rejected at parse time instead of silently downgrading. See
+    ``tests/test_validation/test_meta_store.py`` for the guard test that ties this model's
+    required fields to the vendored schema's, so an upstream rename cannot slip past unnoticed.
+    """
+
+    id: str
+    area: str
+    level: str
+    applies_to: str
+    section: str
+    summary: str
+    text: str
+    text_sha256: str
+    machine_checkable: bool
+    since: str
+    deprecated: bool
+    source: str
+    #: The containing block `text` was taken from. Optional in the schema.
+    context: str | None = None
+    #: Present only on a deprecated rule, naming what replaced it.
+    superseded_by: list[str] | None = None
+
+
 # ---------------------------------------------------------------------------- bundle
 
 
-@dataclass
-class MetaBundle:
+class MetaBundle(BaseModel):
     """The meta-schemas for one version, plus the registry that resolves between them."""
+
+    #: `Registry` is a third-party type pydantic does not know how to validate on its own.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     version: str
     origin: str
     documents: dict[str, Any]
-    registry: Registry = field(repr=False)
+    registry: Registry = Field(repr=False)
     #: The rule catalog for this version, empty when it predates one.
-    rules: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    rules: list[Rule] = Field(default_factory=list, repr=False)
     #: The whole catalog document, kept so :meth:`self_check` can judge it against its schema.
-    rules_document: dict[str, Any] | None = field(default=None, repr=False)
+    rules_document: dict[str, Any] | None = Field(default=None, repr=False)
     #: The schema describing that document, when this version vendors one.
-    rules_schema: dict[str, Any] | None = field(default=None, repr=False)
+    rules_schema: dict[str, Any] | None = Field(default=None, repr=False)
     #: Why the catalog could not be read, when a file was there but unusable.
-    rules_error: str | None = field(default=None, repr=False)
+    rules_error: str | None = Field(default=None, repr=False)
 
     @property
     def meta(self) -> dict[str, Any]:
@@ -180,21 +213,17 @@ class MetaBundle:
     def has_rules(self) -> bool:
         return bool(self.rules)
 
-    def rule(self, rule_id: str) -> dict[str, Any] | None:
+    def rule(self, rule_id: str) -> Rule | None:
         """Look up one rule, or None when this version ships no catalog or lacks the id."""
-        return next((r for r in self.rules if r["id"] == rule_id), None)
+        return next((r for r in self.rules if r.id == rule_id), None)
 
-    def machine_checkable_rules(self) -> list[dict[str, Any]]:
+    def machine_checkable_rules(self) -> list[Rule]:
         """Rules a validator can enforce by inspecting a document.
 
         `implementation` rules constrain a library rather than a document, and `advisory` ones
         constrain nobody, so neither belongs in a validator's coverage figure.
         """
-        return [
-            r
-            for r in self.rules
-            if r.get("machine_checkable") and r.get("applies_to") == "document" and not r.get("deprecated")
-        ]
+        return [r for r in self.rules if r.machine_checkable and r.applies_to == "document" and not r.deprecated]
 
     @property
     def ui_meta(self) -> dict[str, Any]:
@@ -322,6 +351,22 @@ def _read_rules(directory: Path) -> tuple[dict[str, Any] | None, str | None]:
         return None, f"{RULES_FILE} is present but unreadable, so no rule can be cited: {exc}"
 
 
+def _parse_rules(catalog: dict[str, Any] | None, read_error: str | None) -> tuple[list[Rule], str | None]:
+    """Turn a loaded catalog's ``rules`` array into :class:`Rule` models, leniently.
+
+    Mirrors :func:`_read_rules`'s own leniency one level up: a catalog whose entries do not match
+    :class:`Rule`'s shape (a renamed or dropped required field, for instance) is treated the same
+    as one that could not be read at all - no rules are exposed, and the reason is returned for
+    :meth:`MetaBundle.self_check` to report, rather than raised or silently swallowed.
+    """
+    if read_error is not None or catalog is None:
+        return [], read_error
+    try:
+        return [Rule.model_validate(entry) for entry in catalog.get("rules", [])], None
+    except ValidationError as exc:
+        return [], f"{RULES_FILE} has rule entries that do not match the expected shape: {exc}"
+
+
 def _read_rules_schema(directory: Path) -> dict[str, Any] | None:
     """Load the optional schema describing the catalog. Absent is not a problem in itself.
 
@@ -359,15 +404,16 @@ def load_tracked(version: str) -> MetaBundle:
         raise MetaSchemaError(f"meta-schema version {version!r} is not tracked (available: {available})")
     documents = _read_documents(directory, f"meta-schema version {version}", meta_files(version))
     catalog, catalog_error = _read_rules(directory)
+    rules, rules_error = _parse_rules(catalog, catalog_error)
     return MetaBundle(
         version=version,
         origin=str(directory),
         documents=documents,
         registry=_build_registry(documents),
-        rules=(catalog or {}).get("rules", []),
+        rules=rules,
         rules_document=catalog,
         rules_schema=_read_rules_schema(directory),
-        rules_error=catalog_error,
+        rules_error=rules_error,
     )
 
 
@@ -432,15 +478,16 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
         with contextlib.suppress(OSError, json.JSONDecodeError, KeyError):
             origin = f"{target} (fetched {json.loads(stamp.read_text(encoding='utf-8'))['fetched']})"
     catalog, catalog_error = _read_rules(target)
+    rules, rules_error = _parse_rules(catalog, catalog_error)
     return MetaBundle(
         version=REMOTE,
         origin=origin,
         documents=documents,
         registry=_build_registry(documents),
-        rules=(catalog or {}).get("rules", []),
+        rules=rules,
         rules_document=catalog,
         rules_schema=_read_rules_schema(target),
-        rules_error=catalog_error,
+        rules_error=rules_error,
     )
 
 

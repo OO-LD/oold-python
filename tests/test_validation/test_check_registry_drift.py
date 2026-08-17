@@ -92,7 +92,7 @@ def test_every_named_rule_exists_in_some_vendored_catalogue():
     """Catches a typo'd or retired rule id, against every tracked version at once."""
     known: set[str] = set()
     for version in tracked_versions():
-        known |= {rule["id"] for rule in load_tracked(version).rules}
+        known |= {rule.id for rule in load_tracked(version).rules}
 
     unknown = sorted(f"{check.id} cites {check.rule}" for check in CHECKS if check.rule and check.rule not in known)
     assert not unknown, (

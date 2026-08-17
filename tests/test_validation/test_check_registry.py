@@ -15,7 +15,7 @@ from oold.validation.meta_store import latest_version, load_tracked
 #: The catalogue actually shipped for the newest tracked version. Severity is read from it rather
 #: than hardcoded here, so if upstream relaxes a MUST to a SHOULD these tests report the change
 #: instead of silently disagreeing with the specification.
-CATALOG = {r["id"]: r for r in load_tracked(latest_version()).rules}
+CATALOG = {r.id: r for r in load_tracked(latest_version()).rules}
 
 #: The twenty-one self-contained rule checks, in the order they are declared - the same slice
 #: `run_rule_checks` executes. Most run against the schema exactly as authored (`CheckInfo.run`);
@@ -67,7 +67,9 @@ def test_a_rule_absent_from_the_catalogue_is_skipped():
 
 def test_a_deprecated_rule_is_skipped():
     retired = dict(CATALOG)
-    retired["OOLD-VER-3b96"] = {**retired["OOLD-VER-3b96"], "deprecated": True, "superseded_by": ["OOLD-VER-0009"]}
+    retired["OOLD-VER-3b96"] = retired["OOLD-VER-3b96"].model_copy(
+        update={"deprecated": True, "superseded_by": ["OOLD-VER-0009"]}
+    )
     findings = {f.check_id: f for f in run_rule_checks({}, ContextView(), retired)}
     assert findings["rule.id"].status == "skip"
     assert "deprecated" in findings["rule.id"].message

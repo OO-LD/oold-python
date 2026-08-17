@@ -245,13 +245,13 @@ def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: 
     bundle = _rules_bundle(meta, offline)
     rules = bundle.rules
     if area:
-        rules = [r for r in rules if r["area"].upper() == area.upper()]
+        rules = [r for r in rules if r.area.upper() == area.upper()]
     if unchecked:
         enforced = set(rule_map().values())
-        rules = [r for r in bundle.machine_checkable_rules() if r["id"] not in enforced]
+        rules = [r for r in bundle.machine_checkable_rules() if r.id not in enforced]
 
     if as_json:
-        click.echo(json.dumps(rules, indent=2))
+        click.echo(json.dumps([r.model_dump() for r in rules], indent=2))
         return
     if not rules:
         click.echo("no rules match")
@@ -259,11 +259,11 @@ def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: 
 
     enforced_by = {v: k for k, v in rule_map().items()}
     for rule in rules:
-        flag = "!" if rule.get("deprecated") else " "
-        check = enforced_by.get(rule["id"], "-")
+        flag = "!" if rule.deprecated else " "
+        check = enforced_by.get(rule.id, "-")
         click.echo(
-            f"{flag}{click.style(rule['id'], fg='blue')}  {rule['level']:<10} "
-            f"{rule['applies_to']:<14} {check:<20} {rule['summary']}"
+            f"{flag}{click.style(rule.id, fg='blue')}  {rule.level:<10} "
+            f"{rule.applies_to:<14} {check:<20} {rule.summary}"
         )
     click.echo()
     click.echo(f"  {len(rules)} rule(s); the column before the summary is the check that enforces each")
@@ -282,35 +282,35 @@ def rules_explain(rule_id: str, meta, offline: bool, as_json: bool) -> None:
     # Case-insensitive by comparing both sides upper, rather than upper-casing rule_id alone:
     # ids now mint a lowercase hex suffix (OOLD-RT-08f2), so `.upper()` on the query alone would
     # no longer match the catalogue's own casing.
-    rule = next((r for r in bundle.rules if r["id"].upper() == rule_id.upper()), None)
+    rule = next((r for r in bundle.rules if r.id.upper() == rule_id.upper()), None)
     if rule is None:
         raise click.ClickException(
             f"{rule_id} is not in the catalog for meta-schema {bundle.version}. "
             "Try `oold rules list` to see what is available."
         )
     if as_json:
-        click.echo(json.dumps(rule, indent=2))
+        click.echo(json.dumps(rule.model_dump(), indent=2))
         return
 
     enforced_by = {v: k for k, v in rule_map().items()}
-    click.echo(click.style(rule["id"], fg="blue", bold=True) + f"  {rule['level']}")
-    click.echo(f"  {rule['summary']}")
+    click.echo(click.style(rule.id, fg="blue", bold=True) + f"  {rule.level}")
+    click.echo(f"  {rule.summary}")
     click.echo()
-    click.echo(f"  area       {rule['area']}")
-    click.echo(f"  applies to {rule['applies_to']}")
+    click.echo(f"  area       {rule.area}")
+    click.echo(f"  applies to {rule.applies_to}")
     click.echo(
-        f"  machine-checkable  {rule['machine_checkable']}"
-        + (f" (enforced by {enforced_by[rule['id']]})" if rule["id"] in enforced_by else "")
+        f"  machine-checkable  {rule.machine_checkable}"
+        + (f" (enforced by {enforced_by[rule.id]})" if rule.id in enforced_by else "")
     )
-    click.echo(f"  since      {rule['since']}")
-    if rule.get("deprecated"):
+    click.echo(f"  since      {rule.since}")
+    if rule.deprecated:
         click.echo(
-            f"  {click.style('DEPRECATED', fg='yellow')} superseded by {', '.join(rule.get('superseded_by', [])) or 'nothing'}"
+            f"  {click.style('DEPRECATED', fg='yellow')} superseded by {', '.join(rule.superseded_by or []) or 'nothing'}"
         )
-    click.echo(f"  spec       {SPEC_RULE_URL}{rule['id']}")
+    click.echo(f"  spec       {SPEC_RULE_URL}{rule.id}")
     click.echo()
     click.echo(click.style("  specification text:", bold=True))
-    click.echo(click.wrap_text(rule["text"], width=94, initial_indent="    ", subsequent_indent="    "))
+    click.echo(click.wrap_text(rule.text, width=94, initial_indent="    ", subsequent_indent="    "))
 
 
 def _rules_bundle(meta, offline: bool):

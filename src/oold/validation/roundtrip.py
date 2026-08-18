@@ -164,12 +164,18 @@ def roundtrip(
     context_ref: Any,
     loader: DocumentLoader,
     base: str | None = None,
+    promoted: dict[str, str | None] | None = None,
 ) -> RoundtripResult:
     """Round-trip an instance as a compliant export and report what was dropped.
 
     The declared ``rdf:type``(s) are materialised as ``@type`` unless the instance already
     carries one, the document is projected to RDF and back, and it is reconstructed by framing
     when the schema embeds objects or by plain compaction when it does not.
+
+    ``promoted`` names top-level properties known to be mapped only through ``x-oold-context``
+    (see :func:`oold.validation.context_resolution.promoted_terms`). A real JSON-LD processor has
+    no way to see that mapping, so such a property always drops out of the RDF round-trip; this is
+    what stops that expected drop from being reported as loss.
     """
     result = RoundtripResult()
 
@@ -210,6 +216,8 @@ def roundtrip(
         return result
 
     result.lost = lost_keys(sample, result.restored)
+    if promoted:
+        result.lost = [key for key in result.lost if key not in promoted]
     result.ok = not result.lost
     return result
 

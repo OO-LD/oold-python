@@ -12,6 +12,7 @@ DATA = Path(__file__).parent.parent / "data" / "oold"
 BROKEN = DATA / "broken"
 COMPLIANCE = DATA / "compliance"
 REMOTE_CONTEXT = DATA / "remote_context"
+X_OOLD_CONTEXT = DATA / "x_oold_context"
 
 
 @pytest.fixture
@@ -34,6 +35,12 @@ def compliance_dir() -> Path:
 @pytest.fixture
 def remote_context_dir() -> Path:
     return REMOTE_CONTEXT
+
+
+@pytest.fixture
+def x_oold_context_dir() -> Path:
+    """Locally authored schemas that map a term only through ``x-oold-context``."""
+    return X_OOLD_CONTEXT
 
 
 @pytest.fixture

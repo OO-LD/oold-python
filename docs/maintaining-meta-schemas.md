@@ -28,7 +28,8 @@ src/oold/validation/meta/
 tests/data/oold/
 ├── .                   examples/ from the recorded tag, plus compliance/
 ├── broken/             deliberately broken schemas: the checks must fail on these
-└── remote_context/     a schema whose @context chain leaves its directory
+├── remote_context/     a schema whose @context chain leaves its directory
+└── x_oold_context/     a schema mapping a term only through x-oold-context
 ```
 
 Which version `latest` resolves to is deliberately not written down anywhere. It is the highest
@@ -139,9 +140,10 @@ fixture files on. The tag is recorded only in `index.json` now, for exactly that
 ## The fixture slice
 
 Only the top level and `compliance/` are the upstream snapshot; both come from `examples/` at the
-recorded tag. `broken/` and `remote_context/` are written here by hand, exist in no oold-schema
-release, and the refresh loop above never touches them. Upstream's `examples/` also has a `spec/`
-subdirectory, which is deliberately outside the slice - the loops above do not descend into it.
+recorded tag. `broken/`, `remote_context/` and `x_oold_context/` are written here by hand, exist
+in no oold-schema release, and the refresh loop above never touches them. Upstream's `examples/`
+also has a `spec/` subdirectory, which is deliberately outside the slice - the loops above do not
+descend into it.
 
 Upstream's current `main` is covered instead by the opt-in parity tests
 (`tests/test_validation/test_parity_live.py`), which validate against `--meta remote`.

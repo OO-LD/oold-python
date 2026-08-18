@@ -146,6 +146,7 @@ def check_predicates(
     context: Any,
     declared_properties: set[str] | None = None,
     options: dict[str, Any] | None = None,
+    promoted: dict[str, str | None] | None = None,
 ) -> PredicateResult:
     """Classify every declared property of an instance.
 
@@ -153,9 +154,15 @@ def check_predicates(
     Generated instances routinely carry extra keys, because these schemas allow additional
     properties, and those keys have no context term by design. Counting them as dropped would
     bury the real findings in noise, so they are reported separately instead.
+
+    ``promoted`` names terms known to be mapped only through ``x-oold-context`` (see
+    :func:`oold.validation.context_resolution.promoted_terms`). Plain JSON-LD expansion has no
+    way to see that mapping, so such a term always looks dropped; this is what stops that from
+    being reported as a finding, without pretending expansion actually mapped it.
     """
     result = PredicateResult()
     options = options or {}
+    promoted = promoted or {}
 
     payload_keys = [k for k in instance if not k.startswith("@") and k != "$schema"]
     if declared_properties is None:
@@ -166,6 +173,14 @@ def check_predicates(
 
     for name in checked:
         outcome = classify_property(name, instance[name], context, options)
+        if outcome.status == DROPPED and name in promoted:
+            synonym = promoted[name]
+            detail = (
+                f"mapped only through x-oold-context, to synonym {synonym!r}"
+                if synonym
+                else "mapped only through x-oold-context, to more than one synonym"
+            )
+            outcome = PropertyOutcome(name=name, status=MAPPED, predicate=synonym, detail=detail)
         result.outcomes.append(outcome)
         if outcome.status == DROPPED:
             result.dropped.append(name)

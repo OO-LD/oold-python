@@ -67,6 +67,21 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
     assert "context.remote" in _ids(report, OK)
 
 
+def test_a_property_mapped_only_through_x_oold_context_is_not_reported(x_oold_context_dir):
+    """x-oold-context (OOLD-EXT-4966) is a legitimate way to map a term; one mapped only there
+    must not be reported as unmapped just because plain JSON-LD cannot see that mapping."""
+    report = validate_schema(x_oold_context_dir / "SkosSynonym.schema.json", OFFLINE)
+    assert report.passed, [f"{c.id}: {c.message}" for c in report.failures()]
+
+    predicates = next(c for c in report.checks if c.id == "context.predicates")
+    assert predicates.status == OK
+    assert "altLabel" not in predicates.message
+
+    roundtrip_check = next(c for c in report.checks if c.id == "roundtrip.generated")
+    assert roundtrip_check.status == OK
+    assert "altLabel" not in roundtrip_check.message
+
+
 # ------------------------------------------------------------------ the broken fixtures
 
 

@@ -19,11 +19,16 @@ from jsonschema.exceptions import SchemaError
 from .meta_store import MetaBundle
 from .resolve import DereferenceResult, ResolvedSchema, Resolver
 
-#: JSON-LD keywords that may legitimately appear at the root of an OO-LD schema. They are
-#: unknown keywords as far as JSON Schema is concerned, and 2020-12 tolerates unknown keywords
-#: as annotations, which is what lets an OO-LD schema be a valid JSON Schema at all. That
-#: behaviour is load-bearing for this whole package, so the test suite asserts it directly
-#: rather than assuming it.
+#: JSON-LD keywords this check watches for at the root of a schema document. Only ``@context``
+#: belongs there for an OO-LD schema; ``@vocab``, ``@base`` and ``@version`` are context-internal
+#: keywords, and ``@id``, ``@type`` and ``@graph`` are instance-level, so none of the other six
+#: has legitimate business at a schema root - across the corpus, none ever appears there. They
+#: are unknown keywords as far as JSON Schema is concerned, and 2020-12 tolerates unknown
+#: keywords as annotations, which is what lets an OO-LD schema be a valid JSON Schema at all and
+#: is why one appearing here does not fail meta-schema validation on its own; the whole set is
+#: kept so that one showing up at the root is at least reported as a JSON-LD keyword rather than
+#: passing unnoticed. That tolerance is load-bearing for this whole package, so the test suite
+#: asserts it directly rather than assuming it.
 JSONLD_KEYWORDS = frozenset({"@context", "@id", "@type", "@graph", "@vocab", "@base", "@version"})
 
 #: Cap on how many meta-schema errors are reported for one schema. A single structural mistake

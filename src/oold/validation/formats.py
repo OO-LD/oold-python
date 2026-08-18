@@ -26,14 +26,15 @@ from jsonschema import FormatChecker
 
 # ---------------------------------------------------------------------------- IRI
 
-# Corrected IRI formats (RFC 3987).
+# IRI formats (RFC 3987).
 #
-# ajv-formats-draft2019 ships buggy iri / iri-reference regexes: they reject valid compact IRIs
-# such as `ex:alice` (any URI/IRI grammar accepts those - an IRI is a superset of a URI) and are
-# mutually inconsistent (`iri` accepts `urn:uuid:...` while `iri-reference` does not). This module
-# implements both formats corrected instead: an IRI reference excludes ASCII controls, space and
-# the delimiters RFC 3987 disallows, while non-ASCII ucschar stays allowed; an absolute IRI
-# additionally begins with a scheme. Upstream bug: luzlab/ajv-formats-draft2019#31.
+# jsonschema's stock Draft202012Validator.FORMAT_CHECKER asserts only eight formats without
+# optional packages installed (date, email, idn-email, idn-hostname, ipv4, ipv6, regex, uuid),
+# and none of them is iri or iri-reference, so this module implements both against RFC 3987
+# itself: an IRI reference excludes ASCII controls, space and the delimiters RFC 3987 disallows,
+# while non-ASCII ucschar stays allowed; an absolute IRI additionally begins with a scheme. A
+# compact IRI such as `ex:alice` is accepted, since any URI/IRI grammar accepts one - an IRI is a
+# superset of a URI.
 _IRI_EXCLUDED = re.compile(r"[\s<>\"{}|\\^`]")
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 

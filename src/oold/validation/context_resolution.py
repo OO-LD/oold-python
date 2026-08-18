@@ -62,6 +62,10 @@ class ResolvedContext:
     resolved_refs: list[str] = field(default_factory=list)
     cut_cycles: list[str] = field(default_factory=list)
     truncated_scoped_contexts: list[str] = field(default_factory=list)
+    #: Terms known to be mapped only through ``x-oold-context``, keyed by term name. See
+    #: :func:`promoted_terms`. Populated from the schema's own ``x-oold-context``, not from
+    #: anything reached while walking ``@context``.
+    promoted: dict[str, str | None] = field(default_factory=dict)
 
     @property
     def is_empty(self) -> bool:
@@ -99,6 +103,35 @@ class ResolvedContext:
         }
 
 
+def promoted_terms(schema: dict[str, Any]) -> dict[str, str | None]:
+    """Terms mapped only through ``x-oold-context``, keyed by term name.
+
+    ``x-oold-context`` (OO-LD's extended term mapping) associates a term with one or more
+    candidate synonym IRIs. Real promotion into ``@context`` selects exactly one synonym per
+    target profile (``OOLD-EXT-4966``); which one wins is profile-dependent, and picking one
+    without a profile would itself violate ``OOLD-EXT-8f62``'s MUST NOT, so this function never
+    chooses. What every check needs regardless of profile is simpler: the term *is* mapped, so it
+    must not be reported as unmapped. The value is the single synonym IRI when the term names
+    exactly one - forced, not selected, so safe to attribute as the predicate - or ``None`` when
+    it names several: still known-mapped, just not to one particular IRI.
+
+    A synonym entry mapped to ``null`` removes an inherited mapping under schema composition (the
+    meta-schema's own wording for that keyword), so it does not count as present here.
+    """
+    raw = schema.get("x-oold-context")
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, str | None] = {}
+    for term, synonyms in raw.items():
+        if not isinstance(synonyms, dict):
+            continue
+        iris = [iri for iri, fragment in synonyms.items() if fragment is not None]
+        if not iris:
+            continue
+        result[term] = iris[0] if len(iris) == 1 else None
+    return result
+
+
 def resolve_context(
     schema: dict[str, Any],
     base_uri: str,
@@ -108,6 +141,7 @@ def resolve_context(
 ) -> ResolvedContext:
     """Resolve a schema's ``@context`` into a usable JSON-LD context."""
     result = ResolvedContext()
+    result.promoted = promoted_terms(schema)
     raw = schema.get("@context")
     if raw is None:
         return result

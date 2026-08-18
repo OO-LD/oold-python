@@ -22,7 +22,7 @@ from .check_registry import info as _check_info
 from .check_registry import rule_for as _rule_for_check
 from .compliance import run_suite, vocabulary_coverage
 from .context_graph import cyclic_scoped_contexts
-from .context_resolution import find_alias_keys, resolve_context
+from .context_resolution import find_alias_keys, promoted_terms, resolve_context
 from .formats import OOLD_FORMAT_CHECKER
 from .frame import collect_composed_properties
 from .generate import MAX_VARIANTS, collect_variants, generate
@@ -286,12 +286,13 @@ def _check_schema_jsonld(run: _Run, name: str, raw: dict[str, Any]) -> None:
 
     cyclic = name in run.cyclic
     context_url = run.loader.url_for(name)
+    promoted = promoted_terms(raw)
 
     # -- generated-instance round-trip ---------------------------------------------
     if cyclic:
         run.add("roundtrip.generated", name, SKIP, CYCLIC_NOTE)
     else:
-        result = roundtrip(schema, generated.instance, context_url, run.loader)
+        result = roundtrip(schema, generated.instance, context_url, run.loader, promoted=promoted)
         if result.error:
             run.add("roundtrip.generated", name, FAIL, result.error)
         elif result.lost:
@@ -347,10 +348,18 @@ def _check_schema_jsonld(run: _Run, name: str, raw: dict[str, Any]) -> None:
     if total > len(variants):
         run.report.notes.append(f"{name}: {total} oneOf/anyOf branches, checking the first {len(variants)}")
     for variant in variants:
-        _check_variant(run, name, schema, variant, validator, context_url)
+        _check_variant(run, name, schema, variant, validator, context_url, promoted)
 
 
-def _check_variant(run: _Run, name: str, schema, variant, validator, context_url: str) -> None:
+def _check_variant(
+    run: _Run,
+    name: str,
+    schema,
+    variant,
+    validator,
+    context_url: str,
+    promoted: dict[str, str | None] | None = None,
+) -> None:
     label = f"{name} {variant.label}"
     produced = generate(variant.schema)
     if not produced.ok:
@@ -360,7 +369,7 @@ def _check_variant(run: _Run, name: str, schema, variant, validator, context_url
     if errors:
         run.add("variants", label, FAIL, f"generated instance rejected: {errors[0].message}")
         return
-    result = roundtrip(schema, produced.instance, context_url, run.loader)
+    result = roundtrip(schema, produced.instance, context_url, run.loader, promoted=promoted)
     if result.error:
         run.add("variants", label, FAIL, result.error)
     elif result.lost:
@@ -406,7 +415,7 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
 
     id_key, type_key = find_alias_keys(context.terms())
     declared = set(collect_composed_properties(schema)) | {id_key, type_key}
-    result = check_predicates(sample, context.as_jsonld(), declared_properties=declared)
+    result = check_predicates(sample, context.as_jsonld(), declared_properties=declared, promoted=context.promoted)
 
     if result.suspicious:
         first = next(iter(result.suspicious.items()))

@@ -227,8 +227,8 @@ The two are intended to agree on verdicts. Where they differ, it is deliberate:
 
 | Difference | Why |
 |---|---|
-| Remote and cross-directory `@context` references resolve | The reference maps only names directly under its own base and refuses everything else, so a schema whose context chain leaves the directory cannot be processed at all. `--offline` reproduces its behaviour. |
-| Fetched documents are cached on disk | The reference refetches on every run. |
+| Remote and cross-directory `@context` references resolve | The reference's loader does no network I/O at all: it maps only names directly under its own base to local files and throws for everything else, so a genuinely remote URL and a local reference that merely leaves the directory are refused identically, and a schema whose context chain leaves the directory cannot be processed at all. `--offline` reproduces that same refusal here. |
+| Remote references are resolved and cached on disk | The reference refuses network fetches outright, so nothing is ever fetched to cache in the first place; this package instead follows a remote `@context` reference and caches what it fetches, so a repeated run does not refetch it. |
 | `context.predicates` exists | Catches undefined-prefix terms, which round-trip cleanly while meaning nothing. |
 | Results are reported per meta-schema version | Multi-version validation is not available upstream. |
 | Generation is deterministic | The reference's faker already populates every property (`alwaysFakeOptionals`); making it deterministic removes flaky CI failures. There is no `--seed`. |

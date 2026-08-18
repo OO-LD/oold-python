@@ -1,0 +1,28 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "SkosSynonym.schema.json",
+  "title": "SkosSynonym",
+  "@context": {
+    "ex": "https://example.org/",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "name": "ex:name"
+  },
+  "x-oold-context": {
+    "altLabel": {
+      "skos:altLabel": {
+        "x-oold-sssom": {
+          "predicate_id": "skos:exactMatch"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "altLabel": {
+      "type": "string"
+    }
+  }
+}

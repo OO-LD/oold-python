@@ -50,6 +50,39 @@ RDF_BASE = "https://oo-ld.test/"
 #: Keyword prefixes the vocabulary-coverage check tracks.
 VOCAB_PREFIXES = ("x-oold-", "x-enum-")
 
+#: Keywords a meta-schema declares that the vocabulary check does not track, and why. A keyword
+#: outside VOCAB_PREFIXES is invisible to coverage, so without this it would be dropped from the
+#: count in silence and the report would still say "all N covered". Listing it here keeps the
+#: exclusion in the report instead of in a reader's assumptions.
+VOCAB_EXEMPT: dict[str, str] = {
+    "x-sssom": "renamed to x-oold-sssom in 1.0.0-rc.2; only 1.0.0-rc.1 declares the old name",
+}
+
+
+def declared_x_keywords(bundle: MetaBundle) -> set[str]:
+    """Every ``x-*`` key one version's meta-schemas declare, whatever the prefix.
+
+    Mirrors :meth:`MetaBundle.declared_keywords`'s traversal - each document's own top-level
+    ``properties``, plus the UI meta-schema's keyword block - but without its ``x-oold-*``
+    pre-filter, so a keyword under any other prefix is still found. The difference between the
+    two is exactly what coverage is not looking at.
+    """
+    found = {
+        key
+        for document in bundle.documents.values()
+        for key in (document.get("properties") or {})
+        if key.startswith("x-")
+    }
+    ui_keywords = (bundle.ui_meta.get("$defs") or {}).get("keywords", {}).get("properties") or {}
+    found.update(key for key in ui_keywords if key.startswith("x-"))
+    return found
+
+
+def vocabulary_exemptions(bundle: MetaBundle) -> dict[str, str]:
+    """The exempt keywords this version actually declares, mapped to the reason."""
+    untracked = declared_x_keywords(bundle) - set(bundle.declared_keywords())
+    return {key: VOCAB_EXEMPT[key] for key in sorted(untracked) if key in VOCAB_EXEMPT}
+
 
 @dataclass
 class ComplianceCase:

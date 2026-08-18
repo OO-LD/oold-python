@@ -20,7 +20,7 @@ from typing import Any
 from .check_registry import ContextView, RuleFinding, catalog_gate, rule_map, run_rule_checks
 from .check_registry import info as _check_info
 from .check_registry import rule_for as _rule_for_check
-from .compliance import run_suite, vocabulary_coverage
+from .compliance import run_suite, vocabulary_coverage, vocabulary_exemptions
 from .context_graph import cyclic_scoped_contexts
 from .context_resolution import find_alias_keys, promoted_terms, resolve_context
 from .formats import OOLD_FORMAT_CHECKER
@@ -705,12 +705,22 @@ def run_compliance(path: str | Path, options: Options | None = None) -> Report:
                 bundle.version,
             )
         else:
+            exempt = vocabulary_exemptions(bundle)
+            covered = len(bundle.declared_keywords())
+            # Naming the exemptions rather than saying "all covered": a keyword outside
+            # VOCAB_PREFIXES is not counted at all, so "all" would be true of the count and
+            # false of the vocabulary.
+            message = f"all {covered} keywords covered"
+            if exempt:
+                reasons = ", ".join(f"{key} ({why})" for key, why in exempt.items())
+                message = f"{covered} covered, {len(exempt)} exempt: {reasons}"
             run.add(
                 "coverage.vocab",
                 directory.name,
                 OK,
-                f"all {len(bundle.declared_keywords())} keywords covered",
-                meta_version=bundle.version,
+                message,
+                {"exempt": exempt} if exempt else {},
+                bundle.version,
             )
         _check_rule_coverage(run, directory.name, bundle)
     return run.report

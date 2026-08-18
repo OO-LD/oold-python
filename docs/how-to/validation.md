@@ -7,10 +7,19 @@ verdicts, and it is available three ways: as a library, as a CLI, and as an MCP 
 
 Install the extra:
 
-```bash
-pip install "oold[validation]"      # CLI and library
-pip install "oold[validation,mcp]"  # plus the MCP server
-```
+=== "uv (recommended)"
+
+    ```bash
+    uv add "oold[validation]"      # CLI and library
+    uv add "oold[validation,mcp]"  # plus the MCP server
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "oold[validation]"      # CLI and library
+    pip install "oold[validation,mcp]"  # plus the MCP server
+    ```
 
 ## Why more than JSON Schema
 
@@ -223,7 +232,10 @@ Transport is stdio. Tools: `validate_oold_schema`, `validate_oold_instance`,
 
 ## Differences from the reference harness
 
-The two are intended to agree on verdicts. Where they differ, it is deliberate:
+The two are intended to agree on verdicts. Where they differ, it is deliberate. The comparison is
+pinned to [`scripts/validate.mjs` at `v1.0.0-rc.2`](https://github.com/OO-LD/oold-schema/blob/v1.0.0-rc.2/scripts/validate.mjs),
+a tag rather than a moving path, because upstream intends to replace that script with this
+implementation:
 
 | Difference | Why |
 |---|---|

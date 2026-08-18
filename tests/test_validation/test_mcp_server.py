@@ -65,6 +65,19 @@ def test_instance_tool(data_dir):
     assert result.passed is True
 
 
+def test_instance_tool_accepts_raw_json_for_instance_and_schema():
+    schema = json.dumps({
+        "$id": "Inline.schema.json",
+        "@context": {"ex": "https://example.org/", "name": "ex:name"},
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+    })
+    instance = json.dumps({"@context": "Inline.schema.json", "name": "Ada"})
+    result = mcp_server.validate_oold_instance(instance, schema=schema, offline=True)
+    assert result.passed is True
+    assert result.problems == []
+
+
 def test_directory_tool(data_dir):
     result = mcp_server.validate_oold_directory(str(data_dir), offline=True)
     assert result.passed is True
@@ -91,6 +104,21 @@ def test_context_mapping_tool_finds_a_suspicious_predicate():
 
 def test_context_mapping_tool_requires_a_context():
     assert mcp_server.check_context_mapping(json.dumps({"a": 1})).ok is False
+
+
+def test_context_mapping_tool_accepts_raw_json_for_context():
+    document = json.dumps({"latitude": 51.5})
+    context = json.dumps({"latitude": "https://schema.org/latitude"})
+    result = mcp_server.check_context_mapping(document, context)
+    assert result.mapped == {"latitude": "https://schema.org/latitude"}
+
+
+def test_context_mapping_tool_accepts_a_context_path(tmp_path):
+    context_file = tmp_path / "context.json"
+    context_file.write_text(json.dumps({"latitude": "https://schema.org/latitude"}), encoding="utf-8")
+    document = json.dumps({"latitude": 51.5})
+    result = mcp_server.check_context_mapping(document, str(context_file))
+    assert result.mapped == {"latitude": "https://schema.org/latitude"}
 
 
 def test_list_meta_versions_tool():

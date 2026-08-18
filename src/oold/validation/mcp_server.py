@@ -112,20 +112,30 @@ def _payload(report: Report, verbosity: Verbosity) -> ValidationResult:
     return ValidationResult.model_validate(payload)
 
 
-def _materialise(source: str, suffix: str) -> tuple[Path, tempfile.TemporaryDirectory | None]:
+def _materialise(
+    source: str, suffix: str, directory: Path | None = None
+) -> tuple[Path, tempfile.TemporaryDirectory | None]:
     """Turn a path or a raw JSON string into a file on disk.
 
     The checks are directory-relative by nature: a schema's ``@context`` and ``$ref`` entries are
     usually relative siblings. A schema passed as raw JSON therefore has to be written somewhere
     before it can be validated, and it will only resolve if it has no relative references.
+
+    Pass ``directory`` to materialise into a directory an earlier call already created - an
+    instance and an inline schema, for example, must land side by side so the instance's
+    ``$schema`` reference to it resolves. The directory's cleanup remains the caller's
+    responsibility; no ``TemporaryDirectory`` is returned when one is supplied.
     """
     text = source.strip()
     if not text.startswith("{"):
         return Path(source), None
 
-    holder = tempfile.TemporaryDirectory(prefix="oold-validation-")
+    holder: tempfile.TemporaryDirectory | None = None
+    if directory is None:
+        holder = tempfile.TemporaryDirectory(prefix="oold-validation-")
+        directory = Path(holder.name)
     name = "Inline" + suffix
-    target = Path(holder.name) / name
+    target = directory / name
     target.write_text(text, encoding="utf-8")
     return target, holder
 
@@ -176,18 +186,33 @@ def validate_oold_instance(
     document conform", as opposed to "is this schema sound".
 
     Args:
-        instance: Path to the instance document. It names its schema with $schema.
-        schema: Optional path to a schema, overriding $schema. Must sit in the same directory as
-            the instance so relative @context references resolve.
+        instance: Path to the instance document, or the instance itself as a JSON string. It
+            names its schema with $schema; relative @context references only resolve for a
+            document on disk with its siblings.
+        schema: Optional path to a schema, or the schema itself as a JSON string, overriding
+            $schema. Must sit in the same directory as the instance so relative @context
+            references resolve; when both are given as raw JSON, they are materialised into the
+            same temporary directory so this holds automatically.
         meta: Meta-schema versions, as in validate_oold_schema.
         offline: Never fetch over the network.
         verbosity: "full" adds the canonical forms of both sides of the round-trip.
     """
+    instance_path, instance_holder = _materialise(instance, ".instance.json")
+    schema_path = None
+    schema_holder = None
     try:
-        report = validate_instance(Path(instance), Path(schema) if schema else None, _options(meta, offline))
+        if schema is not None:
+            shared_dir = Path(instance_holder.name) if instance_holder else None
+            schema_path, schema_holder = _materialise(schema, ".schema.json", shared_dir)
+        report = validate_instance(instance_path, schema_path, _options(meta, offline))
+        return _payload(report, verbosity)
     except MetaSchemaError as exc:
         return ValidationResult(passed=False, fatal_error=str(exc))
-    return _payload(report, verbosity)
+    finally:
+        if schema_holder:
+            schema_holder.cleanup()
+        if instance_holder:
+            instance_holder.cleanup()
 
 
 @mcp.tool()
@@ -330,29 +355,41 @@ def check_context_mapping(document: str, context: str | None = None) -> ContextM
     No schema and no generation involved.
 
     Args:
-        document: The JSON-LD document, as a JSON string or a path to one.
-        context: Optional context as a JSON string, overriding the document's own @context.
+        document: The JSON-LD document. A path or raw JSON is accepted.
+        context: Optional context, overriding the document's own @context. A path or raw JSON
+            (object or array) is accepted; anything else is used as the context value itself,
+            e.g. a remote context IRI.
     """
-    text = document.strip()
-    if text.startswith("{"):
-        parsed = json.loads(text)
-    else:
+    doc_path, doc_holder = _materialise(document, ".document.json")
+    try:
         try:
-            parsed = json.loads(Path(document).read_text(encoding="utf-8"))
+            parsed = json.loads(doc_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             return ContextMappingResult(ok=False, errors=[f"could not read the document: {exc}"])
 
-    active = parsed.get("@context")
-    if context is not None:
-        try:
-            active = json.loads(context) if context.strip().startswith(("{", "[")) else context
-        except json.JSONDecodeError as exc:
-            return ContextMappingResult(ok=False, errors=[f"context is not valid JSON: {exc}"])
-    if active is None:
-        return ContextMappingResult(ok=False, errors=["document has no @context and none was given"])
+        active = parsed.get("@context")
+        if context is not None:
+            text = context.strip()
+            if text.startswith(("{", "[")):
+                try:
+                    active = json.loads(text)
+                except json.JSONDecodeError as exc:
+                    return ContextMappingResult(ok=False, errors=[f"context is not valid JSON: {exc}"])
+            elif Path(context).is_file():
+                try:
+                    active = json.loads(Path(context).read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    return ContextMappingResult(ok=False, errors=[f"could not read the context: {exc}"])
+            else:
+                active = context
+        if active is None:
+            return ContextMappingResult(ok=False, errors=["document has no @context and none was given"])
 
-    payload = {k: v for k, v in parsed.items() if k not in ("@context", "$schema")}
-    return ContextMappingResult.model_validate(check_predicates(payload, active).to_dict(include_documents=True))
+        payload = {k: v for k, v in parsed.items() if k not in ("@context", "$schema")}
+        return ContextMappingResult.model_validate(check_predicates(payload, active).to_dict(include_documents=True))
+    finally:
+        if doc_holder:
+            doc_holder.cleanup()
 
 
 class RuleWithEnforcement(Rule):

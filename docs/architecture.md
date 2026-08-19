@@ -126,7 +126,7 @@ several versions in one run. See [Validation](how-to/validation.md).
 
 The validator is organized around two identifier systems that are not peers.
 
-**Rule ids** (`OOLD-RT-002`) name *which specification requirement was violated*. They are owned
+**Rule ids** (`OOLD-RT-08f2`) name *which specification requirement was violated*. They are owned
 by the OO-LD specification, are permanent, and come from the versioned rule catalogue
 (`oold-rules.json`) vendored per meta-schema version (see
 [Maintaining the vendored meta-schemas and fixtures](maintaining-meta-schemas.md)). This is what

@@ -29,6 +29,11 @@ class Check:
 
     ``id`` is a stable dotted identifier (``schema.meta``, ``roundtrip.instance``, ...) so
     results can be filtered and compared across runs; the golden parity test keys on it.
+    It is this repository's identifier and is not a second name for ``rule``, which is the
+    specification's: a check whose subject the specification does not mandate carries no rule
+    at all, and no check carries one under a meta-schema version predating the rule catalog.
+    The check id is therefore the identifier that survives every version. See
+    ``docs/architecture.md``, "Validation subsystem design", for the full split.
     ``meta_version`` is set only for the checks whose outcome depends on which meta-schema
     version was used, which keeps a multi-version run readable.
     """

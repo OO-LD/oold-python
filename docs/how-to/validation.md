@@ -37,7 +37,8 @@ The second is the dangerous one, because nothing about the output looks wrong.
 ## CLI
 
 ```bash
-oold validate path/to/Schema.schema.json     # one schema
+oold validate path/to/Schema.schema.json     # a schema, detected from its $schema
+oold validate path/to/doc.instance.json      # an instance, detected from its $schema
 oold validate path/to/schemas/               # every schema and instance in a directory
 oold validate-instance doc.instance.json     # a document against the schema it names
 oold compliance path/to/compliance/          # a deterministic fixture suite
@@ -47,6 +48,12 @@ oold meta fetch                              # refresh the unreleased ones into 
 
 `oold-validate <dir>` is an alias for `oold validate <dir>`, matching the reference harness's
 `npx --yes github:OO-LD/oold-schema oold-validate <dir>` so CI snippets carry across.
+
+A single file passed to `oold validate` is classified by its `$schema`: pointing at the OO-LD
+meta-schema or another JSON Schema dialect makes it a schema, any other value makes it an
+instance of the document it names, and a file with no `$schema` at all needs `--as-schema` or
+`--as-instance` to say which it is. Pass either flag to skip detection and force one reading, for
+example when a schema is still being drafted and has no `$schema` yet.
 
 Exit code is 0 only when no check failed. Warnings do not fail a run.
 
@@ -102,15 +109,15 @@ can be quoted in a review or a changelog:
 
 ```console
 $ oold validate Author.schema.json --verbose
-  FAIL OOLD-RT-002 lint.container    Author.schema.json: strict array property without @container
-       https://oo-ld.org/latest/spec/#rule-OOLD-RT-002
+  FAIL OOLD-RT-08f2 lint.container    Author.schema.json: strict array property without @container
+       https://oo-ld.org/latest/spec/#rule-OOLD-RT-08f2
 ```
 
 ```bash
 oold rules list                    # every rule, and the check that enforces it
 oold rules list --area RT          # just round-trip safety
 oold rules list --unchecked        # checkable rules no check enforces yet
-oold rules explain OOLD-RT-002     # level, binding, spec text and link
+oold rules explain OOLD-RT-08f2    # level, binding, spec text and link
 ```
 
 The catalogue arrived in `1.0.0-rc.1`. Older tracked versions predate it and, being released

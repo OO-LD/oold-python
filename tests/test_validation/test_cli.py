@@ -126,3 +126,62 @@ def test_a_missing_target_is_rejected_by_the_argument_parser(run):
     runner = CliRunner()
     result = runner.invoke(main, ["validate", "no-such-path"])
     assert result.exit_code != 0
+
+
+def test_validate_detects_an_instance_file(run, data_dir):
+    result = run("validate", str(data_dir / "PersonWithPet.instance.json"), "--offline", "--json")
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    ids = {check["id"] for check in payload["checks"]}
+    assert "instance.schema" in ids
+    assert "roundtrip.instance" in ids
+
+
+def test_validate_detects_a_schema_file(run, data_dir):
+    result = run("validate", str(data_dir / "PersonWithPet.schema.json"), "--offline", "--verbose")
+    assert "schema.meta" in result.output
+
+
+def test_as_instance_overrides_detection_on_a_schema_file(run, data_dir):
+    result = run("validate", str(data_dir / "PersonWithPet.schema.json"), "--as-instance", "--offline", "--json")
+    payload = json.loads(result.output)
+    ids = {check["id"] for check in payload["checks"]}
+    assert "instance.schema" in ids
+    assert "schema.meta" not in ids
+
+
+def test_as_schema_overrides_detection_on_an_instance_file(run, data_dir):
+    result = run("validate", str(data_dir / "PersonWithPet.instance.json"), "--as-schema", "--offline", "--json")
+    payload = json.loads(result.output)
+    ids = {check["id"] for check in payload["checks"]}
+    assert "schema.meta" in ids
+    assert "instance.schema" not in ids
+
+
+def test_a_legacy_dialect_is_still_classified_as_a_schema(run, broken_dir):
+    result = run("validate", str(broken_dir / "legacy_dialect.schema.json"), "--offline", "--verbose")
+    assert "schema.meta" in result.output or "rule.dialect-version" in result.output
+
+
+def test_a_file_with_no_schema_key_is_rejected(run, tmp_path):
+    target = tmp_path / "no_schema.json"
+    target.write_text('{"foo": "bar"}', encoding="utf-8")
+    result = run("validate", str(target), "--offline")
+    assert result.exit_code != 0
+    assert "--as-schema" in result.output
+
+
+def test_as_schema_with_a_directory_is_rejected(run, data_dir):
+    result = run("validate", str(data_dir), "--as-schema", "--offline")
+    assert result.exit_code != 0
+
+
+def test_as_schema_and_as_instance_together_are_rejected(run, data_dir):
+    result = run(
+        "validate",
+        str(data_dir / "PersonWithPet.schema.json"),
+        "--as-schema",
+        "--as-instance",
+        "--offline",
+    )
+    assert result.exit_code != 0

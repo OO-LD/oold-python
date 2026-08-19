@@ -14,10 +14,11 @@ import inspect
 import json
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import click
 
-from .meta_store import MetaSchemaError, describe_store, fetch_remote, resolve_selection
+from .meta_store import MetaSchemaError, describe_store, fetch_remote, load_index, resolve_selection
 from .pipeline import Options, run_compliance, validate_directory, validate_instance, validate_schema
 from .report import FAIL, OK, SKIP, WARN, Report
 
@@ -27,6 +28,57 @@ EXIT_FAILED = 1
 #: Where a rule id resolves in the published specification. The anchor is emitted by
 #: oold-schema's spec renderer, so a report can link straight to the requirement it cites.
 SPEC_RULE_URL = "https://oo-ld.org/latest/spec/#rule-"
+
+_META_SCHEMA_FILENAMES = ("oold-meta-schema.json", "oold-meta-schema-base.json")
+
+
+def _names_a_meta_schema(value: str) -> bool:
+    """True when ``value`` names a schema *dialect* rather than a document.
+
+    Used to tell a schema (whose ``$schema`` points at a dialect) from an instance (whose
+    ``$schema`` points at another document, the schema it is an instance of).
+    """
+    if not isinstance(value, str):
+        return False
+
+    # Exact membership in the tracked OO-LD meta-schema ids. Built from the index rather than
+    # hardcoded because the canonical $id domain has moved once already (see meta_store.py's
+    # _build_registry), so the tracked versions currently carry two distinct id_base values.
+    tracked_ids = {
+        entry.get("id_base", "") + filename
+        for entry in load_index().get("versions", {}).values()
+        for filename in _META_SCHEMA_FILENAMES
+    }
+    if value in tracked_ids:
+        return True
+
+    parsed = urlsplit(value)
+
+    # Any JSON Schema draft dialect is a schema, not an instance of one - this is what keeps a
+    # deliberately-outdated dialect (e.g. draft-07) classified as a schema rather than unknown.
+    if parsed.netloc == "json-schema.org":
+        return True
+
+    # Fallback: the final path segment is a meta-schema file name, which keeps an as-yet-untracked
+    # future id_base (a released version this package has not vendored yet) working.
+    return parsed.path.rsplit("/", 1)[-1] in _META_SCHEMA_FILENAMES
+
+
+def _classify(target: Path) -> str:
+    """Classify ``target`` as ``"schema"``, ``"instance"`` or ``"unknown"`` from its $schema."""
+    try:
+        document = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        # Not our error to raise: let the existing pipeline report the parse error for this file.
+        return "schema"
+    if not isinstance(document, dict):
+        return "schema"
+
+    declared = document.get("$schema")
+    if declared is None:
+        return "unknown"
+    return "schema" if _names_a_meta_schema(declared) else "instance"
+
 
 _STATUS_STYLE = {
     OK: {"fg": "green"},
@@ -112,23 +164,58 @@ def _run(report: Report, as_json: bool, verbose: bool, output: Path | None) -> N
 
 @click.command("validate")
 @click.argument("target", type=click.Path(exists=True, path_type=Path))
+@click.option("--as-schema", is_flag=True, help="Treat TARGET as a schema, skipping $schema-based detection.")
+@click.option("--as-instance", is_flag=True, help="Treat TARGET as an instance, skipping $schema-based detection.")
 @_meta_option
 @_offline_option
 @_json_option
 @_verbose_option
 @_output_option
-def validate(target: Path, meta, offline: bool, as_json: bool, verbose: bool, output: Path | None):
-    """Validate an OO-LD schema, or every schema and instance in a directory.
+def validate(
+    target: Path,
+    as_schema: bool,
+    as_instance: bool,
+    meta,
+    offline: bool,
+    as_json: bool,
+    verbose: bool,
+    output: Path | None,
+):
+    """Validate an OO-LD schema or instance, or every schema and instance in a directory.
 
-    TARGET is a *.schema.json file or a directory. A directory runs the same general-workflow
-    checks over every schema and instance it contains.
+    TARGET is a single file or a directory. A directory runs the same general-workflow checks
+    over every schema and instance it contains. A single file is classified from its $schema: a
+    meta-schema or JSON Schema dialect makes it a schema, any other $schema makes it an instance
+    of the document it names, and a missing $schema requires --as-schema or --as-instance.
     """
+    if as_schema and as_instance:
+        raise click.ClickException("--as-schema and --as-instance are mutually exclusive")
+    if (as_schema or as_instance) and target.is_dir():
+        raise click.ClickException("--as-schema and --as-instance apply to a single file, not a directory")
+
     try:
         options = _options(meta, offline)
     except MetaSchemaError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    report = validate_directory(target, options) if target.is_dir() else validate_schema(target, options)
+    if target.is_dir():
+        report = validate_directory(target, options)
+    else:
+        if as_schema:
+            kind = "schema"
+        elif as_instance:
+            kind = "instance"
+        else:
+            kind = _classify(target)
+
+        if kind == "schema":
+            report = validate_schema(target, options)
+        elif kind == "instance":
+            report = validate_instance(target, None, options)
+        else:
+            raise click.ClickException(
+                f"{target.name} has no $schema, so it cannot be classified: pass --as-schema or --as-instance"
+            )
     _run(report, as_json, verbose, output)
 
 

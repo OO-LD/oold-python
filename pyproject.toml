@@ -42,8 +42,9 @@ Download = "https://pypi.org/project/oold/#files"
 [project.scripts]
 oold = "oold.cli:main"
 # The JS-compatible name, bound to the same implementation, so `oold-validate <dir>` works the
-# same way as `npx --yes github:OO-LD/oold-schema oold-validate <dir>`.
-oold-validate = "oold.validation.cli:validate"
+# same way as `npx --yes github:OO-LD/oold-schema oold-validate <dir>`. Bound through oold.cli
+# rather than at the click command so it keeps the missing-extra guard that `oold` has.
+oold-validate = "oold.cli:validate_main"
 
 [project.optional-dependencies]
 # The validator needs a JSON Schema implementation and a CLI framework. pyld and rdflib are

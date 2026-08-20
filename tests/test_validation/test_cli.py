@@ -185,3 +185,23 @@ def test_as_schema_and_as_instance_together_are_rejected(run, data_dir):
         "--offline",
     )
     assert result.exit_code != 0
+
+
+# ------------------------------------------------------------------ console scripts
+
+
+def test_both_console_scripts_keep_the_missing_extra_guard():
+    """Binding either script straight at a click command skips oold.cli's ImportError guard.
+
+    Without the extra installed that turns an actionable install hint into a traceback, and
+    nothing else would notice, since the test suite always has the extra.
+    """
+    from importlib.metadata import distribution
+
+    # The installed metadata rather than pyproject.toml: it is what actually gets written into
+    # the console scripts, and reading it needs no TOML parser on Python 3.10.
+    scripts = {ep.name: ep.value for ep in distribution("oold").entry_points if ep.group == "console_scripts"}
+
+    assert set(scripts) == {"oold", "oold-validate"}
+    for name, target in scripts.items():
+        assert target.startswith("oold.cli:"), f"{name} bypasses the guard in oold.cli: {target}"

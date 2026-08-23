@@ -103,6 +103,13 @@ Predicate = Callable[[dict[str, Any], ContextView], list[str]]
 #: RFC 2119 levels that make a violation a failure. Everything else is advice, so it warns.
 _MUST_LEVELS = frozenset({"MUST", "MUST NOT", "SHALL", "SHALL NOT", "REQUIRED"})
 
+#: Levels that are advice. Listed rather than inferred from "not in _MUST_LEVELS", so that a level
+#: the specification adds later is neither silently treated as advice nor silently treated as a
+#: failure: `severity` raises on one it does not recognise. The two sets together must cover the
+#: `level` enum in `oold-rules.schema.json`, which is asserted by
+#: `test_the_severity_split_covers_the_whole_level_vocabulary`.
+_ADVICE_LEVELS = frozenset({"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED"})
+
 #: Used only when the meta version in use ships no catalogue to read the level from.
 DEFAULT_LEVEL: Status = FAIL
 
@@ -113,10 +120,22 @@ def severity(rule: Rule | None, fallback: Status = DEFAULT_LEVEL) -> Status:
     The level is the specification's own, not a taste judgement made here, so relaxing a MUST to
     a SHOULD upstream changes the validator's behaviour with no code change. Without a catalogue
     there is nothing to read, and the caller's fallback applies.
+
+    An unrecognised level raises rather than defaulting. Defaulting either way is silent and wrong
+    in one direction: as advice it demotes a requirement, as a failure it invents one. The
+    specification added `NOT RECOMMENDED` to its vocabulary in v1.0.0-rc.3, which the old
+    "anything not a MUST is advice" reading would have absorbed without a word.
     """
     if not rule:
         return fallback
-    return FAIL if rule.level in _MUST_LEVELS else WARN
+    if rule.level in _MUST_LEVELS:
+        return FAIL
+    if rule.level in _ADVICE_LEVELS:
+        return WARN
+    raise ValueError(
+        f"{rule.id} carries the level {rule.level!r}, which this validator does not classify. "
+        "The specification's level vocabulary has grown; add it to _MUST_LEVELS or _ADVICE_LEVELS."
+    )
 
 
 # ---------------------------------------------------------------------------- individual rules
@@ -951,12 +970,14 @@ CHECKS: tuple[CheckInfo, ...] = (
     ),
     # Deliberately cites no rule. The specification permits an unmapped term - "an author MAY
     # leave it unmapped" - and treats deferring semantics as what distinguishes OO-LD from
-    # RDF/SHACL, so an unmapped property is not a conformance failure and there is no rule to
-    # borrow severity from. It is still worth reporting: it is usually an oversight, and the
-    # property will not reach RDF. Promote it with --strict where full coverage is intended.
+    # RDF/SHACL, so an unmapped property is not a conformance failure. It is still worth
+    # reporting: OOLD-SCH-21d7 says a schema should offer at least one complete mapping, which is
+    # a SHOULD, so the warning is the catalogue's own severity rather than one chosen here.
+    # Promote it with --strict where full coverage is intended.
     CheckInfo(
         "context.coverage",
         "every declared property carries a @context term",
+        rule="OOLD-SCH-21d7",
         default_status=WARN,
         detects=check_predicates,
         predates_catalog=True,

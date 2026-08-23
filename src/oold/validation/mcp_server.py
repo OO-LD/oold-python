@@ -448,11 +448,7 @@ def list_oold_rules(
         )
 
     enforced_by = {v: k for k, v in rule_map().items()}
-    rules = bundle.machine_checkable_rules() if unenforced_only else bundle.rules
-    if area:
-        rules = [r for r in rules if r.area.upper() == area.upper()]
-    if unenforced_only:
-        rules = [r for r in rules if r.id not in enforced_by]
+    rules = select_rules(bundle, area=area, unenforced_only=unenforced_only)
 
     return RulesListResult(
         meta_version=bundle.version,

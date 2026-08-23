@@ -204,6 +204,7 @@ class MetaBundle(BaseModel):
     rules_schema: dict[str, Any] | None = Field(default=None, repr=False)
     #: Why the catalog could not be read, when a file was there but unusable.
     rules_error: str | None = Field(default=None, repr=False)
+    rules_schema_error: str | None = Field(default=None, repr=False)
 
     @property
     def meta(self) -> dict[str, Any]:
@@ -268,6 +269,10 @@ class MetaBundle(BaseModel):
         """The rule catalog's own problems: unreadable, or disagreeing with its schema."""
         if self.rules_error:
             return [self.rules_error]
+        # Before the None check below, which cannot tell "this version vendors no schema" from
+        # "its schema is broken" and would report neither.
+        if self.rules_schema_error:
+            return [self.rules_schema_error]
         if self.rules_document is None or self.rules_schema is None:
             return []
         try:
@@ -367,20 +372,24 @@ def _parse_rules(catalog: dict[str, Any] | None, read_error: str | None) -> tupl
         return [], f"{RULES_FILE} has rule entries that do not match the expected shape: {exc}"
 
 
-def _read_rules_schema(directory: Path) -> dict[str, Any] | None:
+def _read_rules_schema(directory: Path) -> tuple[dict[str, Any] | None, str | None]:
     """Load the optional schema describing the catalog. Absent is not a problem in itself.
 
     Only versions from 1.0.0-rc.1 onward vendor one, and a version with a catalog but no schema
     is simply left unchecked rather than reported: the missing file is the older layout, not a
     defect in this one.
+
+    Present but unreadable is the opposite, and is reported. Returning None for both would send
+    `_catalog_problems` down its "nothing to validate against" path, so a corrupt schema would
+    silently disable catalog validation entirely - the one outcome this file exists to prevent.
     """
     path = directory / RULES_SCHEMA_FILE
     if not path.is_file():
-        return None
+        return None, None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+        return json.loads(path.read_text(encoding="utf-8")), None
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"{RULES_SCHEMA_FILE} is present but unreadable, so the catalog cannot be checked: {exc}"
 
 
 def _read_documents(directory: Path, label: str, files: list[str]) -> dict[str, Any]:
@@ -405,6 +414,7 @@ def load_tracked(version: str) -> MetaBundle:
     documents = _read_documents(directory, f"meta-schema version {version}", meta_files(version))
     catalog, catalog_error = _read_rules(directory)
     rules, rules_error = _parse_rules(catalog, catalog_error)
+    rules_schema, rules_schema_error = _read_rules_schema(directory)
     return MetaBundle(
         version=version,
         origin=str(directory),
@@ -412,7 +422,8 @@ def load_tracked(version: str) -> MetaBundle:
         registry=_build_registry(documents),
         rules=rules,
         rules_document=catalog,
-        rules_schema=_read_rules_schema(directory),
+        rules_schema=rules_schema,
+        rules_schema_error=rules_schema_error,
         rules_error=rules_error,
     )
 
@@ -479,6 +490,7 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
             origin = f"{target} (fetched {json.loads(stamp.read_text(encoding='utf-8'))['fetched']})"
     catalog, catalog_error = _read_rules(target)
     rules, rules_error = _parse_rules(catalog, catalog_error)
+    rules_schema, rules_schema_error = _read_rules_schema(target)
     return MetaBundle(
         version=REMOTE,
         origin=origin,
@@ -486,7 +498,8 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
         registry=_build_registry(documents),
         rules=rules,
         rules_document=catalog,
-        rules_schema=_read_rules_schema(target),
+        rules_schema=rules_schema,
+        rules_schema_error=rules_schema_error,
         rules_error=rules_error,
     )
 

@@ -335,15 +335,10 @@ def rules_group() -> None:
 @_json_option
 def rules_list(meta, offline: bool, area: str | None, unchecked: bool, as_json: bool) -> None:
     """List the rules in the specification's catalog."""
-    from .check_registry import rule_map
+    from .check_registry import rule_map, select_rules
 
     bundle = _rules_bundle(meta, offline)
-    rules = bundle.rules
-    if area:
-        rules = [r for r in rules if r.area.upper() == area.upper()]
-    if unchecked:
-        enforced = set(rule_map().values())
-        rules = [r for r in bundle.machine_checkable_rules() if r.id not in enforced]
+    rules = select_rules(bundle, area=area, unenforced_only=unchecked)
 
     if as_json:
         click.echo(json.dumps([r.model_dump() for r in rules], indent=2))

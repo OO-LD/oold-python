@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from referencing import Registry
 
 from oold.validation import meta_store
 from oold.validation.meta_store import (
@@ -145,6 +146,38 @@ def test_an_unreadable_catalogue_is_reported_not_swallowed(tmp_path):
     assert error and meta_store.RULES_FILE in error
 
 
+def test_an_unreadable_rules_schema_is_reported_not_swallowed(tmp_path):
+    """A corrupt schema must not be indistinguishable from an absent one.
+
+    Absent means "this version predates the catalog schema", and `_catalog_problems` correctly
+    validates nothing. Corrupt means the file the catalog is checked against is broken, and
+    returning None for both sent that case down the same path - so a broken schema disabled
+    catalog validation entirely, reporting nothing. The catalog is data the validator trusts,
+    which is exactly why its own checking must not fail open.
+    """
+    (tmp_path / meta_store.RULES_SCHEMA_FILE).write_text("{ not json", encoding="utf-8")
+    schema, error = meta_store._read_rules_schema(tmp_path)
+    assert schema is None
+    assert error and meta_store.RULES_SCHEMA_FILE in error
+
+    # And it reaches the caller, rather than stopping at the loader.
+    bundle = meta_store.MetaBundle(
+        version="test",
+        origin=str(tmp_path),
+        registry=Registry(),
+        documents={},
+        rules_document={"rules": []},
+        rules_schema_error=error,
+    )
+    assert bundle._catalog_problems() == [error]
+
+
+def test_an_absent_rules_schema_stays_silent(tmp_path):
+    """The other half of the distinction: a version that never vendored one is not a defect."""
+    schema, error = meta_store._read_rules_schema(tmp_path)
+    assert schema is None and error is None
+
+
 def test_a_malformed_catalog_is_treated_as_absent():
     """Entries that do not parse as `Rule` must not crash a run or half-populate `bundle.rules`.
 
@@ -191,7 +224,8 @@ def test_the_rule_model_requires_exactly_what_the_vendored_schema_requires():
     """
     checked_any = False
     for version in tracked_versions():
-        schema = meta_store._read_rules_schema(meta_store.meta_dir() / version)
+        schema, schema_error = meta_store._read_rules_schema(meta_store.meta_dir() / version)
+        assert schema_error is None, schema_error
         if schema is None:
             continue
         checked_any = True

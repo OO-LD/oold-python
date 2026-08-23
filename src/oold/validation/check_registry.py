@@ -1188,6 +1188,25 @@ def rule_map() -> dict[str, str]:
     return {c.id: c.rule for c in CHECKS if c.rule}
 
 
+def select_rules(bundle, area: str | None = None, unenforced_only: bool = False) -> list[Rule]:
+    """The catalogue entries a caller asked for, filtered once for every front end.
+
+    Lives here rather than in the CLI and the MCP server because it was written twice and the
+    copies disagreed: the CLI rebuilt its list from the machine-checkable rules inside the
+    unenforced branch, which discarded any area filter applied before it, so `--area RT
+    --unchecked` silently returned every area. Restricting the population and then narrowing it
+    is the order both need.
+    """
+    rules = bundle.machine_checkable_rules() if unenforced_only else bundle.rules
+    if area:
+        wanted = area.upper()
+        rules = [r for r in rules if r.area.upper() == wanted]
+    if unenforced_only:
+        enforced = set(rule_map().values())
+        rules = [r for r in rules if r.id not in enforced]
+    return list(rules)
+
+
 _BY_ID: dict[str, CheckInfo] = {c.id: c for c in CHECKS}
 
 

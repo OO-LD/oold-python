@@ -90,11 +90,34 @@
         "oold-rules.json": "bf79dffda89063865ff8b7763576fd880655dd636e8720701db3545f27759536",
         "oold-rules.schema.json": "71e0d2e437d05a0a718612ed273993c3e216681c6c4cd426a6b3c1018f07e07a"
       }
+    },
+    "1.0.0-rc.3": {
+      "tag": "v1.0.0-rc.3",
+      "commit": "28edc9923b5cbb672d976ce60b43f8d00b91542b",
+      "committed": "2026-08-23T13:31:04+02:00",
+      "added": "2026-08-23",
+      "id_base": "https://oo-ld.org/latest/meta/",
+      "prerelease": true,
+      "notes": "Mainly a normativity pass upstream. Four requirements that existed only inside a :::example, a :::note or a section marked .informative were moved into normative prose, so they can now be cited: OOLD-SCH-2d05 (an unmapped term is not a conformance failure), OOLD-SCH-21d7 (a schema should offer one complete mapping), OOLD-VER-46b9 (an x-oold-uuid should also appear in the $id) and OOLD-CMP-1257 (a composed object is closed with unevaluatedProperties). The UI section became normative, because its keywords are enforced by the meta-schema this dialect $refs, so disclaiming them contradicted what the schemas already validate. x-enum-varnames and x-enum-descriptions gained a normative section and moved from the UI meta-schema's $defs/keywords into oold-meta-schema-base.json's properties, which is why both of those files change here while oold-meta-schema.json and oold-pattern-lint.schema.json are byte-identical to v1.0.0-rc.2. The catalogue grew from 66 rules to 73 with none retired and no id reused; of the 66 already vendored, none changed level, applies or text, and OOLD-CMP-a05a changed machine_checkable to false, its trigger being authorial intent that no validator can see.",
+      "files": [
+        "oold-meta-schema.json",
+        "oold-meta-schema-base.json",
+        "oold-pattern-lint.schema.json",
+        "oold-ui-meta-schema.json"
+      ],
+      "sha256": {
+        "oold-meta-schema.json": "7960a4508f8688b74b3096d7ac0828c9fe74089692d370c756eeef58b8785606",
+        "oold-meta-schema-base.json": "01fa8ded2ed24707292bcb7044a2e7edbcee0079d6d4f48525190298e3eff048",
+        "oold-pattern-lint.schema.json": "d89fce19cd2fd42fa740d92968fcf61a1764ea25e741ed5cd4e72040a45c9a86",
+        "oold-ui-meta-schema.json": "1a93b82e28d4d98252546eb2a579c9521496d3bb60be2bbb5af34b65b9fa6640",
+        "oold-rules.json": "9907c8b4227cec829d43377e85d542bcc4664356b3c37d46d24aed46fbcaae11",
+        "oold-rules.schema.json": "efdcb1fbbb592f7881b33fdbace62d5a785e36a37ad58312a39ddc5e85a10ae7"
+      }
     }
   },
   "fixtures": {
     "$comment": "Provenance of the fixture slice in tests/data/oold/, which is a copy of the upstream examples/ directory. Recorded here rather than stated in that folder's README, because a tag is data: the README claimed v0.8.0 for a full release after the slice had moved to v1.0.0-rc.1, and nothing noticed. `tag` must name the newest entry in `versions`, so that fixtures and meta-schemas always come from one release; a test asserts it. The locally authored fixtures under broken/ and remote_context/ are not part of this slice and no refresh touches them.",
-    "tag": "v1.0.0-rc.2",
+    "tag": "v1.0.0-rc.3",
     "source": "examples/",
     "destination": "tests/data/oold/"
   }

@@ -463,7 +463,18 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
     # Two independent findings, reported separately because only the first has a rule behind it.
     # A term expanding to a non-absolute IRI violates OOLD-EXT-2b61; a property with no term at
     # all is permitted by the specification (OOLD-SCH-2d05) and is reported as guidance.
-    if result.suspicious:
+    if result.errors:
+        # A processor failure, not a missing term. Reported here rather than as coverage: the
+        # question was never answered, so treating it as an absent term would downgrade a broken
+        # processor to something the specification permits.
+        run.add(
+            "context.predicates",
+            name,
+            FAIL,
+            f"expansion failed while attributing properties: {result.errors[0]}",
+            result.to_dict(include_documents=True),
+        )
+    elif result.suspicious:
         first = next(iter(result.suspicious.items()))
         run.add(
             "context.predicates",

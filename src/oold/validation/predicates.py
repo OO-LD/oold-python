@@ -39,6 +39,10 @@ ANCHOR = "urn:oold:validation:anchor"
 MAPPED = "mapped"
 ALIAS = "alias"
 DROPPED = "dropped"
+#: The processor raised while expanding this property. Distinct from DROPPED: that means the
+#: term is genuinely absent, which the specification permits, whereas this means the question
+#: was never answered. Collapsing the two lets a broken processor read as a permitted omission.
+ERRORED = "errored"
 SUSPICIOUS = "suspicious"
 
 
@@ -111,7 +115,7 @@ def classify_property(name: str, value: Any, context: Any, options: dict[str, An
     try:
         expanded = jsonld.expand({"@context": context, name: value, ANCHOR: "anchor"}, options)
     except Exception as exc:
-        return PropertyOutcome(name=name, status=DROPPED, detail=f"expansion failed: {describe_jsonld_error(exc)}")
+        return PropertyOutcome(name=name, status=ERRORED, detail=f"expansion failed: {describe_jsonld_error(exc)}")
 
     if not expanded:
         return PropertyOutcome(name=name, status=DROPPED, detail="no context term, so expansion produced no predicate")
@@ -182,7 +186,9 @@ def check_predicates(
             )
             outcome = PropertyOutcome(name=name, status=MAPPED, predicate=synonym, detail=detail)
         result.outcomes.append(outcome)
-        if outcome.status == DROPPED:
+        if outcome.status == ERRORED:
+            result.errors.append(f"{name}: {outcome.detail}")
+        elif outcome.status == DROPPED:
             result.dropped.append(name)
         elif outcome.status == SUSPICIOUS:
             result.suspicious[name] = outcome.predicate or ""

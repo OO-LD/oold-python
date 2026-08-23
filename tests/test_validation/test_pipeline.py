@@ -163,6 +163,25 @@ def test_missing_context_term_warns_and_names_the_orphan_property(broken_dir):
     assert "context.coverage" not in {c.id for c in report.failures()}
 
 
+def test_a_processor_failure_is_not_downgraded_to_a_coverage_warning(broken_dir, monkeypatch):
+    """A raised processor must not read as a permitted omission.
+
+    `classify_property` reported both as DROPPED, so making the unmapped case a warning would
+    have taken genuine expansion failures with it - a real error silently demoted to guidance
+    about something the specification allows. They are distinct statuses now.
+    """
+    from oold.validation import predicates
+
+    monkeypatch.setattr(
+        predicates.jsonld, "expand", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("processor exploded"))
+    )
+    report = validate_schema(broken_dir / "missing_context_term.schema.json", OFFLINE)
+    failures = {c.id: c for c in report.failures()}
+    assert "context.predicates" in failures
+    assert "expansion failed" in failures["context.predicates"].message
+    assert "context.coverage" not in failures
+
+
 def test_strict_promotes_an_unmapped_term_to_a_failure(broken_dir):
     report = validate_schema(
         broken_dir / "missing_context_term.schema.json",

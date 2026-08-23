@@ -53,6 +53,10 @@ class Options:
 
     meta: tuple[str, ...] = ("latest",)
     offline: bool = False
+    #: Promote findings the specification permits but that are usually unintended, currently
+    #: `context.coverage`, from a warning to a failure. Off by default because failing on them
+    #: would reject documents the specification allows.
+    strict: bool = False
     max_variants: int = MAX_VARIANTS
     only: tuple[str, ...] = ()
     skip: tuple[str, ...] = ()
@@ -77,6 +81,10 @@ class _Run:
     schemas: dict[str, Any] = field(default_factory=dict)
     cyclic: set[str] = field(default_factory=set)
     _bounded: dict[str, Any] = field(default_factory=dict)
+    #: Properties a schema declares but does not map, memoised per schema. Two checks need it -
+    #: context.coverage reports it, roundtrip.generated must not count it as a loss - and
+    #: deriving it means resolving the context, which is too expensive to repeat.
+    _unmapped: dict[str, set[str]] = field(default_factory=dict)
 
     def bounded(self, name: str) -> dict[str, Any]:
         """Dereference and bound a schema by file name, memoised for the run."""
@@ -293,17 +301,24 @@ def _check_schema_jsonld(run: _Run, name: str, raw: dict[str, Any]) -> None:
         run.add("roundtrip.generated", name, SKIP, CYCLIC_NOTE)
     else:
         result = roundtrip(schema, generated.instance, context_url, run.loader, promoted=promoted)
+        # A property with no @context term does not reach RDF, so it cannot come back. That is
+        # permitted (OOLD-SCH-2d05) and is context.coverage's finding, not a round-trip defect.
+        # Reporting it here as well would fail the schema for something the specification allows,
+        # under a check that cites no rule. What is left is a genuine loss: a property that was
+        # mapped and still did not survive.
+        unmapped = _unmapped_properties(run, name, raw, schema, generated.instance)
+        lost = [key for key in result.lost if key.split("[")[0].split(".")[0] not in unmapped]
         if result.error:
             run.add("roundtrip.generated", name, FAIL, result.error)
-        elif result.lost:
-            joined = ", ".join(result.lost)
-            plural = "ies" if len(result.lost) > 1 else "y"
+        elif lost:
+            joined = ", ".join(lost)
+            plural = "ies" if len(lost) > 1 else "y"
             run.add(
                 "roundtrip.generated",
                 name,
                 FAIL,
-                f"propert{plural} lost through RDF (unmapped in @context?): {joined}",
-                {"lost": result.lost},
+                f"propert{plural} lost through RDF despite being mapped: {joined}",
+                {"lost": lost, "unmapped": sorted(unmapped)},
             )
         else:
             re_errors = sorted(validator.iter_errors(result.restored), key=lambda e: list(e.absolute_path))
@@ -388,6 +403,34 @@ def _check_variant(
             run.add("variants", label, OK)
 
 
+def _unmapped_properties(run: _Run, name: str, raw, schema, sample) -> set[str]:
+    """Declared properties that produce no predicate, so they never reach RDF.
+
+    Permitted by the specification (`OOLD-SCH-2d05`), so this is not a failure anywhere; it is
+    reported by `context.coverage` and subtracted from what `roundtrip.generated` calls a loss.
+    Returns an empty set when the context cannot be resolved - the checks that report resolution
+    failures do so on their own, and guessing here would double-report it.
+    """
+    if name in run._unmapped:
+        return run._unmapped[name]
+    unmapped: set[str] = set()
+    if isinstance(sample, dict):
+        try:
+            resolved = run.resolver.load(run.directory / name)
+            context = resolve_context(raw, resolved.base_uri, run.resolver)
+            if not context.errors and not context.is_empty:
+                id_key, type_key = find_alias_keys(context.terms())
+                declared = set(collect_composed_properties(schema)) | {id_key, type_key}
+                outcome = check_predicates(
+                    sample, context.as_jsonld(), declared_properties=declared, promoted=context.promoted
+                )
+                unmapped = set(outcome.dropped)
+        except SchemaResolutionError:
+            unmapped = set()
+    run._unmapped[name] = unmapped
+    return unmapped
+
+
 def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
     """Attribute each declared property to the predicate it produces."""
     if not run.options.wants("context.predicates") or not isinstance(sample, dict):
@@ -417,6 +460,9 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
     declared = set(collect_composed_properties(schema)) | {id_key, type_key}
     result = check_predicates(sample, context.as_jsonld(), declared_properties=declared, promoted=context.promoted)
 
+    # Two independent findings, reported separately because only the first has a rule behind it.
+    # A term expanding to a non-absolute IRI violates OOLD-EXT-2b61; a property with no term at
+    # all is permitted by the specification (OOLD-SCH-2d05) and is reported as guidance.
     if result.suspicious:
         first = next(iter(result.suspicious.items()))
         run.add(
@@ -427,14 +473,6 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
             "the prefix is probably undefined",
             result.to_dict(include_documents=True),
         )
-    elif result.dropped:
-        run.add(
-            "context.predicates",
-            name,
-            FAIL,
-            f"propert{'ies' if len(result.dropped) > 1 else 'y'} with no @context term: " + ", ".join(result.dropped),
-            result.to_dict(include_documents=True),
-        )
     else:
         run.add(
             "context.predicates",
@@ -443,6 +481,22 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
             "",
             {"mapped": len(result.mapped), "aliased": len(result.aliased)},
         )
+
+    if not run.options.wants("context.coverage"):
+        return
+    if result.dropped:
+        plural = "ies" if len(result.dropped) > 1 else "y"
+        run.add(
+            "context.coverage",
+            name,
+            FAIL if run.options.strict else WARN,
+            f"propert{plural} with no @context term, so {'they' if result.dropped[1:] else 'it'} "
+            f"will not reach RDF: {', '.join(result.dropped)}. Declare @vocab to map the "
+            "remainder into a default namespace, or add the term to x-oold-context.",
+            result.to_dict(include_documents=True),
+        )
+    else:
+        run.add("context.coverage", name, OK, "", {"declared": len(declared)})
 
 
 # ---------------------------------------------------------------------------- instances

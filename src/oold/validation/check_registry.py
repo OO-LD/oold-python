@@ -944,8 +944,20 @@ CHECKS: tuple[CheckInfo, ...] = (
     ),
     CheckInfo(
         "context.predicates",
-        "every declared property produces a grounded predicate",
+        "every mapped property expands to an absolute IRI",
         rule="OOLD-EXT-2b61",
+        detects=check_predicates,
+        predates_catalog=True,
+    ),
+    # Deliberately cites no rule. The specification permits an unmapped term - "an author MAY
+    # leave it unmapped" - and treats deferring semantics as what distinguishes OO-LD from
+    # RDF/SHACL, so an unmapped property is not a conformance failure and there is no rule to
+    # borrow severity from. It is still worth reporting: it is usually an oversight, and the
+    # property will not reach RDF. Promote it with --strict where full coverage is intended.
+    CheckInfo(
+        "context.coverage",
+        "every declared property carries a @context term",
+        default_status=WARN,
         detects=check_predicates,
         predates_catalog=True,
     ),

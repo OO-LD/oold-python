@@ -98,6 +98,12 @@ _meta_option = click.option(
 _offline_option = click.option(
     "--offline", is_flag=True, help="Never fetch over the network; use local files and the cache."
 )
+_strict_option = click.option(
+    "--strict",
+    is_flag=True,
+    help="Fail on findings the specification permits but that are usually unintended, "
+    "currently a property with no @context term.",
+)
 _json_option = click.option("--json", "as_json", is_flag=True, help="Print the report as JSON.")
 _verbose_option = click.option("--verbose", "-v", is_flag=True, help="Show every check, not only problems.")
 _output_option = click.option("--output", type=click.Path(path_type=Path), help="Write the JSON report to this file.")
@@ -168,6 +174,7 @@ def _run(report: Report, as_json: bool, verbose: bool, output: Path | None) -> N
 @click.option("--as-instance", is_flag=True, help="Treat TARGET as an instance, skipping $schema-based detection.")
 @_meta_option
 @_offline_option
+@_strict_option
 @_json_option
 @_verbose_option
 @_output_option
@@ -177,6 +184,7 @@ def validate(
     as_instance: bool,
     meta,
     offline: bool,
+    strict: bool,
     as_json: bool,
     verbose: bool,
     output: Path | None,
@@ -194,7 +202,7 @@ def validate(
         raise click.ClickException("--as-schema and --as-instance apply to a single file, not a directory")
 
     try:
-        options = _options(meta, offline)
+        options = _options(meta, offline, strict=strict)
     except MetaSchemaError as exc:
         raise click.ClickException(str(exc)) from exc
 

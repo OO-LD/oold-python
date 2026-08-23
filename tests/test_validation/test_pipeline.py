@@ -89,7 +89,9 @@ def test_a_property_mapped_only_through_x_oold_context_is_not_reported(x_oold_co
     "fixture,check_id,status",
     [
         ("invalid_meta.schema.json", "schema.meta", FAIL),
-        ("missing_context_term.schema.json", "roundtrip.generated", FAIL),
+        # Warns rather than fails: an unmapped term is permitted (OOLD-SCH-2d05), and it is not
+        # a round-trip loss either, since a property with no term never reaches RDF to be lost.
+        ("missing_context_term.schema.json", "context.coverage", WARN),
         ("undefined_prefix.schema.json", "context.predicates", FAIL),
         ("unresolvable_context_ref.schema.json", "context.predicates", FAIL),
         ("xsd_string_coercion.schema.json", "lint.pattern", FAIL),
@@ -141,11 +143,33 @@ def test_undefined_prefix_is_reported_as_suspicious_not_dropped(broken_dir):
     assert check.detail["suspicious"] == {"latitude": "schema:latitude"}
 
 
-def test_missing_context_term_names_the_orphan_property(broken_dir):
+def test_missing_context_term_warns_and_names_the_orphan_property(broken_dir):
+    """An unmapped term is permitted by the specification, so it warns rather than fails.
+
+    `OOLD-SCH-2d05`: an implementation must not treat an unmapped term as a conformance failure.
+    The prefix half of the old combined check keeps failing under `context.predicates`, which
+    does have a rule behind it; this half moved to `context.coverage`, which cites none.
+    """
     report = validate_schema(broken_dir / "missing_context_term.schema.json", OFFLINE)
+    checks = {c.id: c for c in report.checks}
+
+    coverage = checks["context.coverage"]
+    assert coverage.status == WARN
+    assert coverage.detail["dropped"] == ["orphan"]
+    # The two ways to map the remainder, so the report says what to do about it.
+    assert "@vocab" in coverage.message and "x-oold-context" in coverage.message
+    # The half that does have a rule is unaffected and still passes here.
+    assert checks["context.predicates"].status == OK
+    assert "context.coverage" not in {c.id for c in report.failures()}
+
+
+def test_strict_promotes_an_unmapped_term_to_a_failure(broken_dir):
+    report = validate_schema(
+        broken_dir / "missing_context_term.schema.json",
+        Options(meta=("latest",), offline=True, strict=True),
+    )
     failures = {c.id: c for c in report.failures()}
-    assert "orphan" in failures["roundtrip.generated"].message
-    assert failures["context.predicates"].detail["dropped"] == ["orphan"]
+    assert failures["context.coverage"].detail["dropped"] == ["orphan"]
 
 
 # ------------------------------------------------------------------ meta versions

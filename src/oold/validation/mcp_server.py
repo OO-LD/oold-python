@@ -431,7 +431,7 @@ def list_oold_rules(
         unenforced_only: Only machine-checkable rules that no check enforces yet.
         offline: Never fetch over the network.
     """
-    from .check_registry import rule_map
+    from .check_registry import rule_map, select_rules
 
     try:
         bundles = resolve_selection(tuple(meta) if meta else ("latest",), offline=offline)

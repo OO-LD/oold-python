@@ -656,3 +656,36 @@ def test_every_check_runs_on_every_example(check, data_dir):
     report = validate_directory(data_dir, Options(meta=("latest",), offline=True))
     produced = [c for c in report.checks if c.id == check.id]
     assert produced, f"{check.id} produced no finding at all"
+
+
+def test_the_severity_split_covers_the_whole_level_vocabulary():
+    """Every level the specification can state must be classified as a failure or as advice.
+
+    `severity` raises on a level it does not recognise, which is the right behaviour at runtime
+    but a poor way to find out. This ties the two sets to the `level` enum of every tracked
+    version, so a vocabulary that grows upstream fails here, at vendoring time, naming the level.
+
+    It is a real gap rather than a hypothetical: `NOT RECOMMENDED` entered the vocabulary in
+    v1.0.0-rc.3, and the previous "anything not a MUST is advice" reading would have swallowed it.
+    """
+    import json
+
+    from oold.validation.check_registry import _ADVICE_LEVELS, _MUST_LEVELS
+    from oold.validation.meta_store import RULES_SCHEMA_FILE, meta_dir, tracked_versions
+
+    classified = _MUST_LEVELS | _ADVICE_LEVELS
+    assert not (_MUST_LEVELS & _ADVICE_LEVELS), "a level cannot be both a failure and advice"
+
+    checked_any = False
+    for version in tracked_versions():
+        path = meta_dir() / version / RULES_SCHEMA_FILE
+        if not path.is_file():
+            continue
+        checked_any = True
+        declared = set(json.loads(path.read_text(encoding="utf-8"))["$defs"]["rule"]["properties"]["level"]["enum"])
+        assert declared <= classified, (
+            f"{version}/{RULES_SCHEMA_FILE} allows {sorted(declared - classified)}, which "
+            "check_registry classifies as neither a failure nor advice, so severity() would raise "
+            "on any rule stated with it."
+        )
+    assert checked_any, "no tracked version ships a rule schema, so this test proved nothing"

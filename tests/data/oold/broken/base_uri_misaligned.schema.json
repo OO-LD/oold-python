@@ -1,0 +1,16 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "https://example.org/schemas/base_uri_misaligned.schema.json",
+  "title": "BaseUriMisaligned",
+  "@context": {
+    "@base": "https://example.org/other/",
+    "ex": "https://example.org/",
+    "name": "ex:name"
+  },
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "array_without_container.schema.json",
+  "title": "ArrayWithoutContainer",
+  "@context": {
+    "ex": "https://example.org/",
+    "tags": {
+      "@id": "ex:tags"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

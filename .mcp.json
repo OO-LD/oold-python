@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "oold-validation": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        ".",
+        "python",
+        "-m",
+        "oold.validation.mcp_server"
+      ]
+    }
+  }
+}

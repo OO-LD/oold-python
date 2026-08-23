@@ -34,6 +34,12 @@ New here? Start with [Get Started](../get-started.md) to run your first end-to-e
 
     Serialize models to JSON-LD, load them into RDFLib, and query with SPARQL - context injection, cross-object links, and round-trip fidelity.
 
+- :material-check-decagram:{ .lg .middle } **[Validation](validation.md)**
+
+    ---
+
+    Check that a schema is well formed and that its `@context` carries every property into RDF - the CLI, the MCP server, meta-schema version selection, and what each check means.
+
 - :material-tune:{ .lg .middle } **[BaseController](controller.md)**
 
     ---

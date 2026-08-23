@@ -2,6 +2,14 @@
 # `pre-commit install` (no --hook-type flags needed).
 default_install_hook_types: [pre-commit, commit-msg]
 
+# Files copied verbatim from the oold-schema repository at a release tag: the vendored
+# meta-schemas (whose sha256 is recorded in meta/index.json) and the OO-LD test fixtures.
+# Reformatting them would break those checksums and make every future refresh from upstream
+# produce a spurious diff, so the whitespace/JSON-formatting hooks must leave them alone.
+# `check-json` still runs on them - it validates without rewriting.
+x-vendored: &vendored >-
+  ^(src/oold/validation/meta/[0-9]|tests/data/oold/)
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: "v6.0.0"
@@ -13,10 +21,12 @@ repos:
       - id: check-json
         exclude: ^.devcontainer/devcontainer.json
       - id: pretty-format-json
-        exclude: ^.devcontainer/devcontainer.json
+        exclude: ^(\.devcontainer/devcontainer\.json|src/oold/validation/meta/[0-9]|tests/data/oold/)
         args: [--autofix, --no-sort-keys]
       - id: end-of-file-fixer
+        exclude: *vendored
       - id: trailing-whitespace
+        exclude: *vendored
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: "v0.15.7"
@@ -33,3 +43,17 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
+
+  # Declaring any markdown_extensions in zensical.toml replaces Zensical's defaults
+  # instead of extending them, so dropping one switches an extension off with no
+  # warning and no build failure. See scripts/check_markdown_extensions.py.
+  - repo: local
+    hooks:
+      - id: markdown-extensions
+        name: check zensical.toml restates Zensical's default Markdown extensions
+        # Goes through make so the invocation matches `make check` and CI exactly.
+        entry: make check-extensions
+        language: system
+        pass_filenames: false
+        files: ^(zensical\.toml|scripts/check_markdown_extensions\.py|Makefile)$
+        require_serial: true

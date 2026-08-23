@@ -1,0 +1,16 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "closed_object_rejects_metadata.schema.json",
+  "title": "ClosedObjectRejectsMetadata",
+  "@context": {
+    "ex": "https://example.org/",
+    "name": "ex:name"
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  }
+}

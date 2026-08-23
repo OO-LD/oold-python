@@ -1,0 +1,15 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "context_array_order_mismatch.schema.json",
+  "title": "ContextArrayOrderMismatch",
+  "@context": [
+    "../Address.schema.json",
+    "../Thing.schema.json"
+  ],
+  "allOf": [
+    { "$ref": "../Thing.schema.json" },
+    { "$ref": "../Address.schema.json" }
+  ],
+  "type": "object",
+  "properties": {}
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "root_ref_not_reflected.schema.json",
+  "title": "RootRefNotReflected",
+  "@context": { "ex": "https://example.org/" },
+  "allOf": [{ "$ref": "../Thing.schema.json" }],
+  "type": "object",
+  "properties": {}
+}

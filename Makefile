@@ -14,11 +14,23 @@ check: ## Run code quality tools.
 	@uv run ty check
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
 	@uv run deptry src
+	@echo "🚀 Checking docs build config: Markdown extensions still match Zensical's defaults"
+	@uv run python scripts/check_markdown_extensions.py
 
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
 	@uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
+
+.PHONY: validate
+validate: ## Validate the committed OO-LD fixtures with the built-in validator
+	@echo "🚀 Validating OO-LD schemas: oold validate"
+	@uv run oold validate tests/data/oold --offline
+	@uv run oold compliance tests/data/oold/compliance --offline
+
+.PHONY: check-extensions
+check-extensions: ## Check zensical.toml still restates Zensical's default Markdown extensions
+	@uv run python scripts/check_markdown_extensions.py
 
 .PHONY: benchmark
 benchmark: ## Run performance benchmarks with pytest-benchmark

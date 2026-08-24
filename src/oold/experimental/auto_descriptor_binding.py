@@ -53,6 +53,7 @@ from oold.backend.interface import (
     apply_operator,
     get_resolver,
 )
+from oold.experimental.compat import LinkedApiMixin
 from oold.experimental.ref_binding import Ref, _construct
 
 T = TypeVar("T")
@@ -420,7 +421,7 @@ class LinkList(_AutoLink, Generic[T]):
         return _AutoLink.__get__(self, obj, objtype)
 
 
-class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
+class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedQueryMeta):
     """Base model supporting both implicit and explicit link declarations."""
 
     model_config = ConfigDict(ignored_types=(Link, LinkList, _AutoLink))
@@ -470,7 +471,16 @@ class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
                     if isinstance(d, str):
                         _TYPE_REGISTRY[d] = cls
 
-    def __init__(self, **data: Any) -> None:
+    def __init__(self, *args: Any, **data: Any) -> None:
+        # The shipped model accepts another model as the first positional
+        # argument as a cast shorthand: Target(source, extra="value").
+        if args and isinstance(args[0], BaseModel):
+            source = args[0]
+            base = source._raw_dict() if hasattr(source, "_raw_dict") else source.model_dump()
+            base.pop("type", None)
+            data = {**{k: v for k, v in base.items() if v is not None}, **data}
+        elif args:
+            raise TypeError(f"{type(self).__name__}() takes no positional arguments other than a source model")
         link_fields = type(self).__link_fields__
         link_data = {k: data.pop(k) for k in list(data) if k in link_fields}
         super().__init__(**data)
@@ -478,6 +488,11 @@ class AutoLinkedModel(BaseModel, metaclass=LinkedQueryMeta):
             link_fields[key].set_value(self, value)
 
     def __setattr__(self, name: str, value: Any) -> None:
+        if name == "__iris__":
+            # a property with a setter on the mixin - pydantic would otherwise
+            # reject it as "no field __iris__"
+            LinkedApiMixin.__iris__.fset(self, value)
+            return
         # Targeted: only link names are routed to the descriptor. Needed because
         # pydantic's own __setattr__ writes model fields straight into __dict__,
         # bypassing a data descriptor's __set__ (which would leave the link

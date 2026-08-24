@@ -1,0 +1,173 @@
+# Downstream API surface and which patterns become obsolete
+
+Companion to [graph-object-binding.md](graph-object-binding.md), tracked in
+[oold-python#107].
+
+Downstream inherits its API from `oold.model.LinkedBaseModel` through
+`opensemantic.OswBaseModel`:
+
+```
+opensemantic.OswBaseModel  ->  oold.model.LinkedBaseModel  ->  pydantic.BaseModel
+opensemantic.v1.OswBaseModel -> oold.model.v1.LinkedBaseModel -> pydantic.v1.BaseModel
+```
+
+`to_json`, `to_jsonld`, `from_json` and `from_jsonld` are **inherited from
+`LinkedBaseModel`**, not defined by `OswBaseModel`, so replacing the binding
+changes them for every consumer.
+
+## Measured usage
+
+Scanned: the generated `opensemantic.*-python` packages plus several
+applications built on them (vendored `.venv`, `.tox` and `site-packages` copies
+excluded). Application code is referred to generically below; the counts are
+what matters for the compatibility decision.
+
+| member | sites | verdict |
+|---|---:|---|
+| `json_schema_extra` | 2499 | v2 declaration, already supported unchanged |
+| `OswBaseModel` | 246 | subclass of `LinkedBaseModel` |
+| `range=` | 187 | **v1 declaration style** (extras land in `field_info.extra`) |
+| `get_cls_iri` | 42 | unchanged |
+| `get_iri_ref` | 24 | **keep** (see pattern E) |
+| `LinkedBaseModel` | 16 | direct base-class references |
+| `__iris__` | 15 | **keep, read and write** (pattern C) |
+| `from pydantic import` / `.v1 import` | 25 / 14 | **both versions in active use** |
+| `to_json` / `from_json` | 9 / 9 | portable |
+| `to_jsonld` / `from_jsonld` | 4 / 1 | portable |
+| `cast` / `cast_none_to_default` | 3 / 2 | portable |
+| `get_raw` | 2 | obsolete (pattern A) |
+| `LinkedBaseModelList` | 0 | no downstream use |
+| `store_jsonld` | 0 | no downstream use |
+
+## Why these patterns exist
+
+Most of them are **workarounds for the shipped binding's hidden I/O**: plain
+attribute access may perform a synchronous, un-batchable backend call inside
+`__getattribute__`. Callers who cannot afford that, or cannot tell whether a
+value is resolved, route around the getter. Under the descriptor binding -
+where reads are batched, cached and return real objects - the reason for most
+of these disappears.
+
+### A. The resolved-or-IRI dance - **obsolete**
+
+Application helpers repeat a shape equivalent to:
+
+```python
+def _load_first_relation(field_name):
+    raw_value = (entity.get_raw(field_name)
+                 if callable(getattr(entity, "get_raw", None))
+                 else getattr(entity, field_name, None))
+    if raw_value:
+        return raw_value[0] if isinstance(raw_value, list) else raw_value
+    relation_ids = (entity.get_iri_ref(field_name)
+                    if callable(getattr(entity, "get_iri_ref", None))
+                    else None)
+    ...
+```
+
+It exists because the caller cannot ask "is this resolved?" without risking
+resolution, and must therefore handle both representations. Under the new
+binding the whole helper collapses to:
+
+```python
+values = entity.field          # real objects, batched and cached
+return values[0] if values else None
+```
+
+Retires `get_raw` (2 sites) entirely.
+
+### B. `try`/`except` around an attribute read - **obsolete**
+
+Seen inside a published `opensemantic.*` package:
+
+```python
+try:
+    char_iri = getattr(channel, "characteristic", None)
+except (ValueError, ImportError):
+    return None
+```
+
+Catching **`ImportError` from an attribute read** is the clearest symptom of the
+problem: the getter resolves, which constructs a type, which may import. With
+resolution moved out of the read path this guard has no reason to exist.
+
+### C. Writing `__iris__` to fabricate a link - **obsolete, but must keep working**
+
+Also inside a published `opensemantic.*` package:
+
+```python
+self.__iris__ = {"characteristic": characteristic_class.get_cls_iri()}
+```
+
+A stub object is given a link by writing the internal side-dict, because there
+was no clean way to set a link to an IRI. Under the new binding that is simply:
+
+```python
+self.characteristic = characteristic_class.get_cls_iri()   # coerced to a link
+```
+
+Because this is **written**, not just read, a read-only `__iris__` shim would
+silently drop the assignment. The compatibility layer therefore implements
+`__iris__` as a read/write property.
+
+### D. Hedging both representations - **simplifies**
+
+```python
+target = self.load_typed(obj.get_iri_ref("some_type") or obj.some_type, SomeType)
+```
+
+`... or ...` hedges: use the IRI if present, else whatever the attribute holds.
+With one predictable representation this becomes a single expression.
+
+### E. Comparing identity without fetching - **legitimate, keep**
+
+```python
+if module_iri in (subprocess.get_iri_ref("tool") or []):
+    ...
+```
+
+Here the caller genuinely wants the IRI, not the object: resolving every related
+entity only to compare identity would be wasteful even when batched. This is a
+real primitive, not a workaround, so **`get_iri_ref` stays** with its current
+name and return shape (`str | list[str] | None`).
+
+### F. Capability probing - **obsolete**
+
+```python
+entity.get_raw(f) if callable(getattr(entity, "get_raw", None)) else ...
+```
+
+Defensive checks for whether the API exists at all. A stable base class removes
+the need.
+
+## Consequences for the replacement
+
+**Must be preserved** (compatibility layer, `oold/experimental/compat.py`):
+
+- `get_iri_ref(field)` -> `str | list[str] | None`, unchanged name and shape
+- `__iris__`, readable **and assignable**
+- `to_json`, `to_jsonld`, `from_json`, `from_jsonld`
+- `cast`, `cast_none_to_default`, `get_cls_iri`, `export_schema`, `full_dict`
+- both declaration styles: `json_schema_extra={"range": ...}` and bare `range=`
+- **pydantic v1 and v2**
+
+**May be deprecated once downstream is updated**: `get_raw`, and the defensive
+idioms in patterns A, B, C, F. They can be kept as thin shims and removed on a
+later major version - none of them needs to survive in the new design on its
+own merits.
+
+**Not needed**: `LinkedBaseModelList` and `store_jsonld` have no downstream
+callers, so the rich list operations and the store helper carry no
+compatibility obligation (they remain available, but need not constrain the
+design).
+
+## Verification plan
+
+Parity is asserted only when these pass unchanged against the new base:
+
+1. the `oold-python` suite,
+2. the test suites of the applications that call `get_iri_ref` directly and
+   assert on its return shape,
+3. a regenerated `opensemantic.core` diffed against the released package.
+
+[oold-python#107]: https://github.com/OO-LD/oold-python/issues/107

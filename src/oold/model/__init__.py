@@ -109,6 +109,48 @@ _controller_types: dict[str, list] = {}
 
 M = TypeVar("M", bound="LinkedBaseModel")
 
+
+def register_type(cls: type, iri: str | list[str] | None = None) -> None:
+    """Register a model class under the type IRI(s) it answers to.
+
+    The public entry point for the type registry that resolution consults when
+    mapping a document's ``type`` back to a class. Classes register themselves
+    on creation, so this is only needed for classes built dynamically, aliased
+    under an extra IRI, or defined before their IRI is known.
+
+    Without it callers reach for the private ``_types`` mapping and write into
+    it directly, which couples them to an internal and offers no validation.
+
+    Parameters
+    ----------
+    cls
+        The model class to register.
+    iri
+        The IRI(s) to register under. Defaults to ``cls.get_cls_iri()``.
+    """
+    if iri is None:
+        iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
+    if iri is None:
+        raise ValueError(f"{cls.__name__} has no type IRI: pass iri= or define get_cls_iri()")
+    for value in iri if isinstance(iri, list) else [iri]:
+        if isinstance(value, str):
+            _types[value] = cls
+
+
+def get_registered_type(iri: str) -> type | None:
+    """The model class registered for a type IRI, or ``None``."""
+    return _types.get(iri)
+
+
+def registered_types() -> dict:
+    """The live type registry.
+
+    The same mapping resolution uses; mutating it affects resolution. Prefer
+    :func:`register_type` over writing to it directly.
+    """
+    return _types
+
+
 _logger = logging.getLogger(__name__)
 
 

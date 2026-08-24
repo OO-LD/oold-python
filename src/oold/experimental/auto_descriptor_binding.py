@@ -214,7 +214,28 @@ def _extract_target(annotation: Any) -> tuple[Any, bool]:
 
 
 _TYPE_REGISTRY: dict[str, type] = {}
-"""Maps a ``type`` field default (the class IRI) to its model class."""
+"""Maps a ``type`` field default (the class IRI) to its model class.
+
+Identity matters, not just contents. Downstream imports the shipped registry
+directly and **writes into it**::
+
+    from oold.model import _types
+    _types[SomeClass.get_cls_iri()] = SomeClass
+
+so on integration this must *be* ``oold.model._types``, not a second dict -
+otherwise those registrations are invisible here and polymorphic resolution
+silently falls back to the declared target. Use :func:`use_type_registry`.
+"""
+
+
+def use_type_registry(registry: dict) -> None:
+    """Adopt an existing registry mapping, sharing its identity.
+
+    Call with ``oold.model._types`` when this binding replaces the shipped one,
+    so registrations made through either name are seen by both.
+    """
+    global _TYPE_REGISTRY
+    _TYPE_REGISTRY = registry
 
 
 def _resolve_cls(data: dict[str, Any], target: Any) -> Any:

@@ -169,6 +169,53 @@ new metaclass inherit from it.
 Verified: after also rebinding the metaclass, the same suite imports cleanly and
 passes.
 
+## The type registry must be the same object
+
+The same class of problem, found by enumerating every symbol downstream imports
+from `oold`:
+
+| imported from `oold.model` | sites |
+|---|---:|
+| `_types` | **7** |
+| `LinkedBaseModel` | 2 |
+| `LinkedBaseModelMetaClass` (aliased) | 1 |
+| `BaseController` | 1 |
+
+`_types` - the *private* registry - is imported more often than the base class
+itself, and it is **written to**::
+
+    from oold.model import _types
+    _types[SomeClass.get_cls_iri()] = SomeClass
+
+both in shipped package code and in examples. A replacement that keeps its own
+registry dict does not see those entries, so polymorphic resolution silently
+falls back to the declared target. Unlike the metaclass conflict this fails
+**quietly**, which makes it the more dangerous of the two.
+
+Fix: share the object, do not copy it - `use_type_registry(oold.model._types)`.
+
+## How to solve both blockers
+
+The rule the two findings share: **downstream imports `oold.model` internals by
+name and mutates them, so the replacement must preserve names and object
+identity, not merely behaviour.** Concretely:
+
+1. **Name the new metaclass `LinkedBaseModelMetaClass`.** Downstream subclasses
+   whatever that name resolves to, so pointing it at the new metaclass makes
+   `class Derived(Base, metaclass=CustomMeta)` consistent by construction.
+   Inheriting the *old* metaclass from the new one does not work - the derived
+   metaclass must be a subclass of the base's, not the other way round.
+2. **Bind the new registry to the existing `_types` dict** rather than creating
+   one, so entries written through either name are visible to both.
+3. **Keep `LinkedBaseModel` and `BaseController` as the exported names** for the
+   new implementations.
+4. Everything under `oold.backend.*` is untouched by the swap - the remaining
+   downstream imports (`interface`, `document_store`, `auth`) need no action.
+
+Both fixes are verified: with the metaclass rebound the previously failing suite
+imports and passes, and with the registry shared a downstream registration
+resolves through the new binding.
+
 ## Consequences for the replacement
 
 **Must be preserved** (compatibility layer, `oold/experimental/compat.py`):
@@ -179,6 +226,7 @@ passes.
 - `cast`, `cast_none_to_default`, `get_cls_iri`, `export_schema`, `full_dict`
 - both declaration styles: `json_schema_extra={"range": ...}` and bare `range=`
 - **`LinkedBaseModelMetaClass`** - downstream subclasses it (see above)
+- **`_types`** - the same dict object, downstream writes into it
 - **pydantic v1 and v2**
 
 **May be deprecated once downstream is updated**: `get_raw`, and the defensive

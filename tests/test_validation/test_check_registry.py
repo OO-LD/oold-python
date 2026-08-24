@@ -689,3 +689,32 @@ def test_the_severity_split_covers_the_whole_level_vocabulary():
             "on any rule stated with it."
         )
     assert checked_any, "no tracked version ships a rule schema, so this test proved nothing"
+
+
+def test_an_unclassified_level_raises_rather_than_defaulting():
+    """Neither fallback is safe, so `severity` refuses to pick one.
+
+    Treating it as advice demotes a requirement; treating it as a failure invents one. The error
+    names the rule and the level, because the fix is a one-line addition to one of the two sets.
+    """
+    import pytest as _pytest
+
+    from oold.validation.check_registry import severity
+    from oold.validation.meta_store import Rule
+
+    rule = Rule(
+        id="OOLD-XXX-0000",
+        area="XXX",
+        level="MUST PROBABLY",
+        applies_to="document",
+        section="whatever",
+        summary="s",
+        text="t",
+        text_sha256="0" * 64,
+        machine_checkable=True,
+        since="9.9.9",
+        deprecated=False,
+        source="x.md:1",
+    )
+    with _pytest.raises(ValueError, match="MUST PROBABLY"):
+        severity(rule)

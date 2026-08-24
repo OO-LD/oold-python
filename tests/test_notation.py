@@ -15,7 +15,7 @@ from pydantic import Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.experimental.notation import Link, OoldField, OoldModel
+from oold.model._notation import Link, OoldField, OoldModel
 
 
 class Org(OoldModel):

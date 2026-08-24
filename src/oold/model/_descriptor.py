@@ -53,8 +53,8 @@ from oold.backend.interface import (
     apply_operator,
     get_resolver,
 )
-from oold.experimental.compat import LinkedApiMixin
-from oold.experimental.ref_binding import Ref, _construct
+from oold.model._compat import LinkedApiMixin
+from oold.model._ref import Ref, _construct
 
 T = TypeVar("T")
 

@@ -9,7 +9,7 @@ so the v1 path is not optional. Detection is simpler here than in v2: pydantic v
 already resolves the target into ``field.type_`` and reports list-ness through
 ``field.shape``, and the extras land in ``field.field_info.extra``.
 
-The mechanics match the v2 module (:mod:`oold.experimental.auto_descriptor_binding`):
+The mechanics match the v2 module (:mod:`oold.model._descriptor`):
 a **non-data** descriptor per link field, resolved values cached in the instance
 ``__dict__`` so warm reads never re-enter Python, batched resolution, and the
 downstream API surface (``get_iri_ref``, ``__iris__``, ``to_json`` ...) preserved.
@@ -24,7 +24,7 @@ from pydantic.v1 import BaseModel, PrivateAttr
 from pydantic.v1.fields import SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE
 from pydantic.v1.main import ModelMetaclass
 
-from oold.experimental.auto_descriptor_binding import (
+from oold.model._descriptor import (
     _TYPE_REGISTRY,
     Condition,
     FieldProxy,
@@ -32,7 +32,7 @@ from oold.experimental.auto_descriptor_binding import (
     _batch_resolve,
     _resolve_cls,
 )
-from oold.experimental.ref_binding import Ref, _construct
+from oold.model._ref import Ref, _construct
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
 

@@ -158,7 +158,7 @@ class LinkedApiMixin(GenericLinkedBaseModel):
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Any:
-        from oold.experimental.auto_descriptor_binding import _TYPE_REGISTRY
+        from oold.model._descriptor import _TYPE_REGISTRY
 
         return import_json(BaseModel, cls, cls, data, _TYPE_REGISTRY)
 
@@ -167,7 +167,7 @@ class LinkedApiMixin(GenericLinkedBaseModel):
 
     @classmethod
     def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
-        from oold.experimental.auto_descriptor_binding import _TYPE_REGISTRY
+        from oold.model._descriptor import _TYPE_REGISTRY
 
         return import_jsonld(BaseModel, cls, cls, jsonld, _TYPE_REGISTRY)
 

@@ -15,7 +15,7 @@ Run it:
 
 import subprocess
 import sys
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 REQUIREMENTS = [
     ("syntax_unchanged", "standard annotations, no wrapper type in declaration"),
@@ -48,12 +48,12 @@ VARIANT_NAMES = {
 MODULE_OF = {
     "shipped_v1": "oold.model.v1",
     "shipped_v2": "oold.model",
-    "auto_implicit": "oold.experimental.auto_descriptor_binding",
-    "auto_explicit": "oold.experimental.auto_descriptor_binding",
-    "ref": "oold.experimental.ref_binding",
+    "auto_implicit": "oold.model._descriptor",
+    "auto_explicit": "oold.model._descriptor",
+    "ref": "oold.model._ref",
 }
 
-CALLS: List[list] = []
+CALLS: list[list] = []
 
 # Stored documents carry a type IRI so polymorphic dispatch can be exercised.
 DATA = {
@@ -82,7 +82,7 @@ class Probe:
     """Collects requirement results, isolating failures per check."""
 
     def __init__(self) -> None:
-        self.res: Dict[str, Optional[bool]] = {}
+        self.res: dict[str, bool | None] = {}
 
     def check(self, name: str, fn: Callable[[], bool]) -> None:
         try:
@@ -90,7 +90,7 @@ class Probe:
         except Exception:
             self.res[name] = False
 
-    def set(self, name: str, value: Optional[bool]) -> None:
+    def set(self, name: str, value: bool | None) -> None:
         self.res[name] = value
 
 
@@ -114,16 +114,16 @@ def check_shipped(version: int) -> dict:
 
     class T(Base):
         id: str
-        label: Optional[str] = None
-        type: Optional[str] = "ex:T"
+        label: str | None = None
+        type: str | None = "ex:T"
 
     class S(T):  # subclass for the polymorphism probe
-        type: Optional[str] = "ex:S"
+        type: str | None = "ex:S"
 
     class M(Base):
         id: str
-        name: Optional[str] = None
-        links: Optional[List[T]] = link_field()
+        name: str | None = None
+        links: list[T] | None = link_field()
 
     p.set("syntax_unchanged", True)  # standard annotations, List[T]
     counting_store()
@@ -142,9 +142,7 @@ def check_shipped(version: int) -> dict:
         "build_by_object",
         lambda: isinstance(M(id="ex:m2", links=[T(id="ex:t1")]).links[0], T),
     )
-    p.check(
-        "polymorphic", lambda: isinstance(M(id="ex:m3", links=["ex:s1"]).links[0], S)
-    )
+    p.check("polymorphic", lambda: isinstance(M(id="ex:m3", links=["ex:s1"]).links[0], S))
 
     def mutate():
         m.links = [T(id="ex:t2", label="two")]
@@ -164,9 +162,7 @@ def check_shipped(version: int) -> dict:
     p.check("link_validated", link_validated)
 
     p.check("list_lookup", lambda: m.links["ex:t2"].id == "ex:t2")
-    p.check(
-        "list_filter", lambda: [x.id for x in m.links[T.label == "two"]] == ["ex:t2"]
-    )
+    p.check("list_filter", lambda: [x.id for x in m.links[T.label == "two"]] == ["ex:t2"])
     p.check("list_projection", lambda: list(m.links.label) == ["two"])
     p.check("serialize_iri", lambda: m.to_json().get("links") == ["ex:t2"])
     p.check("query_dsl", lambda: getattr(M.name == "John", "field", None) == "name")
@@ -175,7 +171,7 @@ def check_shipped(version: int) -> dict:
 
 
 def check_auto(explicit: bool) -> dict:
-    from oold.experimental.auto_descriptor_binding import (
+    from oold.model._descriptor import (
         AutoLinkedModel,
         LinkList,
         OoldExtra,
@@ -186,17 +182,17 @@ def check_auto(explicit: bool) -> dict:
 
     class T(AutoLinkedModel):
         id: str
-        label: Optional[str] = None
-        type: Optional[str] = "ex:T"
+        label: str | None = None
+        type: str | None = "ex:T"
 
     class S(T):
-        type: Optional[str] = "ex:S"
+        type: str | None = "ex:S"
 
     if explicit:
 
         class M(AutoLinkedModel):
             id: str
-            name: Optional[str] = None
+            name: str | None = None
             links = LinkList(T)
 
         p.set("syntax_unchanged", False)  # unannotated descriptor assignment
@@ -204,8 +200,8 @@ def check_auto(explicit: bool) -> dict:
 
         class M(AutoLinkedModel):
             id: str
-            name: Optional[str] = None
-            links: Optional[List[T]] = OoldField(default=None, range="T")
+            name: str | None = None
+            links: list[T] | None = OoldField(default=None, range="T")
 
         p.set("syntax_unchanged", True)
 
@@ -225,9 +221,7 @@ def check_auto(explicit: bool) -> dict:
         lambda: isinstance(M(id="ex:m2", links=[T(id="ex:t1")]).links[0], T),
     )
     # prototype constructs the declared target, it does not dispatch on type IRI
-    p.check(
-        "polymorphic", lambda: isinstance(M(id="ex:m3", links=["ex:s1"]).links[0], S)
-    )
+    p.check("polymorphic", lambda: isinstance(M(id="ex:m3", links=["ex:s1"]).links[0], S))
 
     def mutate():
         m.links = [T(id="ex:t2", label="two")]
@@ -247,9 +241,7 @@ def check_auto(explicit: bool) -> dict:
     p.check("link_validated", link_validated)
 
     p.check("list_lookup", lambda: m.links["ex:t2"].id == "ex:t2")
-    p.check(
-        "list_filter", lambda: [x.id for x in m.links[T.label == "two"]] == ["ex:t2"]
-    )
+    p.check("list_filter", lambda: [x.id for x in m.links[T.label == "two"]] == ["ex:t2"])
     p.check("list_projection", lambda: list(m.links.label) == ["two"])
     p.check(
         "serialize_iri",
@@ -274,19 +266,19 @@ def check_auto(explicit: bool) -> dict:
 
 
 def check_ref() -> dict:
-    from oold.experimental.ref_binding import OoldModel, Ref
+    from oold.model._ref import OoldModel, Ref
 
     p = Probe()
 
     class T(OoldModel):
         id: str
-        label: Optional[str] = None
-        type: Optional[str] = "ex:T"
+        label: str | None = None
+        type: str | None = "ex:T"
 
     class M(OoldModel):
         id: str
-        name: Optional[str] = None
-        links: Optional[List[Ref[T]]] = None
+        name: str | None = None
+        links: list[Ref[T]] | None = None
 
     p.set("syntax_unchanged", False)  # Ref[T] wrapper appears in the annotation
     counting_store()
@@ -322,16 +314,11 @@ def check_ref() -> dict:
     p.check("link_validated", link_validated)
 
     p.check("list_lookup", lambda: m.links["ex:t2"].id == "ex:t2")
-    p.check(
-        "list_filter", lambda: [x.id for x in m.links[T.label == "two"]] == ["ex:t2"]
-    )
+    p.check("list_filter", lambda: [x.id for x in m.links[T.label == "two"]] == ["ex:t2"])
     p.check("list_projection", lambda: list(m.links.label) == ["two"])
     p.check(
         "serialize_iri",
-        lambda: M(id="ex:m4", links=["ex:t2"])
-        .model_dump(exclude_none=True)
-        .get("links")
-        == ["ex:t2"],
+        lambda: M(id="ex:m4", links=["ex:t2"]).model_dump(exclude_none=True).get("links") == ["ex:t2"],
     )
     p.check("query_dsl", lambda: False)
     p.set("typed_extras", False)
@@ -339,9 +326,7 @@ def check_ref() -> dict:
 
 
 def monkeypatch_check(module: str) -> bool:
-    code = (
-        f"import pydantic.fields as pf; import {module}; print(pf.FieldInfo.__name__)"
-    )
+    code = f"import pydantic.fields as pf; import {module}; print(pf.FieldInfo.__name__)"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     return out.returncode == 0 and out.stdout.strip() == "FieldInfo"
 
@@ -366,18 +351,14 @@ def run(key: str) -> dict:
 def main() -> None:
     results = {}
     for key in VARIANT_NAMES:
-        proc = subprocess.run(
-            [sys.executable, __file__, key], capture_output=True, text=True
-        )
+        proc = subprocess.run([sys.executable, __file__, key], capture_output=True, text=True)
         if proc.returncode != 0:
             print(f"{key}: ERROR\n{proc.stderr[-700:]}\n")
             continue
         results[key] = eval(proc.stdout.strip())  # noqa: S307
 
     width = max(len(r) for r, _ in REQUIREMENTS) + 2
-    header = f"{'requirement':{width}}" + "".join(
-        f"{VARIANT_NAMES[k]:>17}" for k in results
-    )
+    header = f"{'requirement':{width}}" + "".join(f"{VARIANT_NAMES[k]:>17}" for k in results)
     print(header)
     print("-" * len(header))
     for req, _desc in REQUIREMENTS:

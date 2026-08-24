@@ -16,7 +16,7 @@ Three proposals are implemented and exercised here:
    ``location: Union[str, Location, Link[Location]]``.
 
 Everything reuses the descriptor machinery from
-:mod:`oold.experimental.auto_descriptor_binding`.
+:mod:`oold.model._descriptor`.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from typing import (
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
 
-from oold.experimental.auto_descriptor_binding import (
+from oold.model._descriptor import (
     _TYPE_REGISTRY,
     LinkedQueryMeta,
     OoldExtra,

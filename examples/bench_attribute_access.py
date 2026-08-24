@@ -26,7 +26,6 @@ protocol during normal attribute lookup.
 import subprocess
 import sys
 import timeit
-from typing import Optional
 
 N = 300_000
 REP = 7
@@ -37,7 +36,7 @@ def build_plain_v2():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     return M(id="x", literal="v")
 
@@ -47,7 +46,7 @@ def build_plain_v1():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     return M(id="x", literal="v")
 
@@ -60,7 +59,7 @@ def build_gated_best():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
         def __getattribute__(self, name):
             if name in links:
@@ -76,7 +75,7 @@ def build_gated_real():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
         __link_names__ = frozenset({"link_a", "link_b"})
 
         def __getattribute__(self, name):
@@ -92,7 +91,7 @@ def build_shipped_v2():
 
     class M(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     return M(id="x", literal="v")
 
@@ -102,7 +101,7 @@ def build_shipped_v1():
 
     class M(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     return M(id="x", literal="v")
 
@@ -112,7 +111,7 @@ def build_descriptor():
 
     class M(LinkedModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
         links = LinkList["M"]("M")
 
     return M(id="x", literal="v")
@@ -120,18 +119,15 @@ def build_descriptor():
 
 def build_auto_descriptor():
     """Auto-installed descriptors: unchanged declaration syntax."""
-    from typing import List
 
     from pydantic import Field
 
-    from oold.experimental.auto_descriptor_binding import AutoLinkedModel
+    from oold.model._descriptor import AutoLinkedModel
 
     class M(AutoLinkedModel):
         id: str
-        literal: Optional[str] = None
-        links: Optional[List["M"]] = Field(
-            None, json_schema_extra={"x-oold-range": "M"}
-        )
+        literal: str | None = None
+        links: list["M"] | None = Field(None, json_schema_extra={"x-oold-range": "M"})
 
     M.model_rebuild()
     return M(id="x", literal="v")
@@ -157,9 +153,7 @@ def measure(key: str) -> float:
 def main() -> None:
     results = {}
     for key in VARIANTS:
-        out = subprocess.run(
-            [sys.executable, __file__, key], capture_output=True, text=True
-        )
+        out = subprocess.run([sys.executable, __file__, key], capture_output=True, text=True)
         if out.returncode != 0:
             print(f"{key}: FAILED\n{out.stderr[-600:]}")
             continue

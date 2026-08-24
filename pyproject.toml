@@ -261,7 +261,10 @@ ignore = [
 # Tests and examples use literal credentials/tokens and broad exception asserts
 # on purpose; the bandit/bugbear security rules are noise there.
 "tests/*" = ["S101", "S105", "S106", "B017"]
-"examples/*" = ["S105", "S106"]
+# Examples and spikes are runnable demos: they self-check with `assert` and
+# re-invoke themselves via subprocess to isolate measurements.
+"examples/*" = ["S101", "S105", "S106", "S603", "TRY300"]
+"src/oold/experimental/*" = ["S101"]
 
 [tool.ruff.format]
 preview = true

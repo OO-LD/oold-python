@@ -16,7 +16,6 @@ Run it:
 import subprocess
 import sys
 import timeit
-from typing import Optional
 
 N = 100_000
 REP = 5
@@ -27,7 +26,7 @@ def build_plain_v1():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     return M(id="x", literal="v"), M, None, None
 
@@ -37,7 +36,7 @@ def build_plain_v2():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
     return M(id="x", literal="v"), M, None, None
 
@@ -50,7 +49,7 @@ def build_gated():
 
     class M(BaseModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
 
         def __getattribute__(self, name):
             if name in links:
@@ -70,8 +69,8 @@ def build_shipped_v1():
 
     class M(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
-        link: Optional[T] = F1(None, range="T")
+        literal: str | None = None
+        link: T | None = F1(None, range="T")
 
     obj = M(id="x", literal="v", link=T(id="ex:t"))
     _ = obj.link
@@ -88,8 +87,8 @@ def build_shipped_v2():
 
     class M(LinkedBaseModel):
         id: str
-        literal: Optional[str] = None
-        link: Optional[T] = Field(None, json_schema_extra={"range": "T"})
+        literal: str | None = None
+        link: T | None = Field(None, json_schema_extra={"range": "T"})
 
     obj = M(id="x", literal="v", link=T(id="ex:t"))
     _ = obj.link
@@ -98,15 +97,15 @@ def build_shipped_v2():
 
 def build_auto_implicit():
     """Auto-descriptor, implicit form: annotated field + range keyword."""
-    from oold.experimental.auto_descriptor_binding import AutoLinkedModel, OoldField
+    from oold.model._descriptor import AutoLinkedModel, OoldField
 
     class T(AutoLinkedModel):
         id: str
 
     class M(AutoLinkedModel):
         id: str
-        literal: Optional[str] = None
-        link: Optional[T] = OoldField(default=None, range="T")
+        literal: str | None = None
+        link: T | None = OoldField(default=None, range="T")
 
     M.model_rebuild()
     obj = M(id="x", literal="v", link=T(id="ex:t"))
@@ -116,14 +115,14 @@ def build_auto_implicit():
 
 def build_auto_explicit():
     """Auto-descriptor, explicit form: descriptor declared in the class body."""
-    from oold.experimental.auto_descriptor_binding import AutoLinkedModel, Link
+    from oold.model._descriptor import AutoLinkedModel, Link
 
     class T(AutoLinkedModel):
         id: str
 
     class M(AutoLinkedModel):
         id: str
-        literal: Optional[str] = None
+        literal: str | None = None
         link = Link(T)
 
     obj = M(id="x", literal="v", link=T(id="ex:t"))
@@ -133,15 +132,15 @@ def build_auto_explicit():
 
 def build_ref():
     """Explicit Ref[T] wrapper."""
-    from oold.experimental.ref_binding import OoldModel, Ref
+    from oold.model._ref import OoldModel, Ref
 
     class T(OoldModel):
         id: str
 
     class M(OoldModel):
         id: str
-        literal: Optional[str] = None
-        link: Optional[Ref[T]] = None
+        literal: str | None = None
+        link: Ref[T] | None = None
 
     obj = M(id="x", literal="v", link=T(id="ex:t"))
     _ = obj.link
@@ -173,9 +172,7 @@ def measure(key: str) -> dict:
     out["plain_write"] = min(timeit.repeat(setp, number=N, repeat=REP))
 
     if linkname:
-        out["link_read"] = min(
-            timeit.repeat(lambda: getattr(obj, linkname), number=N, repeat=REP)
-        )
+        out["link_read"] = min(timeit.repeat(lambda: getattr(obj, linkname), number=N, repeat=REP))
 
         def setl():
             setattr(obj, linkname, linkval)
@@ -185,9 +182,7 @@ def measure(key: str) -> dict:
         except Exception:
             out["link_write"] = None
     try:
-        out["query"] = min(
-            timeit.repeat(lambda: cls.literal == "John", number=N, repeat=REP)
-        )
+        out["query"] = min(timeit.repeat(lambda: cls.literal == "John", number=N, repeat=REP))
     except Exception:
         out["query"] = None
     return out
@@ -196,9 +191,7 @@ def measure(key: str) -> dict:
 def main() -> None:
     results = {}
     for key in VARIANTS:
-        proc = subprocess.run(
-            [sys.executable, __file__, key], capture_output=True, text=True
-        )
+        proc = subprocess.run([sys.executable, __file__, key], capture_output=True, text=True)
         if proc.returncode != 0:
             print(f"{key}: FAILED\n{proc.stderr[-500:]}\n")
             continue

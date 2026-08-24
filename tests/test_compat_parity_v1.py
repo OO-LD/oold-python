@@ -11,8 +11,8 @@ from pydantic.v1 import Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.experimental.auto_descriptor_binding_v1 import AutoLinkedModelV1
 from oold.model.v1 import LinkedBaseModel
+from oold.model.v1._descriptor import AutoLinkedModelV1
 
 
 def build(base, tag):

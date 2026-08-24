@@ -13,17 +13,15 @@ Run it:
     python examples/notation_example.py
 
 The recommended variant for generated code is
-``oold.experimental.auto_descriptor_binding`` (unchanged declaration syntax);
-``oold.experimental.notation`` adds the notations above on top of it.
+``oold.model._descriptor`` (unchanged declaration syntax);
+``oold.model._notation`` adds the notations above on top of it.
 """
-
-# ruff: noqa: S101  - assertions are this script's purpose
 
 from pydantic import Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.experimental.notation import Link, OoldField, OoldModel
+from oold.model._notation import Link, OoldField, OoldModel
 
 
 class Organization(OoldModel):

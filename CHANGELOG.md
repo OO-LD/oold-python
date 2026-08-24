@@ -7,6 +7,24 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.17.1 (2026-08-24)
+
+### Bug Fixes
+
+- **validation**: Classify every level, and cite the coverage rule
+  ([`be47619`](https://github.com/OO-LD/oold-python/commit/be47619ebbd3840882045965aaa1da684394fd35))
+
+### Chores
+
+- **meta**: Vendor oold-schema v1.0.0-rc.3
+  ([`2485f98`](https://github.com/OO-LD/oold-python/commit/2485f98c6b5edb4a0af580f4c5be54f98e3a794a))
+
+### Testing
+
+- **validation**: Cover the unclassified-level raise
+  ([`f509f3c`](https://github.com/OO-LD/oold-python/commit/f509f3c4f5a0cd1067a51e5849151916a7a05e18))
+
+
 ## v0.17.0 (2026-08-23)
 
 ### Bug Fixes

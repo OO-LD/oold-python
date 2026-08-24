@@ -446,3 +446,40 @@ def test_cached_remote_is_usable_offline(isolated_cache, monkeypatch):
         lambda *a, **k: pytest.fail("offline mode fetched over the network"),
     )
     assert meta_store.load_remote(offline=True).version == "remote"
+
+
+def test_a_directory_selector_loads_the_meta_schemas_in_it(tmp_path):
+    """`--meta <path>` reads a checkout, which is the only way to see an unreleased rule.
+
+    A tracked version is a tag and `remote` is `refs/heads/main`, so a rule added on a branch is
+    invisible to both: the checks bound to it skip, saying the version never stated it, and the
+    pull request introducing a rule becomes the one run that cannot enforce it.
+    """
+    latest = meta_store.meta_dir() / meta_store.latest_version()
+    checkout = tmp_path / "oold-schema" / "meta"
+    checkout.mkdir(parents=True)
+    for src in latest.glob("*.json"):
+        (checkout / src.name).write_bytes(src.read_bytes())
+
+    # A rule that exists only here, the way a branch would carry one.
+    catalog = json.loads((checkout / meta_store.RULES_FILE).read_text(encoding="utf-8"))
+    invented = dict(catalog["rules"][0], id="OOLD-XXX-beef", summary="only in the checkout")
+    catalog["rules"].append(invented)
+    (checkout / meta_store.RULES_FILE).write_text(json.dumps(catalog), encoding="utf-8")
+
+    tracked = meta_store.load_tracked(meta_store.latest_version())
+    # Both the repository root and its meta/ directory resolve to the same thing.
+    for selector in (tmp_path / "oold-schema", checkout):
+        bundle = meta_store.resolve_selection([str(selector)])[0]
+        assert bundle.version == meta_store.LOCAL
+        ids = {r.id for r in bundle.rules}
+        assert "OOLD-XXX-beef" in ids, "a local checkout must surface a rule no release carries"
+        assert ids - {"OOLD-XXX-beef"} == {r.id for r in tracked.rules}
+
+    assert "OOLD-XXX-beef" not in {r.id for r in tracked.rules}, "the tracked copy must be untouched"
+
+
+def test_a_directory_without_meta_schemas_is_rejected_by_name(tmp_path):
+    """The likely mistake is pointing at the wrong directory, so say what was expected."""
+    with pytest.raises(MetaSchemaError, match=meta_store.META_SCHEMA_FILE):
+        meta_store.load_local(tmp_path)

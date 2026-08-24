@@ -91,9 +91,10 @@ _meta_option = click.option(
     "--meta",
     "meta",
     multiple=True,
-    metavar="VERSION",
+    metavar="VERSION|PATH",
     help="Meta-schema version: latest (default), a version such as 0.7.0, remote, or all. "
-    "Repeat to validate against several at once.",
+    "A path to an oold-schema checkout validates against its working tree, including rules it "
+    "has not released yet. Repeat to validate against several at once.",
 )
 _offline_option = click.option(
     "--offline", is_flag=True, help="Never fetch over the network; use local files and the cache."

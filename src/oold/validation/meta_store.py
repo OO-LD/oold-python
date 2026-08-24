@@ -37,6 +37,9 @@ from .formats import OOLD_FORMAT_CHECKER
 from .resolve import SchemaResolutionError, default_cache_dir, http_get_json
 
 META_SCHEMA_FILE = "oold-meta-schema.json"
+#: The dialect body the wrapper `$ref`s, present from 1.0.0-rc.2 onward. Named here because a
+#: local checkout has no index entry to declare its file set.
+META_SCHEMA_BASE_FILE = "oold-meta-schema-base.json"
 UI_META_SCHEMA_FILE = "oold-ui-meta-schema.json"
 PATTERN_LINT_FILE = "oold-pattern-lint.schema.json"
 
@@ -428,6 +431,47 @@ def load_tracked(version: str) -> MetaBundle:
     )
 
 
+LOCAL = "local"
+
+
+def load_local(directory: Path | str) -> MetaBundle:
+    """Load a meta-schema set from a checkout rather than from a tracked release.
+
+    Exists for the one case the tracked versions cannot serve: validating a change to the
+    specification *before* it is released. A tracked version is a tag and `--meta remote` is
+    `refs/heads/main`, so a rule added on a branch is invisible to both - the checks bound to it
+    skip, reporting that the version never stated it, and the pull request that introduces a rule
+    is the one run that cannot enforce it.
+
+    `directory` is a checkout of oold-schema, or its `meta/` directly. Unlike a tracked version
+    nothing here is checksummed: the files are working state and expected to change, which is the
+    point. So this must not be the default, and a released version must never be read this way -
+    `load_tracked` stays the only path to those, and its checksums stay meaningful.
+    """
+    root = Path(directory)
+    candidate = root / "meta" if (root / "meta" / META_SCHEMA_FILE).is_file() else root
+    if not (candidate / META_SCHEMA_FILE).is_file():
+        raise MetaSchemaError(
+            f"{root} holds no meta-schemas: expected {META_SCHEMA_FILE} in it or in its meta/ subdirectory"
+        )
+    present = [name for name in [*meta_files(), META_SCHEMA_BASE_FILE] if (candidate / name).is_file()]
+    documents = _read_documents(candidate, f"meta-schemas in {candidate}", present)
+    catalog, catalog_error = _read_rules(candidate)
+    rules, rules_error = _parse_rules(catalog, catalog_error)
+    rules_schema, rules_schema_error = _read_rules_schema(candidate)
+    return MetaBundle(
+        version=LOCAL,
+        origin=str(candidate),
+        documents=documents,
+        registry=_build_registry(documents),
+        rules=rules,
+        rules_document=catalog,
+        rules_schema=rules_schema,
+        rules_schema_error=rules_schema_error,
+        rules_error=rules_error,
+    )
+
+
 # ---------------------------------------------------------------------------- remote
 
 
@@ -518,9 +562,17 @@ def resolve_selection(
     requested = list(selectors) or [LATEST]
 
     wanted: list[str] = []
+    local_paths: dict[str, str] = {}
     for selector in requested:
         name = selector.strip()
-        if name == ALL:
+        # A selector naming a directory is a checkout, not a version. Recognised by being one,
+        # rather than by a prefix, so `--meta ../oold-schema` reads the way a path should; a
+        # tracked version name can never collide, since none of them is a directory here.
+        if name not in (ALL, LATEST, REMOTE) and Path(name).is_dir():
+            key = f"{LOCAL}:{Path(name).resolve()}"
+            local_paths[key] = name
+            resolved = [key]
+        elif name == ALL:
             resolved = tracked_versions()
             if not resolved:
                 raise MetaSchemaError(f"no meta-schema versions are tracked in {meta_dir()}")
@@ -534,7 +586,9 @@ def resolve_selection(
 
     bundles: list[MetaBundle] = []
     for version in wanted:
-        if version == REMOTE:
+        if version in local_paths:
+            bundles.append(load_local(local_paths[version]))
+        elif version == REMOTE:
             bundles.append(load_remote(offline=offline, timeout=timeout))
         else:
             bundles.append(load_tracked(version))

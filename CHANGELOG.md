@@ -7,6 +7,14 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.18.0 (2026-08-24)
+
+### Features
+
+- **validation**: Accept a checkout as a meta-schema source
+  ([`7a1030e`](https://github.com/OO-LD/oold-python/commit/7a1030e399fc0a5a72f9035d8c7a456974151fff))
+
+
 ## v0.17.1 (2026-08-24)
 
 ### Bug Fixes

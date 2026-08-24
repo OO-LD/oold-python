@@ -140,6 +140,35 @@ entity.get_raw(f) if callable(getattr(entity, "get_raw", None)) else ...
 Defensive checks for whether the API exists at all. A stable base class removes
 the need.
 
+## The metaclass identity must move with the base class
+
+Found by running a downstream test suite against a swapped binding rather than
+by reading code. `opensemantic.characteristics.quantitative._static` does:
+
+```python
+from oold.model import LinkedBaseModelMetaClass as ModelMetaclass   # aliased!
+
+class QuantityValueMetaclass(ModelMetaclass): ...
+class QuantityValue(OswBaseModel, metaclass=QuantityValueMetaclass): ...
+```
+
+Downstream **imports and subclasses oold's metaclass**, aliased to a name that
+makes it look like pydantic's. Replacing only `LinkedBaseModel` leaves
+`LinkedBaseModelMetaClass` pointing at the old class, so `QuantityValue`'s
+metaclass is no longer a subclass of its base's and the import dies with::
+
+    TypeError: metaclass conflict: the metaclass of a derived class must be a
+    (non-strict) subclass of the metaclasses of all its bases
+
+The whole package tree fails to import - not a subtle behavioural drift but a
+hard failure at collection time. So `LinkedBaseModelMetaClass` is **part of the
+public API** and its identity has to be carried over together with the base
+class, either by keeping the name bound to the new metaclass or by having the
+new metaclass inherit from it.
+
+Verified: after also rebinding the metaclass, the same suite imports cleanly and
+passes.
+
 ## Consequences for the replacement
 
 **Must be preserved** (compatibility layer, `oold/experimental/compat.py`):
@@ -149,6 +178,7 @@ the need.
 - `to_json`, `to_jsonld`, `from_json`, `from_jsonld`
 - `cast`, `cast_none_to_default`, `get_cls_iri`, `export_schema`, `full_dict`
 - both declaration styles: `json_schema_extra={"range": ...}` and bare `range=`
+- **`LinkedBaseModelMetaClass`** - downstream subclasses it (see above)
 - **pydantic v1 and v2**
 
 **May be deprecated once downstream is updated**: `get_raw`, and the defensive
@@ -169,5 +199,11 @@ Parity is asserted only when these pass unchanged against the new base:
 2. the test suites of the applications that call `get_iri_ref` directly and
    assert on its return shape,
 3. a regenerated `opensemantic.core` diffed against the released package.
+
+Status: step 2 has been run once for a suite that calls `get_iri_ref` and
+asserts on its return shapes. Baseline **2 passed**; with the binding swapped
+(base class *and* metaclass) **2 passed**, same result. The suite exercises a
+live backend, so it covers construction, resolution and serialisation against
+real data rather than fixtures.
 
 [oold-python#107]: https://github.com/OO-LD/oold-python/issues/107

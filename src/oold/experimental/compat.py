@@ -74,6 +74,32 @@ class LinkedApiMixin(GenericLinkedBaseModel):
                 continue
             descr.set_value(self, iris)
 
+    @classmethod
+    def get_cls_iri(cls) -> Any:
+        """The class IRI(s), from the schema annotation and the type default.
+
+        ``GenericLinkedBaseModel`` only declares this abstract, so without an
+        implementation it silently returns ``None`` - which would break the
+        downstream callers and the type registry alike.
+        """
+        schema = getattr(cls, "model_config", {}).get("json_schema_extra") or {}
+        if callable(schema):
+            schema = {}
+        out: list[str] = []
+        for key in ("$id", "x-oold-iri", "iri"):
+            if key in schema:
+                out.append(schema[key])
+                break
+        type_field = cls.model_fields.get(cls.get_type_field())
+        if type_field is not None:
+            default = type_field.default
+            for value in default if isinstance(default, list) else [default]:
+                if isinstance(value, str) and value not in out:
+                    out.append(value)
+        if not out:
+            return None
+        return out[0] if len(out) == 1 else out
+
     def get_iri_ref(self, field_name: str) -> Any:
         """IRI reference(s) for a field, or ``None``, without resolving."""
         iris = self.__iris__.get(field_name)

@@ -76,11 +76,17 @@ def embedded_properties(schema: dict[str, Any]) -> list[str]:
 
     Shape is the primary signal; a scoped context is a strong hint but not mandatory, since an
     embed can also be mapped by the ambient top-level context.
+
+    A scoped term only counts where the schema declares a property of that name. A schema must
+    reflect every ``$ref`` in its ``@context`` (``OOLD-CMP-b926``), including the ones reached
+    from ``$defs``, so the context carries terms for properties this schema's instances never
+    hold; treating those as embeds puts a property into the derived frame that no instance can
+    match, and framing then returns nothing.
     """
     properties = collect_composed_properties(schema)
     structural = [name for name, prop in properties.items() if is_embed(prop)]
     terms = context_terms(schema.get("@context"))
-    scoped = [term for term, definition in terms.items() if "@context" in definition]
+    scoped = [term for term, definition in terms.items() if "@context" in definition and term in properties]
     # dict.fromkeys dedupes while preserving order, matching the JS Set spread.
     return list(dict.fromkeys([*structural, *scoped]))
 

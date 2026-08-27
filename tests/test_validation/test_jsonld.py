@@ -122,6 +122,28 @@ def test_embedded_properties_follows_allof_composition():
     assert embedded_properties(schema) == ["inherited"]
 
 
+def test_embedded_properties_ignores_a_scoped_term_that_is_not_a_property_here():
+    """A $defs subschema's $ref is reflected in the root @context (OOLD-CMP-b926).
+
+    Its term carries a scoped @context, but the root object has no such property, so an instance
+    can never hold one. Counting it would put an unmatchable property into the derived frame.
+    """
+    schema = {
+        "properties": {"type": {"type": "array", "items": {"type": "string"}}},
+        "$defs": {"Component": {"properties": {"amount": {"$ref": "https://oo-ld.test/x/MassFraction.schema.json"}}}},
+        "@context": {
+            "type": {"@id": "@type", "@container": "@set"},
+            "amount": {
+                "@id": "https://example.org/amount",
+                "@type": "@id",
+                "@context": "https://oo-ld.test/x/MassFraction.schema.json",
+            },
+        },
+    }
+    assert embedded_properties(schema) == []
+    assert "amount" not in schema_to_frame(schema, "https://oo-ld.test/x/C.schema.json")
+
+
 # ------------------------------------------------------------------ loader
 
 

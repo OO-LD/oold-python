@@ -382,9 +382,9 @@ def _read_rules_schema(directory: Path) -> tuple[dict[str, Any] | None, str | No
     is simply left unchecked rather than reported: the missing file is the older layout, not a
     defect in this one.
 
-    Present but unreadable is the opposite, and is reported. Returning None for both would send
-    `_catalog_problems` down its "nothing to validate against" path, so a corrupt schema would
-    silently disable catalog validation entirely - the one outcome this file exists to prevent.
+    Present but unreadable is the opposite, and is reported. The two must stay distinguishable:
+    `_catalog_problems` validates nothing when there is no schema, so collapsing them would let a
+    corrupt schema disable catalog validation in silence.
     """
     path = directory / RULES_SCHEMA_FILE
     if not path.is_file():

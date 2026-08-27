@@ -103,11 +103,10 @@ Predicate = Callable[[dict[str, Any], ContextView], list[str]]
 #: RFC 2119 levels that make a violation a failure. Everything else is advice, so it warns.
 _MUST_LEVELS = frozenset({"MUST", "MUST NOT", "SHALL", "SHALL NOT", "REQUIRED"})
 
-#: Levels that are advice. Listed rather than inferred from "not in _MUST_LEVELS", so that a level
-#: the specification adds later is neither silently treated as advice nor silently treated as a
-#: failure: `severity` raises on one it does not recognise. The two sets together must cover the
-#: `level` enum in `oold-rules.schema.json`, which is asserted by
-#: `test_the_severity_split_covers_the_whole_level_vocabulary`.
+#: Levels that are advice. Enumerated, not "everything that is not a MUST", so an unrecognised
+#: level is a distinct case that `severity` raises on rather than one this set absorbs. The two
+#: sets together must cover the `level` enum in `oold-rules.schema.json`, which
+#: `test_the_severity_split_covers_the_whole_level_vocabulary` asserts.
 _ADVICE_LEVELS = frozenset({"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED"})
 
 #: Used only when the meta version in use ships no catalogue to read the level from.
@@ -123,8 +122,7 @@ def severity(rule: Rule | None, fallback: Status = DEFAULT_LEVEL) -> Status:
 
     An unrecognised level raises rather than defaulting. Defaulting either way is silent and wrong
     in one direction: as advice it demotes a requirement, as a failure it invents one. The
-    specification added `NOT RECOMMENDED` to its vocabulary in v1.0.0-rc.3, which the old
-    "anything not a MUST is advice" reading would have absorbed without a word.
+    specification's vocabulary grows, so this is reachable whenever a version is vendored.
     """
     if not rule:
         return fallback
@@ -1212,11 +1210,10 @@ def rule_map() -> dict[str, str]:
 def select_rules(bundle, area: str | None = None, unenforced_only: bool = False) -> list[Rule]:
     """The catalogue entries a caller asked for, filtered once for every front end.
 
-    Lives here rather than in the CLI and the MCP server because it was written twice and the
-    copies disagreed: the CLI rebuilt its list from the machine-checkable rules inside the
-    unenforced branch, which discarded any area filter applied before it, so `--area RT
-    --unchecked` silently returned every area. Restricting the population and then narrowing it
-    is the order both need.
+    Shared by the CLI and the MCP server so both answer a given query identically.
+
+    Order matters: `unenforced_only` selects the population, `area` narrows it. Applying them the
+    other way round drops the area restriction, because the population is rebuilt after it.
     """
     rules = bundle.machine_checkable_rules() if unenforced_only else bundle.rules
     if area:

@@ -130,11 +130,7 @@ def test_embedded_properties_ignores_a_scoped_term_that_is_not_a_property_here()
     """
     schema = {
         "properties": {"type": {"type": "array", "items": {"type": "string"}}},
-        "$defs": {
-            "Component": {
-                "properties": {"amount": {"$ref": "https://oo-ld.test/x/MassFraction.schema.json"}}
-            }
-        },
+        "$defs": {"Component": {"properties": {"amount": {"$ref": "https://oo-ld.test/x/MassFraction.schema.json"}}}},
         "@context": {
             "type": {"@id": "@type", "@container": "@set"},
             "amount": {

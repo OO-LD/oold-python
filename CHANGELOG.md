@@ -7,6 +7,30 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.18.1 (2026-08-27)
+
+### Bug Fixes
+
+- **validation**: Count a scoped @context term only where it is a property
+  ([#135](https://github.com/OO-LD/oold-python/pull/135),
+  [`0b49605`](https://github.com/OO-LD/oold-python/commit/0b49605e71d9bad5c25cf62ded4475512d9a4e2c))
+
+### Code Style
+
+- Apply ruff format to the new test ([#135](https://github.com/OO-LD/oold-python/pull/135),
+  [`0b49605`](https://github.com/OO-LD/oold-python/commit/0b49605e71d9bad5c25cf62ded4475512d9a4e2c))
+
+### Continuous Integration
+
+- Gate the parity check against the reference
+  ([`fdb9007`](https://github.com/OO-LD/oold-python/commit/fdb9007377aab115da3b2661e59834090af79314))
+
+### Documentation
+
+- **validation**: State invariants in comments, not prior behaviour
+  ([`4baf212`](https://github.com/OO-LD/oold-python/commit/4baf212f85a6f97fc9f6f16eee07ab2a0bcd42d5))
+
+
 ## v0.18.0 (2026-08-24)
 
 ### Features

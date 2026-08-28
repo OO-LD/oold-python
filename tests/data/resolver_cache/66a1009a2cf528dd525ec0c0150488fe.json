@@ -1,0 +1,5 @@
+{
+  "$id": "https://example.org/oold-warm-cache-fixture.schema.json",
+  "title": "Warm",
+  "type": "object"
+}

@@ -241,6 +241,22 @@ def test_properties_nesting_is_depth_neutral():
     assert bound_schema(nested, max_depth=2) == nested
 
 
+def test_a_warm_cache_entry_resolves_offline_and_a_missing_one_is_refused(resolver_cache_dir):
+    """`tests/data/resolver_cache/` commits one entry ahead of time, named by the sha256 digest
+    `Resolver._cache_file` itself derives from the URL. That is what lets this prove the offline
+    guarantee the vendored meta-schemas depend on - a previously warmed cache satisfies a fetch -
+    without a network mock standing in for the retrieval layer #119 is about to move onto
+    `referencing`.
+    """
+    resolver = Resolver(cache_dir=resolver_cache_dir, offline=True)
+
+    document = resolver.fetch("https://example.org/oold-warm-cache-fixture.schema.json")
+    assert document["title"] == "Warm"
+
+    with pytest.raises(SchemaResolutionError, match="offline"):
+        resolver.fetch("https://example.org/oold-warm-cache-fixture-missing.schema.json")
+
+
 def test_disk_cache_is_reused(tmp_path, monkeypatch):
     cache = tmp_path / "cache"
     calls = []

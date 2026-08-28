@@ -13,6 +13,7 @@ BROKEN = DATA / "broken"
 COMPLIANCE = DATA / "compliance"
 REMOTE_CONTEXT = DATA / "remote_context"
 X_OOLD_CONTEXT = DATA / "x_oold_context"
+RESOLVER_CACHE = DATA.parent / "resolver_cache"
 
 
 @pytest.fixture
@@ -41,6 +42,16 @@ def remote_context_dir() -> Path:
 def x_oold_context_dir() -> Path:
     """Locally authored schemas that map a term only through ``x-oold-context``."""
     return X_OOLD_CONTEXT
+
+
+@pytest.fixture
+def resolver_cache_dir() -> Path:
+    """A committed `Resolver` disk-cache entry, named by the sha256 digest of a fixed URL.
+
+    Proves a warmed cache satisfies an offline fetch without a network mock standing in for the
+    retrieval layer itself.
+    """
+    return RESOLVER_CACHE
 
 
 @pytest.fixture

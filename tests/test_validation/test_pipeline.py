@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import functools
+import http.server
+import json
+import threading
+
 import pytest
 
 from oold.validation import Options, run_compliance, validate_directory, validate_instance, validate_schema
@@ -65,6 +70,85 @@ def test_a_context_chain_leaving_the_directory_resolves(remote_context_dir):
     report = validate_schema(remote_context_dir / "Leaf.schema.json", OFFLINE)
     assert report.passed, [f"{c.id}: {c.message}" for c in report.failures()]
     assert "context.remote" in _ids(report, OK)
+
+
+def test_a_genuinely_remote_context_is_fetched_over_http(tmp_path):
+    """`remote_context_dir` above only ever leaves the *directory*; nothing in the corpus makes
+    an `@context` chain leave the filesystem, so `Resolver` never actually opens a socket. That
+    matters because socket retrieval is exactly the layer #119 proposes moving onto
+    `referencing`, and no fixture touching it means a regression there would pass CI.
+
+    A loopback HTTP server, bound to an OS-assigned port and shut down in a `finally`, is the
+    genuinely remote sibling: the schema and its remote context are templated into `tmp_path`
+    (a committed fixture cannot carry a port that varies per run), and the handler records every
+    request it serves, so the assertion below is that the context was actually fetched over the
+    wire, not resolved from disk by accident.
+    """
+    served = tmp_path / "served"
+    served.mkdir()
+    requested: list[str] = []
+
+    class RecordingHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self) -> None:
+            requested.append(self.path)
+            super().do_GET()
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass  # keep the test's own output free of per-request access logging
+
+    handler = functools.partial(RecordingHandler, directory=str(served))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}/"
+        (served / "Thing.schema.json").write_text(
+            json.dumps({
+                "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+                "$id": "Thing.schema.json",
+                "x-oold-instance-rdf-type": ["schema:Thing"],
+                "@context": {"schema": "http://schema.org/", "name": "schema:name"},
+                "title": "Thing",
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+            }),
+            encoding="utf-8",
+        )
+
+        case_dir = tmp_path / "case"
+        case_dir.mkdir()
+        (case_dir / "RemoteLeaf.schema.json").write_text(
+            json.dumps({
+                "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+                "$id": "RemoteLeaf.schema.json",
+                "title": "RemoteLeaf",
+                "x-oold-instance-rdf-type": ["schema:Thing"],
+                "@context": [
+                    f"{base_url}Thing.schema.json",
+                    {"schema": "http://schema.org/", "nickname": "schema:alternateName"},
+                ],
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}, "nickname": {"type": "string"}},
+            }),
+            encoding="utf-8",
+        )
+
+        report = validate_schema(
+            case_dir / "RemoteLeaf.schema.json",
+            Options(meta=("latest",), offline=False, cache_dir=tmp_path / "cache"),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert report.passed, [f"{c.id}: {c.message}" for c in report.failures()]
+    assert "context.remote" in _ids(report, OK)
+    assert any(path.endswith("Thing.schema.json") for path in requested), (
+        f"the context was never actually requested over the socket: {requested!r}"
+    )
 
 
 def test_a_property_mapped_only_through_x_oold_context_is_not_reported(x_oold_context_dir):

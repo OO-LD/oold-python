@@ -5,3 +5,8 @@
 # checksums and making every refresh from upstream show a whole-file diff.
 src/oold/validation/meta/*/**  -text
 tests/data/oold/**             -text
+
+# tests/data/resolver_cache/ holds a Resolver disk-cache entry, named by the sha256 of a fixed
+# URL. It carries no upstream checksum, but the same autocrlf rewrite would still turn it into
+# a CRLF file, which is not what the "written with LF" test fixture convention expects.
+tests/data/resolver_cache/**   -text

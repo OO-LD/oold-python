@@ -349,6 +349,11 @@ def _check_schema_jsonld(run: _Run, name: str, raw: dict[str, Any]) -> None:
                 run.loader.options(base=run.loader.base_url),
             )
             run.add("context.remote", name, OK)
+        # Kept broad deliberately. This calls jsonld.expand on the same shared pyld.jsonld
+        # module predicates.py calls it through, so an unexpected exception here has the same
+        # nowhere-to-go problem as the one documented there: no attribution path of its own, and
+        # no per-file guard in validate_directory to land in if it propagates. Narrowing this
+        # waits on #145 for the same reason predicates.py's catch does.
         except Exception as exc:
             from .loader import describe_jsonld_error
 

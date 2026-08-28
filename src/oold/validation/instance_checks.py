@@ -75,6 +75,12 @@ def validate_instance(instance: Any, schema: dict[str, Any]) -> InstanceCheckRes
     try:
         validator = Draft202012Validator(schema, format_checker=OOLD_FORMAT_CHECKER)
         errors = sorted(validator.iter_errors(instance), key=lambda e: list(e.absolute_path))
+    # `schema` is whatever the instance's `$schema` dereferences to; nothing here has checked it
+    # is a well-formed OO-LD schema first, so it can carry a malformed keyword value (say
+    # `properties` typed as something other than an object) that makes jsonschema's internals
+    # raise a plain AttributeError/TypeError while walking it as a validator, not a
+    # jsonschema-specific type. Reporting that as an `instance.schema` FAIL, rather than raising,
+    # is what lets the run continue to the next instance file.
     except Exception as exc:
         result.valid = False
         result.errors = [f"could not validate against the schema: {type(exc).__name__}: {exc}"]
@@ -118,6 +124,12 @@ def roundtrip_instance(
         else:
             result.method = "compacted"
             result.restored = jsonld.compact(back, schema_url, loader.options(base=instance_url))
+    # Unlike roundtrip.py's `roundtrip()`, `schema` here has not already survived a successful
+    # `generate()` call - no such gate exists on the instance-check path - so a malformed keyword
+    # value can still reach `embedded_properties`/`schema_to_frame` and raise a plain
+    # AttributeError/TypeError from their traversal, on top of the JsonLdError the jsonld.* calls
+    # themselves can raise. Reporting that as a `roundtrip.instance` FAIL, rather than raising,
+    # is what lets the run continue to the next instance file.
     except Exception as exc:
         result.error = describe_jsonld_error(exc)
         return result

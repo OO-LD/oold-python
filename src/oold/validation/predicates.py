@@ -114,6 +114,13 @@ def classify_property(name: str, value: Any, context: Any, options: dict[str, An
     """
     try:
         expanded = jsonld.expand({"@context": context, name: value, ANCHOR: "anchor"}, options)
+    # Kept broad deliberately. Routing to ERRORED already distinguishes a genuine processor
+    # failure from a permitted missing term (2a03e2f) - a narrower catch would only change which
+    # exceptions get that attribution, not add any. And `validate_directory` has no per-file
+    # guard (pipeline.py:649-652), so anything this does not catch would discard the verdicts for
+    # every other file in the run: there is currently nowhere for "this is my bug, not your
+    # document's" to go without either misattributing it or aborting the run. Narrowing this
+    # waits on that gap being closed; see #145.
     except Exception as exc:
         return PropertyOutcome(name=name, status=ERRORED, detail=f"expansion failed: {describe_jsonld_error(exc)}")
 

@@ -326,6 +326,13 @@ def generate(schema: dict[str, Any], unique_ids: bool = True) -> GenerationResul
     except RecursionError:
         result.error = "generation recursed too deeply; the schema may not be fully bounded"
         return result
+    # `schema` reaches here even when `schema.meta` already failed: only unresolved `$ref`s stop
+    # the pipeline before this call, not meta-schema invalidity. `_generate` walks keyword values
+    # such as `properties` assuming they are shaped as the meta-schema requires, so a malformed
+    # one (say a string instead of an object) raises a plain AttributeError/TypeError from this
+    # module's own traversal, not from anything with a narrower, catchable type. Letting it
+    # propagate would abort the whole directory run over one bad schema instead of reporting a
+    # `generate.satisfiable` FAIL and moving on to the next file.
     except Exception as exc:
         result.error = f"generation failed: {type(exc).__name__}: {exc}"
         return result

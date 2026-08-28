@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 import pytest
 from click.testing import CliRunner
 
+from oold.validation import meta_store, meta_vendor
 from oold.validation.cli import main
 
 
@@ -108,6 +110,54 @@ def test_meta_list_json(run):
     payload = json.loads(run("meta", "list", "--json").output)
     assert payload["latest"]
     assert payload["versions"]
+
+
+def test_meta_vendor_requires_from(run):
+    result = run("meta", "vendor", "1.2.3")
+    assert result.exit_code != 0
+    assert "--from" in result.output
+
+
+def _run_git(cwd, *args: str) -> None:
+    # S603/S607: a fixed executable ("git") with literal, test-authored arguments, never
+    # untrusted input.
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)  # noqa: S603, S607
+
+
+def test_meta_vendor_reaches_the_store_and_reports_what_it_did(run, tmp_path, monkeypatch):
+    """A wiring test: the CLI option maps through to `vendor_version` and its result is echoed."""
+    source = tmp_path / "source"
+    (source / "meta").mkdir(parents=True)
+    _run_git(source, "init", "-q")
+    _run_git(source, "config", "user.email", "test@example.com")
+    _run_git(source, "config", "user.name", "Test")
+    documents = (meta_store.META_SCHEMA_FILE, meta_store.PATTERN_LINT_FILE, meta_store.UI_META_SCHEMA_FILE)
+    for name in documents:
+        (source / "meta" / name).write_text(
+            json.dumps({"$id": f"https://example.org/1.2.3/meta/{name}"}), encoding="utf-8"
+        )
+    _run_git(source, "add", "-A")
+    _run_git(source, "commit", "-q", "-m", "release 1.2.3")
+    _run_git(source, "tag", "v1.2.3")
+
+    meta_root = tmp_path / "tracked-meta"
+    meta_root.mkdir()
+    (meta_root / "index.json").write_text(
+        json.dumps({"files": list(documents), "versions": {}, "fixtures": {"tag": "v0.0.0"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(meta_store, "meta_dir", lambda: meta_root)
+    meta_store.load_index.cache_clear()
+    fixtures_root = tmp_path / "fixtures"
+    (fixtures_root / "compliance").mkdir(parents=True)
+    monkeypatch.setattr(meta_vendor, "_fixtures_dir", lambda: fixtures_root)
+
+    try:
+        result = run("meta", "vendor", "1.2.3", "--from", str(source))
+        assert result.exit_code == 0, result.output
+        assert "vendored 1.2.3 from v1.2.3" in result.output
+        assert (meta_root / "1.2.3" / meta_store.META_SCHEMA_FILE).is_file()
+    finally:
+        meta_store.load_index.cache_clear()
 
 
 def test_unknown_meta_version_reports_cleanly(run, data_dir):

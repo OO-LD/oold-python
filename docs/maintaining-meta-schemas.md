@@ -48,7 +48,7 @@ meta-schema file, so they are not ordinary source files:
 - they must be LF. A CRLF copy hashes differently, which passes on Windows and fails on Linux.
   This has happened; `test_the_vendored_files_are_stored_with_unix_line_endings` now guards it.
 
-That is why every extraction command below uses `git cat-file blob`, never `git show`: `show`
+That is why `oold meta vendor` (below) extracts with `git cat-file blob`, never `git show`: `show`
 applies the checkout's end-of-line conversion, so on Windows it writes CRLF, which changes every
 digest and fails only once it reaches Linux CI.
 
@@ -72,55 +72,43 @@ skip - drift here is exactly what this is meant to catch.
 
 When oold-schema cuts a release, from a checkout of it:
 
-### 1. Vendor the meta-schema files
-
 ```bash
-V=1.0.0
-mkdir -p src/oold/validation/meta/$V
-for f in oold-meta-schema oold-meta-schema-base oold-pattern-lint.schema oold-ui-meta-schema oold-rules oold-rules.schema; do
-  git -C ../oold-schema cat-file blob v$V:meta/$f.json > src/oold/validation/meta/$V/$f.json
-done
-sha256sum src/oold/validation/meta/$V/*.json
-git -C ../oold-schema rev-parse v$V
-git -C ../oold-schema log -1 --format=%cI v$V
+uv run oold meta vendor 1.0.0 --from ../oold-schema
 ```
 
-**Check what the release actually ships before running the loop.** The set has grown twice.
-`oold-rules.json`, the catalogue of normative statements, and `oold-rules.schema.json`, which
-describes it, arrived in 1.0.0-rc.1; `oold-meta-schema-base.json` arrived in 1.0.0-rc.2, when the
-dialect split into a wrapper and the body it `$ref`s. Drop from the loop whatever a given version
-predates, and name the set in that version's own `files` entry when it differs from the shared
-default. Listing only the three meta-schemas here once cost a vendoring the catalogue entirely,
-which is silent: findings simply stop citing rules and every `rule.*` check skips as though the
-version had stated nothing. Omitting the base is not silent, but it fails obscurely, as an
-unresolvable `$ref` rather than a missing file.
+This resolves the tag `v1.0.0` in that checkout and does, in one call, what used to be two
+hand-run procedures:
 
-Extract from the **tag**, not from the working tree. The two diverge: at the time 0.7.0 was added,
-`main` had already changed all three files, including the canonical `$id` domain.
+- reads what `meta/` actually contains **at that tag**, rather than a fixed list someone has to
+  remember to edit. The set has grown twice already - `oold-rules.json`, the catalogue of
+  normative statements, and `oold-rules.schema.json`, which describes it, arrived in 1.0.0-rc.1;
+  `oold-meta-schema-base.json` arrived in 1.0.0-rc.2, when the dialect split into a wrapper and the
+  body it `$ref`s - and a version that predates one of these is simply not made to load a file it
+  does not ship. Listing only the three meta-schemas here once cost a vendoring the catalogue
+  entirely, which is silent: findings stop citing rules and every `rule.*` check skips as though
+  the version had stated nothing. Omitting the base is not silent, but it fails obscurely, as an
+  unresolvable `$ref` rather than a missing file;
+- writes every file with `git cat-file blob`, never `git show`, so nothing here can pick up the
+  checkout's line-ending conversion (see "Byte-exactness" above);
+- records the tag, commit, commit date, the `$id` base declared in the vendored wrapper (see "Why
+  `id_base` is recorded and not assumed" below), and a sha256 of each file, in `index.json`;
+- refreshes `tests/data/oold/` from the **same tag** and sets `fixtures.tag` to it, so fixtures and
+  meta-schemas can never drift apart the way a separate, easy-to-skip second step once let them.
+  Keeping the two in step is not cosmetic: a compliance fixture asserts the lint rules of the
+  release that introduced them, so a newer fixture set combined with an older meta-schema fails in
+  ways that say nothing about the code. `test_the_fixture_slice_records_the_release_it_came_from`
+  is what would have caught the earlier miss - a README claiming a release the fixture slice had
+  already moved past.
 
-The catalogue is the one exception, and only while it is unreleased. `1.0.0-rc.1`'s copy comes from
-an oold-schema branch because no tag carries one yet; when that happens, record the branch and
-commit under `rules_source` so the provenance is still exact. Never do this for a meta-schema.
+It refuses to overwrite a version already tracked; pass `--force` to replace one deliberately.
+Optional narrative fields on an entry - `notes`, `prerelease` - are not generated and can be added
+by hand afterward.
 
-Then add an entry to `index.json` with the tag, commit, commit date, the `$id` base in use for that
-release (see "Why `id_base` is recorded and not assumed" below), and the checksums.
-
-### 2. Refresh the fixture slice
-
-Refresh `tests/data/oold/` from the **same tag**, so fixtures and meta-schemas always come from
-one release, then record that tag as `fixtures.tag` in `index.json`:
-
-```bash
-V=$(uv run python -c "from oold.validation.meta_store import latest_version; print(latest_version())")
-DEST=tests/data/oold
-for f in $(git -C ../oold-schema ls-tree --name-only v$V examples/ | grep '\.json$'); do
-  git -C ../oold-schema cat-file blob "v$V:$f" > "$DEST/$(basename $f)"
-done
-for f in $(git -C ../oold-schema ls-tree --name-only v$V examples/compliance/); do
-  git -C ../oold-schema cat-file blob "v$V:$f" > "$DEST/compliance/$(basename $f)"
-done
-make validate
-```
+The rule catalogue is the one thing this command does not vendor from an unreleased source.
+`1.0.0-rc.1`'s copy comes from an oold-schema branch because no tag carried one yet; when that
+happens, add the catalogue and a `rules_source` entry by hand, recording the branch and commit so
+the provenance stays exact. Never do this for a meta-schema - a document that has not reached a tag
+has not been released.
 
 Then confirm both refreshes still pass:
 
@@ -129,21 +117,13 @@ uv run oold validate tests/data/oold --offline --meta all
 make validate && uv run pytest tests/test_validation -q
 ```
 
-Keeping the two in step is not cosmetic. A compliance fixture asserts the lint rules of the release
-that introduced them, so a newer fixture set combined with an older meta-schema fails in ways that
-say nothing about the code. `fixtures.tag` is what makes the pairing checkable rather than a habit:
-`test_the_fixture_slice_records_the_release_it_came_from` compares it against the newest tracked
-version, because this step has been skipped before and prose describing the tag in a README did
-not notice - the sentence kept naming an old release after a vendoring had already moved the
-fixture files on. The tag is recorded only in `index.json` now, for exactly that reason.
-
 ## The fixture slice
 
 Only the top level and `compliance/` are the upstream snapshot; both come from `examples/` at the
 recorded tag. `broken/`, `remote_context/` and `x_oold_context/` are written here by hand, exist
-in no oold-schema release, and the refresh loop above never touches them. Upstream's `examples/`
-also has a `spec/` subdirectory, which is deliberately outside the slice - the loops above do not
-descend into it.
+in no oold-schema release, and `oold meta vendor` never touches them. Upstream's `examples/` also
+has a `spec/` subdirectory, which is deliberately outside the slice - the command does not descend
+into it.
 
 Upstream's current `main` is covered instead by the opt-in parity tests
 (`tests/test_validation/test_parity_live.py`), which validate against `--meta remote`.

@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 import click
 
 from .meta_store import MetaSchemaError, describe_store, fetch_remote, load_index, resolve_selection
+from .meta_vendor import vendor_version
 from .pipeline import Options, run_compliance, validate_directory, validate_instance, validate_schema
 from .report import FAIL, OK, SKIP, WARN, Report
 
@@ -317,6 +318,33 @@ def meta_fetch(force: bool) -> None:
     except MetaSchemaError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"fetched into {target}")
+
+
+@meta_group.command("vendor")
+@click.argument("version")
+@click.option(
+    "--from",
+    "source",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="A checkout of oold-schema to vendor the release from.",
+)
+@click.option("--force", is_flag=True, help="Overwrite an already-tracked version.")
+def meta_vendor(version: str, source: Path, force: bool) -> None:
+    """Vendor one released meta-schema version, and refresh the fixture slice from the same tag.
+
+    Reads the file set the tag actually ships rather than a fixed list, writes every file
+    byte-for-byte with no line-ending conversion, and records its sha256, tag, commit and commit
+    date in meta/index.json. See docs/maintaining-meta-schemas.md for what this replaces.
+    """
+    try:
+        result = vendor_version(version, source, force=force)
+    except MetaSchemaError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"vendored {result.version} from {result.tag} ({result.commit})")
+    for name in result.files:
+        click.echo(f"  {name}")
+    click.echo(f"fixtures refreshed from {result.tag}: {len(result.fixture_files)} files")
 
 
 @click.group("rules")

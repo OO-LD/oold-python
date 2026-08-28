@@ -26,6 +26,16 @@ jobs:
       - name: Run checks
         run: make check
 
+      - name: Confirm rfc3987 never enters the lock file
+        # jsonschema[format] pulls in rfc3987, which is GPLv3+, into a package that is
+        # Apache-2.0; only jsonschema[format-nongpl] (see the `validation` extra) should ever
+        # be used. This is the one place that would catch someone typing the wrong extra.
+        run: |
+          if grep -q '^name = "rfc3987"$' uv.lock; then
+            echo "rfc3987 (GPLv3+) is present in uv.lock - use jsonschema[format-nongpl], not jsonschema[format]" >&2
+            exit 1
+          fi
+
   tests-and-type-check:
     runs-on: ${{ matrix.platform }}
     strategy:

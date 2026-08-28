@@ -4,39 +4,65 @@
 declared ``format`` is not an error. This module asserts it instead, so a generated instance that
 violates a declared ``format`` is a failure rather than a silent pass.
 
-Two reasons it implements the formats itself instead of relying on ``jsonschema[format]``:
+Most formats are asserted by the checkers ``jsonschema[format-nongpl]`` registers on
+``Draft202012Validator.FORMAT_CHECKER`` (see the ``validation`` extra in ``pyproject.toml``). That
+extra, not ``jsonschema[format]``, is deliberate: ``jsonschema[format]`` pulls in ``rfc3987``,
+which is GPLv3+, into a package that is Apache-2.0. ``format-nongpl`` covers the same formats this
+module needs through ``fqdn`` (MPL-2.0), ``rfc3986-validator`` (MIT) and ``rfc3987-syntax``
+(Apache-2.0) instead, none of which carry that obligation.
 
-* the stock :data:`jsonschema.Draft202012Validator.FORMAT_CHECKER` asserts only eight formats
-  without optional packages installed, and the ones OO-LD leans on most (``iri``, ``uri``,
-  ``date-time``, ``duration``, ``time``) are not among them;
-* ``iri`` and ``iri-reference`` need a deliberate *override* rather than a strict RFC 3987
-  implementation. See :func:`is_iri_reference`.
+Five formats stay hand-written because the library's own checker disagrees with the reference
+toolchain (ajv-formats in *full* mode, which is what ``tests/data/format_parity.json`` records) on
+cases this project's schemas rely on:
+
+* ``date-time`` and ``time`` - ``rfc3339_validator`` rejects the space date/time separator, an
+  offset without a colon (``+0200``) and the leap second ``23:59:60``, all of which the reference
+  toolchain accepts.
+* ``email`` and ``idn-email`` - the library's checker for both is not conditional on any optional
+  package; it is always just ``"@" in instance``, far looser than ajv-formats' full email pattern.
+* ``uuid`` - the library's checker parses with :class:`uuid.UUID`, which strips a leading
+  ``urn:uuid:``, and then range-checks dash positions assuming no prefix was there, so a prefixed
+  UUID such as ``urn:uuid:...`` is rejected even though the reference toolchain accepts it.
 
 Formats not implemented here stay annotations: an unrecognized ``format`` value is not an error.
 """
 
 from __future__ import annotations
 
-import ipaddress
 import re
 from datetime import date as _date
 from typing import Any
 
-from jsonschema import FormatChecker
+from jsonschema import Draft202012Validator, FormatChecker
 
-# ---------------------------------------------------------------------------- IRI
+# ---------------------------------------------------------------------------- checker
 
-# IRI formats (RFC 3987).
-#
-# jsonschema's stock Draft202012Validator.FORMAT_CHECKER asserts only eight formats without
-# optional packages installed (date, email, idn-email, idn-hostname, ipv4, ipv6, regex, uuid),
-# and none of them is iri or iri-reference, so this module implements both against RFC 3987
-# itself: an IRI reference excludes ASCII controls, space and the delimiters RFC 3987 disallows,
-# while non-ASCII ucschar stays allowed; an absolute IRI additionally begins with a scheme. A
-# compact IRI such as `ex:alice` is accepted, since any URI/IRI grammar accepts one - an IRI is a
-# superset of a URI.
-_IRI_EXCLUDED = re.compile(r"[\s<>\"{}|\\^`]")
-_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
+#: The format checker used everywhere in this package. Kept as a module-level singleton so a
+#: validator built in one check behaves identically to one built in another.
+OOLD_FORMAT_CHECKER = FormatChecker()
+
+# Formats where jsonschema[format-nongpl]'s own checker matches the reference toolchain on every
+# case in tests/data/format_parity.json, plus this project's own edge cases - a compact IRI such
+# as `ex:alice` is accepted by `iri`/`iri-reference`/`uri`/`uri-reference` alike, since an IRI is
+# a superset of a URI. Copied from the draft this project targets rather than relying on
+# jsonschema's ambient global registry, which also carries formats this module does not use
+# (e.g. `color`, registered only for draft 3).
+for _name in (
+    "date",
+    "duration",
+    "hostname",
+    "idn-hostname",
+    "ipv4",
+    "ipv6",
+    "iri",
+    "iri-reference",
+    "json-pointer",
+    "regex",
+    "relative-json-pointer",
+    "uri",
+    "uri-reference",
+):
+    OOLD_FORMAT_CHECKER.checkers[_name] = Draft202012Validator.FORMAT_CHECKER.checkers[_name]
 
 #: ``format`` values that constrain a string to IRI/URI shape. Used by the pattern lint.
 IRI_FORMATS = frozenset({"iri-reference", "iri", "uri-reference", "uri"})
@@ -44,24 +70,24 @@ IRI_FORMATS = frozenset({"iri-reference", "iri", "uri-reference", "uri"})
 
 def is_iri_reference(value: str) -> bool:
     """True for an IRI reference: absolute, compact or relative."""
-    return isinstance(value, str) and not _IRI_EXCLUDED.search(value)
+    return isinstance(value, str) and OOLD_FORMAT_CHECKER.conforms(value, "iri-reference")
 
 
 def is_iri(value: str) -> bool:
     """True for an absolute IRI, meaning an IRI reference that carries a scheme."""
-    return is_iri_reference(value) and bool(_SCHEME.match(value))
+    return isinstance(value, str) and OOLD_FORMAT_CHECKER.conforms(value, "iri")
 
 
-# ---------------------------------------------------------------------------- patterns
+# ---------------------------------------------------------------------------- hand-written formats
 
 # Ported from ajv-formats so the two toolchains agree on edge cases. ajv matches a loose regex
 # and then range-checks the fields numerically, which is what stops `25:00:00` being accepted;
 # the same split is used here. `date-time` accepts a space separator and requires an offset,
-# `time` leaves the offset optional, and both allow the leap second 23:59:60.
+# `time` leaves the offset optional in its grammar (though not by default here, see
+# `_valid_time`), and both allow the leap second 23:59:60.
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _TIME = re.compile(r"^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|[+-]\d\d(?::?\d\d)?)?$", re.IGNORECASE)
 _DATE_TIME_SPLIT = re.compile(r"^(.+?)[t ](.+)$", re.IGNORECASE)
-_DURATION = re.compile(r"^P(?!$)((\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?|(\d+W)?)$")
 # ajv-formats' *full* email pattern, the variant `addFormats(ajv)` installs by default. It
 # differs from the fast variant by requiring a dotted domain, so `a@b` is rejected, and by only
 # allowing dots between local-part atoms.
@@ -70,35 +96,10 @@ _EMAIL = re.compile(
     r"@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
     re.IGNORECASE,
 )
-_HOSTNAME = re.compile(
-    r"^(?=.{1,253}\.?$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
-    r"(?:\.[a-z0-9](?:[-0-9a-z]{0,61}[0-9a-z])?)*\.?$",
-    re.IGNORECASE,
-)
 _UUID = re.compile(
     r"^(?:urn:uuid:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
-_JSON_POINTER = re.compile(r"^(?:/(?:[^~/]|~0|~1)*)*$")
-_RELATIVE_JSON_POINTER = re.compile(r"^(?:0|[1-9][0-9]*)(?:#|(?:/(?:[^~/]|~0|~1)*)*)$")
-
-#: An ASCII-only counterpart of the IRI rule, which is what separates ``uri`` from ``iri``.
-_NON_ASCII = re.compile(r"[^\x00-\x7f]")
-
-
-def _is_uri_reference(value: str) -> bool:
-    return is_iri_reference(value) and not _NON_ASCII.search(value)
-
-
-def _is_uri(value: str) -> bool:
-    return _is_uri_reference(value) and bool(_SCHEME.match(value))
-
-
-# ---------------------------------------------------------------------------- checker
-
-#: The format checker used everywhere in this package. Kept as a module-level singleton so a
-#: validator built in one check behaves identically to one built in another.
-OOLD_FORMAT_CHECKER = FormatChecker()
 
 
 def _string_check(func):
@@ -159,56 +160,15 @@ def _valid_date_time(value: str) -> bool:
     return _valid_date(parts[1]) and _valid_time(parts[2], require_offset=True)
 
 
-def _valid_ipv4(value: str) -> bool:
-    try:
-        ipaddress.IPv4Address(value)
-    except ValueError:
-        return False
-    return True
-
-
-def _valid_ipv6(value: str) -> bool:
-    # A scoped address such as `fe80::1%eth0` is accepted by `ipaddress` but not by ajv, and a
-    # zone identifier is not part of the JSON Schema `ipv6` format.
-    if "%" in value:
-        return False
-    try:
-        ipaddress.IPv6Address(value)
-    except ValueError:
-        return False
-    return True
-
-
-def _valid_regex(value: str) -> bool:
-    try:
-        re.compile(value)
-    except re.error:
-        return False
-    return True
-
-
-_register("date", _valid_date)
 _register("date-time", _valid_date_time)
 _register("time", _valid_time)
-_register("duration", lambda v: bool(_DURATION.match(v)))
 _register("email", lambda v: bool(_EMAIL.match(v)))
-_register("hostname", lambda v: bool(_HOSTNAME.match(v)))
-_register("ipv4", _valid_ipv4)
-_register("ipv6", _valid_ipv6)
 _register("uuid", lambda v: bool(_UUID.match(v)))
-_register("regex", _valid_regex)
-_register("json-pointer", lambda v: bool(_JSON_POINTER.match(v)))
-_register("relative-json-pointer", lambda v: bool(_RELATIVE_JSON_POINTER.match(v)))
-_register("uri", _is_uri)
-_register("uri-reference", _is_uri_reference)
-_register("iri", is_iri)
-_register("iri-reference", is_iri_reference)
 
-# The internationalised variants differ from their ASCII counterparts only by permitting
-# non-ASCII, which the IRI rules already do. Neither OO-LD corpus uses them; they are registered
-# so a schema that declares one still gets a shape check rather than silently no check at all.
+# `idn-email` differs from `email` only by permitting non-ASCII, which the IRI rules already do.
+# Neither OO-LD corpus uses it; it is registered so a schema that declares it still gets a shape
+# check rather than silently no check at all.
 _register("idn-email", lambda v: bool(_EMAIL.match(v)) or ("@" in v and is_iri_reference(v)))
-_register("idn-hostname", lambda v: is_iri_reference(v) and "/" not in v)
 
 #: Deterministic, format-valid sample values, used by the instance generator. Every entry must
 #: satisfy the corresponding checker above; :mod:`tests` asserts exactly that.

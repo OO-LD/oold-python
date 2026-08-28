@@ -49,14 +49,17 @@ oold-validate = "oold.cli:validate_main"
 [project.optional-dependencies]
 # The validator needs a JSON Schema implementation and a CLI framework. pyld and rdflib are
 # already core dependencies, so the whole JSON-LD half of it costs nothing extra.
+#
+# jsonschema's `format-nongpl` extra, not its `format` extra, supplies the format checkers: the
+# `format` extra pulls in rfc3987, which is GPLv3+, into a package that is Apache-2.0.
 validation = [
-    "jsonschema>=4.20",
+    "jsonschema[format-nongpl]>=4.20",
     "referencing>=0.30",
     "click>=8.1",
 ]
 mcp = [
     "mcp>=1.2",
-    "jsonschema>=4.20",
+    "jsonschema[format-nongpl]>=4.20",
     "referencing>=0.30",
     "click>=8.1",
 ]
@@ -93,7 +96,7 @@ all = [
     "traitlets",
     "ipython",
     "nicegui",
-    "jsonschema>=4.20",
+    "jsonschema[format-nongpl]>=4.20",
     "referencing>=0.30",
     "click>=8.1",
     "mcp>=1.2",
@@ -103,7 +106,7 @@ all = [
 dev = [
     # The validation extras are dev dependencies too, so `make test` and `make check` see them
     # without `--all-extras`.
-    "jsonschema>=4.20",
+    "jsonschema[format-nongpl]>=4.20",
     "referencing>=0.30",
     "click>=8.1",
     "mcp>=1.2",

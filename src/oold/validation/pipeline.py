@@ -409,7 +409,9 @@ def _unmapped_properties(run: _Run, name: str, raw, schema, sample) -> set[str]:
     Permitted by the specification (`OOLD-SCH-2d05`), so this is not a failure anywhere; it is
     reported by `context.coverage` and subtracted from what `roundtrip.generated` calls a loss.
     Returns an empty set when the context cannot be resolved - the checks that report resolution
-    failures do so on their own, and guessing here would double-report it.
+    failures do so on their own, and guessing here would double-report it. A context that resolves
+    to nothing is the opposite case and answers the question: no term exists, so every declared
+    property is unmapped.
     """
     if name in run._unmapped:
         return run._unmapped[name]
@@ -418,7 +420,11 @@ def _unmapped_properties(run: _Run, name: str, raw, schema, sample) -> set[str]:
         try:
             resolved = run.resolver.load(run.directory / name)
             context = resolve_context(raw, resolved.base_uri, run.resolver)
-            if not context.errors and not context.is_empty:
+            if context.errors:
+                unmapped = set()
+            elif context.is_empty:
+                unmapped = set(collect_composed_properties(schema))
+            else:
                 id_key, type_key = find_alias_keys(context.terms())
                 declared = set(collect_composed_properties(schema)) | {id_key, type_key}
                 outcome = check_predicates(
@@ -447,6 +453,21 @@ def _check_predicates(run: _Run, name: str, raw, schema, sample) -> None:
         return
     if context.is_empty:
         run.add("context.predicates", name, SKIP, "schema declares no @context")
+        # Coverage still has an answer here, and it is the strongest one it ever gives: no term
+        # exists, so nothing reaches RDF. Staying silent would report a schema mapping one
+        # property of ten while saying nothing about a schema mapping none of them.
+        declared = sorted(collect_composed_properties(schema))
+        if declared and run.options.wants("context.coverage"):
+            plural = "ies" if declared[1:] else "y"
+            run.add(
+                "context.coverage",
+                name,
+                FAIL if run.options.strict else WARN,
+                f"schema declares no @context, so none of its {len(declared)} propert{plural} "
+                f"will reach RDF: {', '.join(declared)}. Declare @vocab to map them into a "
+                "default namespace, or add the terms to x-oold-context.",
+                {"declared": declared},
+            )
         return
 
     _run_rule_checks(run, name, raw, schema, ContextView(terms=context.terms(), entries=list(context.context)))

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "no_context.schema.json",
+  "title": "NoContext",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "orphan": {
+      "type": "string"
+    }
+  }
+}

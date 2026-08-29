@@ -163,6 +163,25 @@ def test_missing_context_term_warns_and_names_the_orphan_property(broken_dir):
     assert "context.coverage" not in {c.id for c in report.failures()}
 
 
+def test_a_schema_with_no_context_warns_instead_of_failing_the_round_trip(broken_dir):
+    """No `@context` means no term, so no property is mapped and none can be lost.
+
+    `roundtrip.generated` subtracts unmapped properties from what it calls a loss, and an
+    absent context is the case where that set is every declared property. Reporting them as
+    lost would fail a schema for the one thing `OOLD-SCH-2d05` says must not fail it.
+    """
+    report = validate_schema(broken_dir / "no_context.schema.json", OFFLINE)
+    checks = {c.id: c for c in report.checks}
+
+    assert checks["roundtrip.generated"].status == OK
+    assert checks["context.predicates"].status == SKIP
+    coverage = checks["context.coverage"]
+    assert coverage.status == WARN
+    assert coverage.detail["declared"] == ["name", "orphan"]
+    assert "@vocab" in coverage.message and "x-oold-context" in coverage.message
+    assert not report.failures()
+
+
 def test_a_processor_failure_is_not_downgraded_to_a_coverage_warning(broken_dir, monkeypatch):
     """A raised processor must not read as a permitted omission.
 

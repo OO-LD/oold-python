@@ -7,6 +7,15 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.18.2 (2026-08-29)
+
+### Bug Fixes
+
+- **validation**: Treat an absent @context as every property unmapped
+  ([#142](https://github.com/OO-LD/oold-python/pull/142),
+  [`bc6e1c9`](https://github.com/OO-LD/oold-python/commit/bc6e1c98bd98bf97431afed767ca5f33bd3ea985))
+
+
 ## v0.18.1 (2026-08-27)
 
 ### Bug Fixes

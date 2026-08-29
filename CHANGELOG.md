@@ -7,6 +7,21 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.18.3 (2026-08-29)
+
+### Bug Fixes
+
+- **validation**: Revalidate the remote meta cache instead of trusting it
+  ([#143](https://github.com/OO-LD/oold-python/pull/143),
+  [`8e83643`](https://github.com/OO-LD/oold-python/commit/8e83643a557d7a133b80632b45649cb6d7632b52))
+
+### Testing
+
+- **validation**: Cover the conditional-fetch helper directly
+  ([#143](https://github.com/OO-LD/oold-python/pull/143),
+  [`8e83643`](https://github.com/OO-LD/oold-python/commit/8e83643a557d7a133b80632b45649cb6d7632b52))
+
+
 ## v0.18.2 (2026-08-29)
 
 ### Bug Fixes

@@ -141,13 +141,22 @@ def test_serialisation_to_iris(store):
     assert d["name"] == "Alice"
 
 
-def test_query_dsl(store):
+def test_query_dsl_builds_conditions(store):
     cond = Person.name == "John"
     assert cond.field == "name" and cond.value == "John"
-    assert Person[cond] is not None
-    assert Person["ex:p1"] is not None
     assert (Employee.name == "x").field == "name"  # inherited field
     assert (Person.employer == "ex:acme").field == "employer"  # link descriptor
+
+
+def test_query_by_iri_and_condition(store):
+    """Model[...] resolves against the registered backends."""
+    found = Person["ex:p2"]
+    assert found is not None and found.name == "Bob"
+    matches = Person[Person.name == "Bob"]
+    assert matches is not None
+    assert [m.id for m in matches] == ["ex:p2"]
+    # nothing matching returns None rather than an empty result
+    assert Person["ex:does-not-exist"] is None
 
 
 def test_typed_extras_validate():

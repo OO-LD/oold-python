@@ -97,7 +97,7 @@ class _AutoLinkV1:
         return id(self)
 
 
-class LinkedQueryMetaV1(ModelMetaclass):
+class LinkedBaseModelMetaClass(ModelMetaclass):
     """Installs link descriptors and provides the class-level query DSL."""
 
     def __new__(mcs, name, bases, namespace, **kwargs):
@@ -136,7 +136,7 @@ class LinkedQueryMetaV1(ModelMetaclass):
         return cls.oold_query(item)
 
 
-class AutoLinkedModelV1(BaseModel, metaclass=LinkedQueryMetaV1):
+class AutoLinkedModelV1(BaseModel, metaclass=LinkedBaseModelMetaClass):
     """pydantic v1 base with the descriptor binding and the downstream API."""
 
     _links: dict = PrivateAttr(default_factory=dict)
@@ -314,3 +314,6 @@ class AutoLinkedModelV1(BaseModel, metaclass=LinkedQueryMetaV1):
 
     def cast_none_to_default(self, cls: type, **kwargs: Any) -> Any:
         return self.cast(cls, none_to_default=True, **kwargs)
+
+
+LinkedQueryMetaV1 = LinkedBaseModelMetaClass

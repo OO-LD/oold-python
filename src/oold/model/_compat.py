@@ -92,10 +92,12 @@ class LinkedApiMixin(GenericLinkedBaseModel):
                 break
         type_field = cls.model_fields.get(cls.get_type_field())
         if type_field is not None:
+            # append the default as-is: a list default is one identity (a type
+            # array), not several. Flattening it changes the registry keys and
+            # the type array that serialisation emits.
             default = type_field.default
-            for value in default if isinstance(default, list) else [default]:
-                if isinstance(value, str) and value not in out:
-                    out.append(value)
+            if default is not None and default not in out:
+                out.append(default)
         if not out:
             return None
         return out[0] if len(out) == 1 else out
@@ -157,10 +159,19 @@ class LinkedApiMixin(GenericLinkedBaseModel):
         return result
 
     @classmethod
+    def _root_cls(cls) -> type:
+        from oold.model._descriptor import AutoLinkedModel
+
+        return AutoLinkedModel
+
+    @classmethod
     def from_json(cls, data: dict[str, Any]) -> Any:
         from oold.model._descriptor import _TYPE_REGISTRY
 
-        return import_json(BaseModel, cls, cls, data, _TYPE_REGISTRY)
+        # root must be the binding base: import_json only falls back to the
+        # given class when the two differ, which is how a payload without a
+        # type IRI still constructs.
+        return import_json(BaseModel, cls._root_cls(), cls, data, _TYPE_REGISTRY)
 
     def to_jsonld(self) -> dict[str, Any]:
         return export_jsonld(self, BaseModel)
@@ -169,7 +180,7 @@ class LinkedApiMixin(GenericLinkedBaseModel):
     def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
         from oold.model._descriptor import _TYPE_REGISTRY
 
-        return import_jsonld(BaseModel, cls, cls, jsonld, _TYPE_REGISTRY)
+        return import_jsonld(BaseModel, cls._root_cls(), cls, jsonld, _TYPE_REGISTRY)
 
     def store_jsonld(self) -> None:
         from oold.backend.interface import GetBackendParam, StoreParam, get_backend

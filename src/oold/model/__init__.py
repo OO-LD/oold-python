@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1224,3 +1225,30 @@ class BaseController:
                 ):
                     del data[key]
         return data
+
+
+# ---------------------------------------------------------------------------
+# Opt-in descriptor binding
+# ---------------------------------------------------------------------------
+# The descriptor binding (see docs/design/graph-object-binding.md) replaces the
+# per-attribute interception above with a data descriptor per link field. It is
+# behaviour-compatible - the downstream API is re-implemented on top of it and
+# checked by tests/test_compat_parity*.py - but it is a large change, so it is
+# enabled explicitly rather than by default:
+#
+#     OOLD_DESCRIPTOR_BINDING=1
+#
+# Two names have to move with the base class, because downstream imports them
+# and relies on their identity (see docs/design/downstream-migration.md):
+#
+#   * LinkedBaseModelMetaClass - subclassed downstream, so a derived metaclass
+#     must remain a subclass of whatever LinkedBaseModel actually uses;
+#   * _types - written to downstream, so the binding must share the very same
+#     mapping rather than keep its own.
+if os.environ.get("OOLD_DESCRIPTOR_BINDING") == "1":  # pragma: no cover
+    from oold.model import _descriptor as _descriptor_module
+
+    _descriptor_module.use_type_registry(_types)
+    LinkedBaseModel = _descriptor_module.AutoLinkedModel
+    LinkedBaseModelMetaClass = _descriptor_module.LinkedBaseModelMetaClass
+    _logger.info("oold: descriptor binding enabled (OOLD_DESCRIPTOR_BINDING=1)")

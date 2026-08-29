@@ -47,9 +47,12 @@ from typing import (
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
 from pydantic._internal._model_construction import ModelMetaclass
 
+from oold.backend import interface
 from oold.backend.interface import (
     Condition,
     GetResolverParam,
+    QueryParam,
+    ResolveParam,
     apply_operator,
     get_resolver,
 )
@@ -165,7 +168,7 @@ class FieldProxy:
         return id(self)
 
 
-class LinkedQueryMeta(ModelMetaclass):
+class LinkedBaseModelMetaClass(ModelMetaclass):
     """Metaclass providing the query DSL without touching attribute reads.
 
     Uses ``__getattr__`` (a fallback, invoked only when normal lookup *fails*)
@@ -174,9 +177,28 @@ class LinkedQueryMeta(ModelMetaclass):
     naturally and lands here at no cost to any other attribute access.
     """
 
+    _constructing: bool = False
+    """Set while a class is being built.
+
+    Pydantic probes ``getattr(base, field_name, None)`` during class
+    construction to detect shadowed attributes and inherited defaults. Since
+    field names are exactly what ``__getattr__`` answers with a FieldProxy, an
+    unguarded proxy is mistaken for an inherited default and ends up as the
+    field's value. Same reason the shipped metaclass carries this flag.
+    """
+
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        LinkedBaseModelMetaClass._constructing = True
+        try:
+            return super().__new__(mcs, name, bases, namespace, **kwargs)
+        finally:
+            LinkedBaseModelMetaClass._constructing = False
+
     def __getattr__(cls, name: str) -> Any:
         # Never call getattr(cls, ...) here: cls.model_fields is a property
         # that itself calls getattr, which would recurse until the stack blows.
+        if LinkedBaseModelMetaClass._constructing:
+            raise AttributeError(name)
         if name.startswith("_"):
             raise AttributeError(name)
         for klass in cls.__mro__:
@@ -251,10 +273,51 @@ def _resolve_cls(data: dict[str, Any], target: Any) -> Any:
 
 
 class LinkResultList(list[Any]):
-    """List returned by a to-many link, with IRI lookup, filtering, projection."""
+    """List returned by a to-many link.
+
+    Adds IRI lookup, filtering and attribute projection, and keeps mutations in
+    sync with the owner's link storage: appending or removing an item updates
+    the stored references too, so ``__iris__`` and serialisation stay correct
+    without a second write.
+    """
+
+    _owner: Any = None
+    _field: str | None = None
+
+    def _bind(self, owner: Any, field: str) -> LinkResultList:
+        self._owner = owner
+        self._field = field
+        return self
+
+    def _sync(self) -> None:
+        if self._owner is None or self._field is None:
+            return
+        target = type(self._owner).__link_fields__[self._field].target
+        self._owner._links[self._field] = [_to_ref(v, target) for v in self if v is not None]
+        # keep the cached read pointing at this very list
+        self._owner.__dict__[self._field] = self
+
+    def append(self, item: Any) -> None:
+        super().append(item)
+        self._sync()
+
+    def remove(self, item: Any) -> None:
+        super().remove(item)
+        self._sync()
+
+    def extend(self, iterable: Any) -> None:
+        super().extend(iterable)
+        self._sync()
 
     def __getitem__(self, index: Any) -> Any:
         if isinstance(index, str):
+            if index.startswith("@"):
+                # inline query form: links["@name=='Entity 2'"]
+                key, _, raw = index[1:].partition("==")
+                wanted = raw.strip().strip("'\"")
+                return LinkResultList(
+                    item for item in self if item is not None and getattr(item, key.strip(), None) == wanted
+                )
             for item in self:
                 if item is not None and getattr(item, "id", None) == index:
                     return item
@@ -292,12 +355,21 @@ def _batch_resolve(refs: list[Ref | None], target: Any) -> list[Any]:
     for group in groups.values():
         iris = [r.iri for r in group]
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
-        fetched = resolver.resolve_iris(iris)
+        # Go through resolve(), not resolve_iris(): it applies the backend's
+        # format (a JSON-LD store hands back expanded JSON-LD, which cannot be
+        # fed to the model directly) and dispatches on the document's type IRI,
+        # so a stored subclass resolves to the subclass.
+        try:
+            nodes = resolver.resolve(ResolveParam(iris=iris, model_cls=target)).nodes
+        except Exception:
+            # a backend that cannot answer for this model falls back to the
+            # raw documents, constructed against the declared target
+            fetched = resolver.resolve_iris(iris)
+            nodes = {
+                iri: (_construct(_resolve_cls(d, target), d) if d is not None else None) for iri, d in fetched.items()
+            }
         for r in group:
-            d = fetched.get(r.iri)
-            # dispatch on the document's type IRI so a stored subclass
-            # resolves to the subclass, not merely to the declared target
-            r._obj = _construct(_resolve_cls(d, target), d) if d is not None else None
+            r._obj = nodes.get(r.iri)
     return [None if r is None else r._obj for r in refs]
 
 
@@ -317,6 +389,30 @@ def _to_ref(value: Any, target: Any) -> Ref | None:
             raise ValueError(f"Cannot construct link from {value!r}: unknown target")
         return Ref(obj=_construct(cls, value), target=target)
     return Ref(obj=value, target=target)
+
+
+def _register_class(cls: type) -> None:
+    """Register a class under the type IRIs it introduces.
+
+    Mirrors the shipped metaclass: controllers are collected in a separate
+    table so they never shadow the data model they extend, and a data model may
+    only claim the IRIs it introduces itself - a subclass that merely narrows a
+    field reports its parent's IRI and would otherwise replace it.
+    """
+    from oold.model import _controller_types, _inherited_cls_iris
+
+    iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
+    if iri is None:
+        return
+    is_ctrl = any(b.__module__ == "oold.model" and b.__name__ == "BaseController" for b in cls.__mro__)
+    inherited = frozenset() if is_ctrl else _inherited_cls_iris(cls)
+    for value in iri if isinstance(iri, list) else [iri]:
+        if not isinstance(value, str):
+            continue
+        if is_ctrl:
+            _controller_types.setdefault(value, []).append(cls)
+        elif value not in inherited:
+            _TYPE_REGISTRY[value] = cls
 
 
 class _AutoLink:
@@ -373,7 +469,9 @@ class _AutoLink:
         stored = obj._links.get(self.name)
         target = self._target_cls(objtype or type(obj))
         if self.many:
-            result = LinkResultList(_batch_resolve(stored, target)) if stored else LinkResultList()
+            result = (LinkResultList(_batch_resolve(stored, target)) if stored else LinkResultList())._bind(
+                obj, self.name
+            )
         elif stored is None:
             result = None
         else:
@@ -442,7 +540,7 @@ class LinkList(_AutoLink, Generic[T]):
         return _AutoLink.__get__(self, obj, objtype)
 
 
-class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedQueryMeta):
+class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaClass):
     """Base model supporting both implicit and explicit link declarations."""
 
     model_config = ConfigDict(ignored_types=(Link, LinkList, _AutoLink))
@@ -453,8 +551,29 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedQueryMeta):
 
     @classmethod
     def oold_query(cls, item: Any) -> Any:
-        """Entry point for ``Model[...]``. Wired to a backend in production."""
-        return ("query", cls.__name__, item)
+        """Resolve ``Model[...]`` against every registered resolver.
+
+        A single IRI yields one instance, a list or a condition yields a list.
+        Resolvers that cannot answer a structured query are skipped.
+        """
+        node_list: list = []
+        for resolver in interface._resolvers.values():
+            try:
+                if isinstance(item, (str, list)):
+                    nodes = resolver.resolve(
+                        ResolveParam(
+                            iris=[item] if isinstance(item, str) else item,
+                            model_cls=cls,
+                        )
+                    ).nodes.values()
+                else:
+                    nodes = resolver.query(QueryParam(query=item, model_cls=cls)).nodes.values()
+                node_list.extend(nodes)
+            except NotImplementedError:
+                continue
+        if isinstance(item, str):
+            return node_list[0] if node_list else None
+        return LinkResultList(node_list) if node_list else None
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -481,16 +600,7 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedQueryMeta):
             setattr(cls, name, descr)
             links[name] = descr
         cls.__link_fields__ = links
-        # register by the 'type' field default so resolution can dispatch
-        type_field = cls.model_fields.get("type")
-        if type_field is not None:
-            default = type_field.default
-            if isinstance(default, str):
-                _TYPE_REGISTRY[default] = cls
-            elif isinstance(default, list):
-                for d in default:
-                    if isinstance(d, str):
-                        _TYPE_REGISTRY[d] = cls
+        _register_class(cls)
 
     def __init__(self, *args: Any, **data: Any) -> None:
         # The shipped model accepts another model as the first positional
@@ -541,3 +651,8 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedQueryMeta):
             else:
                 d.pop(name, None)
         return d
+
+
+# Downstream subclasses this metaclass by name, so the name is public API and
+# must stay bound to whatever metaclass LinkedBaseModel actually uses.
+LinkedQueryMeta = LinkedBaseModelMetaClass

@@ -31,6 +31,7 @@ in one backend call.
 
 from __future__ import annotations
 
+import os
 import types
 from collections import defaultdict
 from typing import (
@@ -60,6 +61,17 @@ from oold.model._compat import LinkedApiMixin
 from oold.model._ref import Ref, _construct
 
 T = TypeVar("T")
+
+
+def links_enabled() -> bool:
+    """Whether OO-LD link behaviour is active.
+
+    ``OOLD_LINKS=0`` turns it off: no descriptors are installed, nothing is
+    routed out of the payload, and serialisation is pydantic's own. Useful to
+    check whether a problem is OO-LD's or the model's, and to run a code base
+    as plain pydantic without editing it.
+    """
+    return os.environ.get("OOLD_LINKS", "1") != "0"
 
 
 class OoldExtraModel(BaseModel):
@@ -578,6 +590,13 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
+        if not links_enabled():
+            # Plain-pydantic mode: install nothing. Link fields keep the
+            # semantics their annotation already states - a nested model, not
+            # an IRI reference - so the class behaves exactly like a plain
+            # BaseModel without touching the declaration.
+            cls.__link_fields__ = {}
+            return
         links: dict[str, _AutoLink] = dict(getattr(cls, "__link_fields__", {}))
         # Explicit form: descriptors declared directly in the class body.
         for klass in reversed(cls.__mro__):

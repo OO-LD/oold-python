@@ -81,3 +81,51 @@ def test_downstream_metaclass_subclassing_survives_the_switch():
 def test_registry_identity_is_preserved_either_way():
     for enabled in (False, True):
         assert run(enabled=enabled)["REGISTRY_IS_TYPES"] == "True", enabled
+
+
+PLAIN = textwrap.dedent(
+    """
+    import warnings; warnings.filterwarnings("ignore")
+    from pydantic import Field
+    from oold.model import LinkedBaseModel
+
+    class T(LinkedBaseModel):
+        id: str
+        label: str | None = None
+
+    class M(LinkedBaseModel):
+        id: str
+        links: list[T] | None = Field(None, json_schema_extra={"range": "T"})
+
+    M.model_rebuild()
+    m = M(id="ex:m", links=[T(id="ex:t1", label="one")])
+    print("DUMP", m.model_dump(exclude_none=True)["links"])
+    print("DESCRIPTORS", bool(getattr(M, "__link_fields__", {})))
+    """
+)
+
+
+def run_plain(links: str) -> dict:
+    import os
+
+    env = dict(os.environ)
+    env["OOLD_DESCRIPTOR_BINDING"] = "1"
+    env["OOLD_LINKS"] = links
+    proc = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", PLAIN], capture_output=True, text=True, env=env
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return dict(line.split(" ", 1) for line in proc.stdout.strip().splitlines() if " " in line)
+
+
+def test_links_on_collapse_to_iris():
+    out = run_plain("1")
+    assert out["DUMP"] == "['ex:t1']"
+    assert out["DESCRIPTORS"] == "True"
+
+
+def test_links_off_is_plain_pydantic():
+    """OOLD_LINKS=0 turns a model back into plain pydantic, unedited."""
+    out = run_plain("0")
+    assert out["DUMP"] == "[{'id': 'ex:t1', 'label': 'one'}]"  # nested, not an IRI
+    assert out["DESCRIPTORS"] == "False"  # nothing installed

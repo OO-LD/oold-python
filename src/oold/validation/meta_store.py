@@ -34,7 +34,7 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 from .formats import OOLD_FORMAT_CHECKER
-from .resolve import SchemaResolutionError, default_cache_dir, http_get_json
+from .resolve import SchemaResolutionError, default_cache_dir, http_get_json_if_changed
 
 META_SCHEMA_FILE = "oold-meta-schema.json"
 #: The dialect body the wrapper `$ref`s, present from 1.0.0-rc.2 onward. Named here because a
@@ -475,31 +475,59 @@ def load_local(directory: Path | str) -> MetaBundle:
 # ---------------------------------------------------------------------------- remote
 
 
+def _read_stamp(target: Path) -> dict[str, Any]:
+    """The cache's own record of what it holds, or an empty one if it is missing or corrupt."""
+    stamp = target / "fetched.json"
+    if not stamp.is_file():
+        return {}
+    try:
+        record = json.loads(stamp.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return record if isinstance(record, dict) else {}
+
+
 def fetch_remote(force: bool = False, timeout: float = 10.0) -> Path:
-    """Fetch the unreleased ``main`` meta-schemas into the user cache and return its path."""
+    """Fetch or revalidate the unreleased ``main`` meta-schemas in the user cache.
+
+    ``remote`` names a moving target, so a cached copy is only meaningful against the commit it
+    came from. Every call revalidates it with a conditional request per file and rewrites the
+    ones that changed; ``force`` skips the conditional and refetches unconditionally.
+
+    Revalidation is what makes the source honest in both directions. Without it a cache can
+    fail a run against a keyword upstream has removed, and - the direction that costs more -
+    pass a run against a disagreement upstream has introduced.
+    """
     target = remote_cache_dir()
     stamp = target / "fetched.json"
     files = meta_files(REMOTE)
-    if not force and all((target / name).is_file() for name in files):
-        return target
-
     base = remote_base_url()
+    complete = all((target / name).is_file() for name in files)
+    etags: dict[str, str] = {} if force or not complete else _read_stamp(target).get("etags") or {}
+
     target.mkdir(parents=True, exist_ok=True)
-    for name in files:
-        document = http_get_json(base + name, timeout=timeout)
-        (target / name).write_text(json.dumps(document, indent=2), encoding="utf-8")
-    try:
-        catalog = http_get_json(base + RULES_FILE, timeout=timeout)
-        (target / RULES_FILE).write_text(json.dumps(catalog, indent=2), encoding="utf-8")
-    except SchemaResolutionError:
-        # Upstream has not published a catalog yet; the bundle is still complete without it.
-        (target / RULES_FILE).unlink(missing_ok=True)
+    fresh: dict[str, str] = {}
+    for name in (*files, RULES_FILE):
+        try:
+            document, etag = http_get_json_if_changed(base + name, etags.get(name), timeout=timeout)
+        except SchemaResolutionError:
+            if name != RULES_FILE:
+                raise
+            # Upstream has not published a catalog yet; the bundle is still complete without it.
+            (target / RULES_FILE).unlink(missing_ok=True)
+            continue
+        if document is not None:
+            (target / name).write_text(json.dumps(document, indent=2), encoding="utf-8")
+        if etag:
+            fresh[name] = etag
+
     stamp.write_text(
         json.dumps(
             {
                 "base_url": base,
                 "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "files": files,
+                "etags": fresh,
             },
             indent=2,
         ),
@@ -514,16 +542,24 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
     files = meta_files(REMOTE)
     cached = all((target / name).is_file() for name in files)
 
-    if not cached:
-        if offline:
+    # A cached copy is revalidated rather than trusted: `remote` tracks a branch, so age alone
+    # says nothing about whether it still matches. Where that cannot be done the origin says so,
+    # because an unverified copy and a confirmed one are different evidence for the same report.
+    unverified = ""
+    if offline:
+        if not cached:
             raise MetaSchemaError(
                 "refusing network fetch (offline): the remote meta-schemas are not cached. "
                 "Run `oold meta fetch` once while online, or select a tracked version."
             )
+        unverified = ", not revalidated: offline"
+    else:
         try:
             target = fetch_remote(timeout=timeout)
         except SchemaResolutionError as exc:
-            raise MetaSchemaError(f"could not fetch the remote meta-schemas: {exc}") from exc
+            if not cached:
+                raise MetaSchemaError(f"could not fetch the remote meta-schemas: {exc}") from exc
+            unverified = ", not revalidated: upstream unreachable"
 
     documents = _read_documents(target, "the remote meta-schemas", files)
     origin = str(target)
@@ -531,7 +567,8 @@ def load_remote(offline: bool = False, timeout: float = 10.0) -> MetaBundle:
     if stamp.is_file():
         # The stamp is provenance for the report, so a corrupt one must not fail the run.
         with contextlib.suppress(OSError, json.JSONDecodeError, KeyError):
-            origin = f"{target} (fetched {json.loads(stamp.read_text(encoding='utf-8'))['fetched']})"
+            checked = json.loads(stamp.read_text(encoding="utf-8"))["fetched"]
+            origin = f"{target} (checked {checked}{unverified})"
     catalog, catalog_error = _read_rules(target)
     rules, rules_error = _parse_rules(catalog, catalog_error)
     rules_schema, rules_schema_error = _read_rules_schema(target)

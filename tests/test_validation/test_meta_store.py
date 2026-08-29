@@ -405,20 +405,38 @@ def _remote_documents() -> dict:
     return documents
 
 
+class _FakeUpstream:
+    """A conditional-GET origin server, near enough: one etag per file, bumped by `revision`.
+
+    Upstream serves the meta-schemas but not (yet) the optional rule catalog; a missing file
+    surfaces as a resolution error, the same as a real 404.
+    """
+
+    def __init__(self, documents):
+        self.documents = documents
+        self.revision = 1
+        self.requests: list[tuple[str, str | None]] = []
+
+    def etag_for(self, name):
+        return f'"{name}-r{self.revision}"'
+
+    def __call__(self, uri, etag=None, timeout=10.0):
+        name = uri.rsplit("/", 1)[-1]
+        self.requests.append((name, etag))
+        if name not in self.documents:
+            raise SchemaResolutionError(f"could not fetch {uri}: 404")
+        current = self.etag_for(name)
+        if etag == current:
+            return None, current
+        return self.documents[name], current
+
+
 def test_remote_fetch_writes_only_to_the_cache(isolated_cache, monkeypatch, tmp_path):
     """A remote fetch must never touch the tracked version history."""
     documents = _remote_documents()
     before = {path: path.read_bytes() for path in meta_store.meta_dir().rglob("*.json")}
 
-    def fake_get(uri, timeout=10.0):
-        # Upstream serves the three meta-schemas but not (yet) the optional rule catalog;
-        # a missing file surfaces as a resolution error, the same as a real 404.
-        name = uri.rsplit("/", 1)[-1]
-        if name not in documents:
-            raise SchemaResolutionError(f"could not fetch {uri}: 404")
-        return documents[name]
-
-    monkeypatch.setattr(meta_store, "http_get_json", fake_get)
+    monkeypatch.setattr(meta_store, "http_get_json_if_changed", _FakeUpstream(documents))
     bundle = meta_store.load_remote(offline=False)
 
     assert bundle.version == "remote"
@@ -429,23 +447,55 @@ def test_remote_fetch_writes_only_to_the_cache(isolated_cache, monkeypatch, tmp_
 
 
 def test_cached_remote_is_usable_offline(isolated_cache, monkeypatch):
-    documents = _remote_documents()
-
-    def fake_get(uri, timeout=10.0):
-        name = uri.rsplit("/", 1)[-1]
-        if name not in documents:
-            raise SchemaResolutionError(f"could not fetch {uri}: 404")
-        return documents[name]
-
-    monkeypatch.setattr(meta_store, "http_get_json", fake_get)
+    monkeypatch.setattr(meta_store, "http_get_json_if_changed", _FakeUpstream(_remote_documents()))
     meta_store.fetch_remote()
     # Now offline: the cached copy must satisfy the request without any fetch.
     monkeypatch.setattr(
         meta_store,
-        "http_get_json",
+        "http_get_json_if_changed",
         lambda *a, **k: pytest.fail("offline mode fetched over the network"),
     )
     assert meta_store.load_remote(offline=True).version == "remote"
+
+
+def test_a_cached_remote_is_revalidated_rather_than_trusted(isolated_cache, monkeypatch):
+    """`remote` names a branch, so age says nothing about whether the copy still matches.
+
+    The silent direction is the expensive one: upstream moves, the cache does not, and a run
+    stays green against a disagreement that already exists.
+    """
+    documents = _remote_documents()
+    upstream = _FakeUpstream(documents)
+    monkeypatch.setattr(meta_store, "http_get_json_if_changed", upstream)
+    meta_store.fetch_remote()
+
+    # Upstream moves: same file name, new content, new etag.
+    documents[META_SCHEMA_FILE] = {**documents[META_SCHEMA_FILE], "title": "moved upstream"}
+    upstream.revision = 2
+    upstream.requests.clear()
+    meta_store.load_remote(offline=False)
+
+    cached = json.loads(Path(meta_store.remote_cache_dir(), META_SCHEMA_FILE).read_text("utf-8"))
+    assert cached["title"] == "moved upstream"
+    # Revalidation is conditional, not a blind refetch: the stored etag went back out.
+    sent = dict(upstream.requests)
+    assert sent[META_SCHEMA_FILE] == f'"{META_SCHEMA_FILE}-r1"'
+
+
+def test_an_unrevalidated_cache_says_so_in_its_origin(isolated_cache, monkeypatch):
+    """An unverified copy and a confirmed one are different evidence for the same report."""
+    monkeypatch.setattr(meta_store, "http_get_json_if_changed", _FakeUpstream(_remote_documents()))
+    assert "not revalidated" not in meta_store.load_remote(offline=False).origin
+
+    assert "not revalidated: offline" in meta_store.load_remote(offline=True).origin
+
+    def unreachable(*args, **kwargs):
+        raise SchemaResolutionError("could not fetch: network is down")
+
+    monkeypatch.setattr(meta_store, "http_get_json_if_changed", unreachable)
+    bundle = meta_store.load_remote(offline=False)
+    assert bundle.version == "remote", "an unreachable upstream must not lose a usable cache"
+    assert "not revalidated: upstream unreachable" in bundle.origin
 
 
 def test_a_directory_selector_loads_the_meta_schemas_in_it(tmp_path):

@@ -356,6 +356,42 @@ class Resolver:
         return result
 
 
+def http_get_json_if_changed(uri: str, etag: str | None = None, timeout: float = 10.0) -> tuple[Any | None, str | None]:
+    """Fetch JSON unless the caller's copy is still current, returning ``(document, etag)``.
+
+    A ``None`` document means the server answered 304: the caller's copy is byte-identical to
+    what the URL serves now, and the returned etag is the one it was validated with. Callers
+    that cache a moving target need this to tell "unchanged" from "not checked"; a stored
+    timestamp cannot, because it only records when the copy was taken.
+    """
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    if urlsplit(uri).scheme not in {"http", "https"}:
+        raise SchemaResolutionError(f"refusing to fetch a non-http(s) URL: {uri}")
+
+    headers = {"Accept": "application/json", "User-Agent": "oold-validation"}
+    if etag:
+        headers["If-None-Match"] = etag
+    request = Request(uri, headers=headers)  # noqa: S310 - scheme restricted above
+
+    try:
+        with urlopen(request, timeout=timeout) as response:  # noqa: S310
+            payload = response.read().decode("utf-8")
+            fresh = response.headers.get("ETag")
+    except HTTPError as exc:
+        if exc.code == 304:
+            return None, etag
+        raise SchemaResolutionError(f"could not fetch {uri}: {exc}") from exc
+    except (URLError, OSError) as exc:
+        raise SchemaResolutionError(f"could not fetch {uri}: {exc}") from exc
+
+    try:
+        return json.loads(payload), fresh
+    except json.JSONDecodeError as exc:
+        raise SchemaResolutionError(f"{uri} did not return valid JSON: {exc}") from exc
+
+
 def http_get_json(uri: str, timeout: float = 10.0) -> Any:
     """Fetch JSON over HTTP using the standard library, so no HTTP client is a dependency."""
     from urllib.error import URLError

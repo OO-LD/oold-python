@@ -51,6 +51,85 @@ def test_non_http_urls_are_refused_before_being_opened():
         http_get_json("file:///etc/passwd")
 
 
+class _FakeResponse:
+    """The slice of `urlopen`'s context manager that `http_get_json_if_changed` reads."""
+
+    def __init__(self, payload, etag=None):
+        self._payload = payload.encode("utf-8")
+        self.headers = {"ETag": etag} if etag else {}
+
+    def read(self):
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _patch_urlopen(monkeypatch, handler):
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "urlopen", handler)
+
+
+def test_a_conditional_fetch_sends_the_caller_etag_and_returns_the_new_one(monkeypatch):
+    from oold.validation.resolve import http_get_json_if_changed
+
+    seen = {}
+
+    def handler(request, timeout=None):
+        seen["if_none_match"] = request.get_header("If-none-match")
+        return _FakeResponse('{"title": "fresh"}', '"v2"')
+
+    _patch_urlopen(monkeypatch, handler)
+    document, etag = http_get_json_if_changed("https://example.org/a.json", '"v1"')
+
+    assert document == {"title": "fresh"}
+    assert etag == '"v2"'
+    assert seen["if_none_match"] == '"v1"'
+
+
+def test_a_304_answers_with_no_document_so_unchanged_differs_from_unchecked(monkeypatch):
+    from urllib.error import HTTPError
+
+    from oold.validation.resolve import http_get_json_if_changed
+
+    def handler(request, timeout=None):
+        raise HTTPError(request.full_url, 304, "Not Modified", {}, None)
+
+    _patch_urlopen(monkeypatch, handler)
+    assert http_get_json_if_changed("https://example.org/a.json", '"v1"') == (None, '"v1"')
+
+
+def test_a_conditional_fetch_reports_transport_and_payload_failures(monkeypatch):
+    from urllib.error import HTTPError, URLError
+
+    from oold.validation.resolve import http_get_json_if_changed
+
+    with pytest.raises(SchemaResolutionError, match="non-http"):
+        http_get_json_if_changed("file:///etc/passwd")
+
+    def not_found(request, timeout=None):
+        raise HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+    _patch_urlopen(monkeypatch, not_found)
+    with pytest.raises(SchemaResolutionError, match="could not fetch"):
+        http_get_json_if_changed("https://example.org/a.json")
+
+    def offline(request, timeout=None):
+        raise URLError("network is down")
+
+    _patch_urlopen(monkeypatch, offline)
+    with pytest.raises(SchemaResolutionError, match="could not fetch"):
+        http_get_json_if_changed("https://example.org/a.json")
+
+    _patch_urlopen(monkeypatch, lambda request, timeout=None: _FakeResponse("not json"))
+    with pytest.raises(SchemaResolutionError, match="did not return valid JSON"):
+        http_get_json_if_changed("https://example.org/a.json")
+
+
 def test_file_uris_round_trip_through_uri_to_path(tmp_path, data_dir):
     """Every file URI this package handles comes from `Path.as_uri()`, so both must agree.
 

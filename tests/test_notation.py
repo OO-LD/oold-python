@@ -163,3 +163,29 @@ def test_round_trip_list_of_links(store):
     assert [x.id for x in restored.knows] == ["ex:p2"]
     assert [x.id for x in restored.friends] == ["ex:p2"]
     assert isinstance(restored.knows[0], Person)
+
+
+def test_equality_is_independent_of_resolution(store):
+    """Reading a link caches it in __dict__; that must not change equality."""
+    a = Person(id="ex:p1", knows=["ex:p2"])
+    b = Person(id="ex:p1", knows=["ex:p2"])
+    _ = a.knows  # resolve on one side only
+    assert a == b
+    assert Person(id="ex:p1", knows=["ex:p2"]) != Person(id="ex:p1")
+    assert Person(id="ex:p1") != Person(id="ex:other")
+
+
+def test_unset_and_explicit_empty_are_distinct(store):
+    """Unset contributes nothing; an explicit [] is a statement and round-trips."""
+    unset = Person(id="ex:u").model_dump(exclude_none=True)
+    empty = Person(id="ex:e", knows=[]).model_dump(exclude_none=True)
+    assert "knows" not in unset
+    assert empty["knows"] == []
+    assert Person(**empty).model_dump(exclude_none=True)["knows"] == []
+
+
+def test_unset_to_many_reads_as_empty_list(store):
+    """A non-Optional list annotation must not hand back None."""
+    p = Person(id="ex:u")
+    assert p.knows == []
+    assert p.employer is None  # to-one keeps None, and keeps "| None"

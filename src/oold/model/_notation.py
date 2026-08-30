@@ -252,6 +252,29 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
             return [one(v) for v in value]
         return one(value)
 
+    def __eq__(self, other: Any) -> bool:
+        """Compare by data, not by what happens to be cached.
+
+        Resolving a link stores the resolved object in ``__dict__`` (that is
+        what makes warm reads native-speed), and pydantic's ``__eq__`` compares
+        ``__dict__`` - so reading a link would otherwise change the result of a
+        comparison. Links are compared by their stored references instead, and
+        the remaining fields the normal way.
+        """
+        if other.__class__ is not self.__class__:
+            return NotImplemented
+        links = type(self).__link_fields__
+        if links:
+            mine = {k: v for k, v in self.__dict__.items() if k not in links}
+            theirs = {k: v for k, v in other.__dict__.items() if k not in links}
+            if mine != theirs:
+                return False
+            return all(links[name].iris(self) == links[name].iris(other) for name in links)
+        return self.__dict__ == other.__dict__
+
+    def __hash__(self) -> int:
+        return id(self)
+
     def __setattr__(self, name: str, value: Any) -> None:
         descr = type(self).__link_fields__.get(name)
         if descr is not None:
@@ -292,10 +315,9 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
             # text. JSON-LD spells the unambiguous form {"@id": ...}.
             boxed = bool(literals.get(name))
             emitted = _emit(stored, boxed)
-            # An unset link contributes nothing: omit it rather than emitting a
-            # null or an empty array. The attribute still reads as [] for a
-            # to-many link; that is an in-memory convenience, not payload.
-            if emitted in (None, []):
+            # An explicit empty list is kept - it round-trips as [] and is not
+            # the same statement as "unset", which is dropped above.
+            if emitted is None:
                 d.pop(name, None)
             else:
                 d[name] = emitted

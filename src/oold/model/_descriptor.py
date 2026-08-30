@@ -645,6 +645,29 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
 
+    def __eq__(self, other: Any) -> bool:
+        """Compare by data, not by what happens to be cached.
+
+        Resolving a link stores the resolved object in ``__dict__`` (that is
+        what makes warm reads native-speed), and pydantic's ``__eq__`` compares
+        ``__dict__`` - so reading a link would otherwise change the result of a
+        comparison. Links are compared by their stored references instead, and
+        the remaining fields the normal way.
+        """
+        if other.__class__ is not self.__class__:
+            return NotImplemented
+        links = type(self).__link_fields__
+        if links:
+            mine = {k: v for k, v in self.__dict__.items() if k not in links}
+            theirs = {k: v for k, v in other.__dict__.items() if k not in links}
+            if mine != theirs:
+                return False
+            return all(links[name].iris(self) == links[name].iris(other) for name in links)
+        return self.__dict__ == other.__dict__
+
+    def __hash__(self) -> int:
+        return id(self)
+
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "__iris__":
             # a property with a setter on the mixin - pydantic would otherwise

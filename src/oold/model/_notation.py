@@ -223,6 +223,14 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
         lits = type(self).__link_literals__
         link_data = {k: data.pop(k) for k in list(data) if k in lf}
         super().__init__(**data)
+        # Pydantic writes each field's default into __dict__, and an entry there
+        # shadows a non-data descriptor - so an unset link would keep returning
+        # that default (None) and never reach __get__. Dropping the entries hands
+        # unset links back to the descriptor, which answers [] for to-many and
+        # None for to-one. A union field keeps its literal value, set below.
+        for _name in lf:
+            if _name not in link_data or not lits.get(_name):
+                self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             # union arms: a bare string stays a literal when the field also
             # declares a literal arm; a reference then arrives as {"@id": ...}
@@ -266,20 +274,28 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
     def _serialize_links(self, handler: Any) -> dict[str, Any]:
         d = handler(self)
         literals = type(self).__link_literals__
-        for name, descr in type(self).__link_fields__.items():
+        for name in type(self).__link_fields__:
             stored = self._links.get(name)
             if stored is None and name not in self._links:
-                # never set as a link: a literal arm may have taken the value,
-                # in which case the plain pydantic field already serialised it
+                # Never set as a link. A literal arm may have taken the value,
+                # in which case the plain field already serialised it; keep it.
+                # Otherwise the field is unset and contributes nothing - drop
+                # the [] the descriptor hands back so it stays out of payloads.
+                # handler() has already read the descriptor, which caches its
+                # [] into __dict__, so test the emitted value rather than the
+                # instance: a literal arm leaves a real value here.
+                if d.get(name) in (None, [], {}):
+                    d.pop(name, None)
                 continue
             # A field that also accepts a literal cannot emit a reference as a
             # bare IRI: on re-read the string would be indistinguishable from
             # text. JSON-LD spells the unambiguous form {"@id": ...}.
             boxed = bool(literals.get(name))
             emitted = _emit(stored, boxed)
-            if emitted is None and descr.many:
-                emitted = []
-            if emitted in (None, []) and not descr.many:
+            # An unset link contributes nothing: omit it rather than emitting a
+            # null or an empty array. The attribute still reads as [] for a
+            # to-many link; that is an in-memory convenience, not payload.
+            if emitted in (None, []):
                 d.pop(name, None)
             else:
                 d[name] = emitted

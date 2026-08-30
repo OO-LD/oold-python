@@ -634,6 +634,14 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         link_fields = type(self).__link_fields__
         link_data = {k: data.pop(k) for k in list(data) if k in link_fields}
         super().__init__(**data)
+        # Pydantic writes each field's default into __dict__, and an entry there
+        # shadows a non-data descriptor - so an unset link would keep returning
+        # that default (None) and never reach __get__. Dropping the entries hands
+        # unset links back to the descriptor, which answers [] for to-many and
+        # None for to-one. That is what makes a non-Optional list annotation
+        # truthful rather than a lie about a value that is really None.
+        for _name in link_fields:
+            self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
 

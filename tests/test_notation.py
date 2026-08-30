@@ -35,10 +35,10 @@ class Person(OoldModel):
     name: str | None = None
     type: str | None = "ex:NPerson"
     # target inferred from the annotation, no range= needed
-    knows: list["Person"] | None = OoldField()
+    knows: list["Person"] = OoldField()
     # Link[T] inside the annotation
     employer: Link[Org] | None = Field(default=None)
-    friends: list[Link["Person"]] | None = OoldField()
+    friends: list[Link["Person"]] = OoldField()
     # union: literal text | inline object | reference
     location: str | Location | None = OoldField(link=True)
 

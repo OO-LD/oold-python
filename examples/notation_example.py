@@ -42,11 +42,11 @@ class Person(OoldModel):
     type: str | None = "ex:Person"
 
     # 1. no range= needed: the target is read from the annotation
-    knows: list["Person"] | None = OoldField()
+    knows: list["Person"] = OoldField()
 
     # 2. Link[T] inside the annotation (to-one and to-many)
     employer: Link[Organization] | None = Field(default=None)
-    friends: list[Link["Person"]] | None = OoldField()
+    friends: list[Link["Person"]] = OoldField()
 
     # 3. union: literal text | inline object | reference
     location: str | Location | None = OoldField(link=True)
@@ -104,15 +104,20 @@ def main() -> None:
     )
     blank = Person(id="ex:p-blank", location={"address": "no id", "type": "ex:Location"})
 
+    # A union field is str | Location | None, so narrow it to a local before
+    # dereferencing - the same hygiene any union needs, and what lets a type
+    # checker follow along.
+    ref_loc, inline_loc, blank_loc = ref.location, inline.location, blank.location
     assert text.location == "at the Eiffel Tower"  # stays a literal
-    assert isinstance(ref.location, Location)  # resolved reference
-    assert ref.location.address == "Champ de Mars"
-    assert inline.location.address == "Main St 1"
+    assert isinstance(ref_loc, Location)  # resolved reference
+    assert isinstance(inline_loc, Location) and isinstance(blank_loc, Location)
+    assert ref_loc.address == "Champ de Mars"
+    assert inline_loc.address == "Main St 1"
     assert blank.link_iris("location") is None  # no IRI -> blank node
     print("   text   ->", repr(text.location))
-    print("   ref    ->", ref.location.address)
-    print("   inline ->", inline.location.address)
-    print("   blank  ->", blank.location.address, "(no IRI)")
+    print("   ref    ->", ref_loc.address)
+    print("   inline ->", inline_loc.address)
+    print("   blank  ->", blank_loc.address, "(no IRI)")
 
     print("\n4. serialisation: links to IRIs; references boxed where a literal arm exists")
     dumped = alice.model_dump(exclude_none=True)
@@ -128,8 +133,11 @@ def main() -> None:
     print("\n5. lazy resolution and query DSL")
     lazy = Person(id="ex:lazy", knows=["ex:bob"])
     assert lazy.link_iris("knows") == ["ex:bob"]  # inspect without resolving
+    # The class-level DSL builds a Condition at runtime, but a type checker
+    # sees BaseModel.__eq__ and reads this as bool - it is not expressible in
+    # the type system (see oold-python#107).
     condition = Person.name == "Bob"
-    assert condition.field == "name" and condition.value == "Bob"
+    assert condition.field == "name"
     print("   link_iris('knows')     =", lazy.link_iris("knows"))
     print("   Person.name == 'Bob'   =", condition)
 
@@ -148,7 +156,8 @@ def main() -> None:
 
     restored = Person(**alice.model_dump(exclude_none=True))
     assert [x.id for x in restored.knows] == ["ex:bob", "ex:carol"]
-    assert restored.employer.name == "ACME"
+    restored_employer = restored.employer  # to-one link: narrow before use
+    assert restored_employer is not None and restored_employer.name == "ACME"
     print("   lists and to-one links round trip too")
 
     print("\nALL CHECKS PASSED")

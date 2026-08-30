@@ -1,18 +1,21 @@
-"""Opt-in parity tests against a real oold-schema checkout.
+"""Opt-in parity tests against a real oold-schema corpus and the oold-js reference.
 
-These are the tests that catch drift from the reference implementation. They are skipped unless
-``OOLD_SCHEMA_DIR`` points at a local checkout::
+These are the tests that catch drift from the reference implementation. Two checkouts are
+needed, because the corpus and the reference are separate repositories::
 
-    OOLD_SCHEMA_DIR=../oold-schema uv run pytest tests/test_validation -q
+    OOLD_SCHEMA_DIR=../oold-schema OOLD_JS_DIR=../oold-js uv run pytest tests/test_validation -q
 
-The committed fixture slice is a snapshot and cannot notice upstream changes; this can. CI does
-not depend on it, so the suite stays self-contained by default.
+``OOLD_SCHEMA_DIR`` alone still runs the checks that need only the corpus; the ones that compare
+verdicts skip without ``OOLD_JS_DIR``. The committed fixture slice is a snapshot and cannot
+notice upstream changes; this can. CI pins the reference by tag, so a change there is adopted
+deliberately rather than arriving with the next push.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +31,42 @@ def upstream(upstream_dir):
     if not (upstream_dir / "examples").is_dir():
         pytest.skip(f"{upstream_dir} does not look like an oold-schema checkout")
     return upstream_dir
+
+
+@pytest.fixture
+def reference(upstream, reference_dir):
+    """Run the oold-js validator over a directory, against the same meta-schemas this port uses.
+
+    `--meta` points at the corpus checkout rather than anything `oold-js` ships: the reference
+    vendors no meta-schemas, so both implementations read the one file set and a disagreement
+    can only come from the code.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+    if reference_dir is None:
+        pytest.skip("set OOLD_JS_DIR to a local oold-js checkout to compare verdicts")
+    script = reference_dir / "src" / "validate.mjs"
+    if not script.is_file() or not (reference_dir / "node_modules").is_dir():
+        pytest.skip("the reference harness is not installed (run npm install in oold-js)")
+
+    def run(target: Path) -> subprocess.CompletedProcess:
+        # S603: a fixed script inside a checkout the developer pointed us at.
+        return subprocess.run(  # noqa: S603
+            [
+                node,
+                str(script),
+                str(Path(target).resolve()),
+                "--meta",
+                str((upstream / "meta").resolve()),
+            ],
+            cwd=str(reference_dir),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+
+    return run
 
 
 def _options(upstream_dir):
@@ -56,27 +95,13 @@ def test_vocabulary_coverage_matches_upstream(upstream):
     assert coverage and all(c.status == "ok" for c in coverage), [c.message for c in coverage]
 
 
-def test_verdict_agrees_with_the_reference_harness(upstream):
-    """Run `node scripts/validate.mjs` and require the same overall verdict.
+def test_verdict_agrees_with_the_reference_harness(upstream, reference):
+    """Run the oold-js validator and require the same overall verdict.
 
     Check *counts* legitimately differ: this port splits some of the reference's combined
     sections and adds `context.predicates`. The verdict must not.
     """
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is not available")
-    script = upstream / "scripts" / "validate.mjs"
-    if not script.is_file() or not (upstream / "node_modules").is_dir():
-        pytest.skip("the reference harness is not installed (run npm install in oold-schema)")
-
-    # S603: a fixed script inside a checkout the developer pointed us at.
-    completed = subprocess.run(  # noqa: S603
-        [node, str(script)],
-        cwd=str(upstream),
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
+    completed = reference(upstream / "examples")
     reference_passed = completed.returncode == 0
 
     ours = validate_directory(upstream / "examples", _options(upstream))
@@ -90,26 +115,12 @@ def test_verdict_agrees_with_the_reference_harness(upstream):
     )
 
 
-def test_the_reference_cannot_resolve_a_context_leaving_the_directory(upstream, remote_context_dir):
+def test_the_reference_cannot_resolve_a_context_leaving_the_directory(reference, remote_context_dir):
     """Documents the one capability this port adds, by demonstrating the difference.
 
-    If upstream ever gains this ability, the divergence note in the docs is stale.
+    If the reference ever gains this ability, the divergence note in the docs is stale.
     """
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is not available")
-    script = upstream / "scripts" / "validate.mjs"
-    if not script.is_file() or not (upstream / "node_modules").is_dir():
-        pytest.skip("the reference harness is not installed")
-
-    # S603: a fixed script inside a checkout the developer pointed us at.
-    completed = subprocess.run(  # noqa: S603
-        [node, str(script), str(remote_context_dir.resolve())],
-        cwd=str(upstream),
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
+    completed = reference(remote_context_dir)
     ours = validate_directory(remote_context_dir, Options(meta=("remote",), offline=False))
 
     assert ours.passed, "this port is expected to resolve a ../ context reference"

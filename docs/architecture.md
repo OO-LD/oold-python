@@ -109,10 +109,8 @@ Backends are registered per IRI prefix via `set_resolver` / `set_backend`, so mu
 ### Validation Layer (optional)
 
 `oold.validation` checks that a schema is well formed and that its `@context` actually carries
-every declared property into RDF. It is a native port of the reference harness in
-[oold-schema](https://github.com/OO-LD/oold-schema)'s
-[`scripts/validate.mjs`](https://github.com/OO-LD/oold-schema/blob/v1.0.0-rc.2/scripts/validate.mjs)
-(pinned at `v1.0.0-rc.2`, since upstream intends to replace that script with this implementation),
+every declared property into RDF. It is a native port of the reference harness
+[oold-js](https://github.com/OO-LD/oold-js) (pinned at [`v0.1.0`](https://github.com/OO-LD/oold-js/tree/v0.1.0)),
 and reuses `pyld` from the serialization layer, so the JSON-LD half of it adds no dependencies.
 
 One pipeline backs three surfaces - the library API, the `oold validate` CLI, and an MCP server -

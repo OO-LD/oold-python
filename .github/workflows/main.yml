@@ -72,23 +72,25 @@ jobs:
         run: make validate
 
       - name: Check parity against the reference harness
+        env:
+          # The reference is pinned, so a change to it is adopted by editing this line rather
+          # than arriving with the next push. The corpus is not: it tracks oold-schema's main,
+          # which is what lets this notice a specification change the fixture snapshot cannot.
+          OOLD_JS_REF: v0.1.0
         run: |
-          # oold-schema owns the reference implementation. Comparing against its current main
-          # catches drift that the committed fixture snapshot cannot see.
+          # Two repositories: oold-schema owns the corpus and the meta-schemas, oold-js owns the
+          # reference implementation. Comparing against the corpus's current main catches drift
+          # that the committed fixture snapshot cannot see.
           #
-          # This gates, as of oold-schema switching its own CI to this validator. Until then the
-          # reference was still what checked that repository, so parity was informative and a
-          # disagreement had a second opinion behind it. Now nothing else validates the
-          # specification's own examples, which makes agreement between the two implementations
-          # the evidence the switch rests on - and evidence that cannot fail is not evidence.
-          #
-          # It stays valuable after the migration rather than becoming scaffolding: validate.mjs
-          # is being extracted to oold-js, so this becomes a standing cross-implementation
-          # conformance check, which is what catches an ambiguity in the specification rather
-          # than a bug in one port.
+          # This gates. Nothing else validates the specification's own examples since oold-schema
+          # switched its CI to this validator, which makes agreement between the two
+          # implementations the evidence that switch rests on - and evidence that cannot fail is
+          # not evidence. It is a standing cross-implementation conformance check, which is what
+          # catches an ambiguity in the specification rather than a bug in one port.
           git clone --depth 1 https://github.com/OO-LD/oold-schema.git /tmp/oold-schema
-          npm --prefix /tmp/oold-schema install --no-audit --no-fund
-          OOLD_SCHEMA_DIR=/tmp/oold-schema uv run python -m pytest \
+          git clone --depth 1 --branch "$OOLD_JS_REF" https://github.com/OO-LD/oold-js.git /tmp/oold-js
+          npm --prefix /tmp/oold-js ci --no-audit --no-fund
+          OOLD_SCHEMA_DIR=/tmp/oold-schema OOLD_JS_DIR=/tmp/oold-js uv run python -m pytest \
             tests/test_validation/test_parity_live.py -v --no-cov
 
   check-docs:

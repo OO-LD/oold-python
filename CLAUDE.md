@@ -11,10 +11,10 @@ make test       # pytest with coverage
 make validate   # run the validator over the committed fixtures
 make docs-test  # strict docs build, fails on any warning
 
-OOLD_SCHEMA_DIR=../oold-schema uv run pytest -m parity   # compare against oold-schema's own validator
+OOLD_SCHEMA_DIR=../oold-schema OOLD_JS_DIR=../oold-js uv run pytest -m parity   # compare against the reference
 ```
 
-The parity tests skip silently without `OOLD_SCHEMA_DIR`, so a green `make test` does not mean
+The parity tests skip silently without those variables, so a green `make test` does not mean
 parity holds. Run them explicitly when touching `src/oold/validation/`.
 
 ## Where the details live

@@ -2,7 +2,7 @@
 
 `oold` can check that an OO-LD schema is well formed and that an instance document conforms to
 the schema it names. It is a native Python port of the reference harness in
-[oold-schema](https://github.com/OO-LD/oold-schema) (`scripts/validate.mjs`), so the two agree on
+[oold-js](https://github.com/OO-LD/oold-js), so the two agree on
 verdicts, and it is available three ways: as a library, as a CLI, and as an MCP server.
 
 Install the extra:
@@ -240,9 +240,8 @@ Transport is stdio. Tools: `validate_oold_schema`, `validate_oold_instance`,
 ## Differences from the reference harness
 
 The two are intended to agree on verdicts. Where they differ, it is deliberate. The comparison is
-pinned to [`scripts/validate.mjs` at `v1.0.0-rc.2`](https://github.com/OO-LD/oold-schema/blob/v1.0.0-rc.2/scripts/validate.mjs),
-a tag rather than a moving path, because upstream intends to replace that script with this
-implementation:
+pinned to [oold-js `v0.1.0`](https://github.com/OO-LD/oold-js/tree/v0.1.0), a tag rather than a
+moving branch, so a change to the reference is adopted deliberately:
 
 | Difference | Why |
 |---|---|
@@ -261,15 +260,16 @@ checkout.
 ## Testing against the upstream repository
 
 ```bash
-OOLD_SCHEMA_DIR=../oold-schema uv run pytest tests/test_validation -q
+OOLD_SCHEMA_DIR=../oold-schema OOLD_JS_DIR=../oold-js uv run pytest tests/test_validation -q
 ```
 
-Without that variable the parity tests skip and the suite stays self-contained. With it, the full
-validator runs over oold-schema's own `examples/` and `examples/compliance/`, and the overall
-verdict is compared against `node scripts/validate.mjs`.
+Without those variables the parity tests skip and the suite stays self-contained. With them, the
+full validator runs over oold-schema's own `examples/` and `examples/compliance/`, and the overall
+verdict is compared against the oold-js reference run over the same corpus and the same
+meta-schemas.
 
 The `format` assertions are pinned separately: `tests/data/format_parity.json` holds 98 outcomes
 captured from ajv as the reference configures it (`ajv-formats` in *full* mode, plus the
-`iri`/`iri-reference` override `validate.mjs` applies), and the suite asserts Python agrees on
+`iri`/`iri-reference` override the reference applies), and the suite asserts Python agrees on
 every one. Two are easy to get wrong: in full mode `time` requires an offset and `email` requires
 a dotted domain.

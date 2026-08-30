@@ -93,3 +93,18 @@ def upstream_dir() -> Path | None:
         return None
     path = Path(raw)
     return path if path.is_dir() else None
+
+
+@pytest.fixture
+def reference_dir() -> Path | None:
+    """A local oold-js checkout, when OOLD_JS_DIR points at one.
+
+    Separate from :func:`upstream_dir` because the corpus and the implementation that checks it
+    now live in different repositories: parity compares this package against `oold-js` over
+    `oold-schema`'s examples, so a run needs both and can have either without the other.
+    """
+    raw = os.environ.get("OOLD_JS_DIR")
+    if not raw:
+        return None
+    path = Path(raw)
+    return path if path.is_dir() else None

@@ -304,8 +304,10 @@ class LinkResultList(list[Any]):
     def _sync(self) -> None:
         if self._owner is None or self._field is None:
             return
-        target = type(self._owner).__link_fields__[self._field].target
-        self._owner._links[self._field] = [_to_ref(v, target) for v in self if v is not None]
+        # delegate to the descriptor so the reference coercion is the one that
+        # belongs to this pydantic version, not a hard-coded v2 helper
+        descr = type(self._owner).__link_fields__[self._field]
+        descr.set_value(self._owner, [v for v in self if v is not None])
         # keep the cached read pointing at this very list
         self._owner.__dict__[self._field] = self
 

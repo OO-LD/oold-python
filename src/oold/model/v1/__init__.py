@@ -875,5 +875,6 @@ from oold.model import BaseController  # noqa: E402, F401
 if os.environ.get("OOLD_DESCRIPTOR_BINDING") == "1":  # pragma: no cover
     from oold.model.v1 import _descriptor as _descriptor_module
 
+    _descriptor_module.use_type_registry(_types, _controller_types)
     LinkedBaseModel = _descriptor_module.AutoLinkedModelV1
     LinkedBaseModelMetaClass = _descriptor_module.LinkedBaseModelMetaClass

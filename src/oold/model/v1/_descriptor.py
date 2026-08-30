@@ -25,7 +25,6 @@ from pydantic.v1.fields import SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE
 from pydantic.v1.main import ModelMetaclass
 
 from oold.model._descriptor import (
-    _TYPE_REGISTRY,
     Condition,
     FieldProxy,
     LinkResultList,
@@ -33,8 +32,57 @@ from oold.model._descriptor import (
     _resolve_cls,
 )
 from oold.model._ref import Ref, _construct
+from oold.static import GenericLinkedBaseModel
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
+
+_TYPE_REGISTRY: dict[str, type] = {}
+"""Type IRI -> model class.
+
+Kept separate from the v2 registry: the two live in different pydantic worlds,
+and a v2 class handed to v1 deserialisation would fail to validate.
+"""
+
+_CONTROLLER_REGISTRY: dict[str, list] = {}
+
+
+def use_type_registry(registry: dict, controllers: dict | None = None) -> None:
+    """Write registrations into ``registry`` instead of the module-local one.
+
+    Downstream code imports ``oold.model.v1._types`` and writes to it directly,
+    so the binding has to share that very mapping rather than keep its own -
+    otherwise resolution silently falls back to the declared target.
+    """
+    global _TYPE_REGISTRY, _CONTROLLER_REGISTRY
+    registry.update(_TYPE_REGISTRY)
+    _TYPE_REGISTRY = registry
+    if controllers is not None:
+        controllers.update(_CONTROLLER_REGISTRY)
+        _CONTROLLER_REGISTRY = controllers
+
+
+def _register_class_v1(cls: type) -> None:
+    """Register a class under the type IRIs it introduces.
+
+    Mirrors the shipped v1 metaclass: controllers are collected separately so
+    they never shadow the data model they extend, and a class may only claim the
+    IRIs it introduces itself - a subclass that merely narrows a field reports
+    its parent's IRI and would otherwise replace it.
+    """
+    from oold.model import _inherited_cls_iris
+
+    iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
+    if iri is None:
+        return
+    is_ctrl = any(b.__name__ == "BaseController" for b in cls.__mro__)
+    inherited = frozenset() if is_ctrl else _inherited_cls_iris(cls)
+    for value in iri if isinstance(iri, list) else [iri]:
+        if not isinstance(value, str):
+            continue
+        if is_ctrl:
+            _CONTROLLER_REGISTRY.setdefault(value, []).append(cls)
+        elif value not in inherited:
+            _TYPE_REGISTRY[value] = cls
 
 
 def _to_ref_v1(value: Any, target: Any) -> Ref | None:
@@ -67,7 +115,9 @@ class _AutoLinkV1:
             return self
         stored = obj._links.get(self.name)
         if self.many:
-            result = LinkResultList(_batch_resolve(stored, self.target)) if stored else LinkResultList()
+            result = (LinkResultList(_batch_resolve(stored, self.target)) if stored else LinkResultList())._bind(
+                obj, self.name
+            )
         elif stored is None:
             result = None
         else:
@@ -101,7 +151,11 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
     """Installs link descriptors and provides the class-level query DSL."""
 
     def __new__(mcs, name, bases, namespace, **kwargs):
-        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        LinkedBaseModelMetaClass._constructing = True
+        try:
+            cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        finally:
+            LinkedBaseModelMetaClass._constructing = False
         links: dict[str, _AutoLinkV1] = {}
         for base in reversed(cls.__mro__):
             links.update(getattr(base, "__link_fields__", {}) or {})
@@ -115,15 +169,21 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
             setattr(cls, fname, descr)
             links[fname] = descr
         cls.__link_fields__ = links
-        type_field = getattr(cls, "__fields__", {}).get("type")
-        if type_field is not None:
-            default = type_field.default
-            for d in default if isinstance(default, list) else [default]:
-                if isinstance(d, str):
-                    _TYPE_REGISTRY[d] = cls
+        _register_class_v1(cls)
         return cls
 
+    _constructing: bool = False
+    """Set while a class is being built.
+
+    pydantic v1 calls ``hasattr(base, field_name)`` to reject fields that shadow
+    a BaseModel attribute. Field names are exactly what ``__getattr__`` answers
+    with a FieldProxy, so without this guard every model declaring ``type``
+    fails to build. Same reason the v2 metaclass carries the flag.
+    """
+
     def __getattr__(cls, name: str) -> Any:
+        if LinkedBaseModelMetaClass._constructing:
+            raise AttributeError(name)
         if name.startswith("_"):
             raise AttributeError(name)
         for klass in cls.__mro__:
@@ -136,7 +196,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         return cls.oold_query(item)
 
 
-class AutoLinkedModelV1(BaseModel, metaclass=LinkedBaseModelMetaClass):
+class AutoLinkedModelV1(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass):
     """pydantic v1 base with the descriptor binding and the downstream API."""
 
     _links: dict = PrivateAttr(default_factory=dict)
@@ -147,7 +207,28 @@ class AutoLinkedModelV1(BaseModel, metaclass=LinkedBaseModelMetaClass):
 
     @classmethod
     def oold_query(cls, item: Any) -> Any:
-        return ("query", cls.__name__, item)
+        """Resolve ``Model[...]`` against every registered resolver."""
+        from oold.backend import interface
+        from oold.backend.interface import QueryParam, ResolveParam
+
+        node_list: list = []
+        for resolver in interface._resolvers.values():
+            try:
+                if isinstance(item, (str, list)):
+                    nodes = resolver.resolve(
+                        ResolveParam(
+                            iris=[item] if isinstance(item, str) else item,
+                            model_cls=cls,
+                        )
+                    ).nodes.values()
+                else:
+                    nodes = resolver.query(QueryParam(query=item, model_cls=cls)).nodes.values()
+                node_list.extend(nodes)
+            except NotImplementedError:
+                continue
+        if isinstance(item, str):
+            return node_list[0] if node_list else None
+        return LinkResultList(node_list) if node_list else None
 
     def __init__(self, *args: Any, **data: Any) -> None:
         if args and isinstance(args[0], BaseModel):
@@ -277,7 +358,7 @@ class AutoLinkedModelV1(BaseModel, metaclass=LinkedBaseModelMetaClass):
     def from_json(cls, data: dict[str, Any]) -> Any:
         from oold.static import import_json
 
-        return import_json(BaseModel, cls, cls, data, _TYPE_REGISTRY)
+        return import_json(BaseModel, AutoLinkedModelV1, cls, data, _TYPE_REGISTRY)
 
     def to_jsonld(self) -> dict[str, Any]:
         from oold.static import export_jsonld
@@ -288,7 +369,13 @@ class AutoLinkedModelV1(BaseModel, metaclass=LinkedBaseModelMetaClass):
     def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
         from oold.static import import_jsonld
 
-        return import_jsonld(BaseModel, cls, cls, jsonld, _TYPE_REGISTRY)
+        return import_jsonld(BaseModel, AutoLinkedModelV1, cls, jsonld, _TYPE_REGISTRY)
+
+    def store_jsonld(self) -> None:
+        from oold.backend.interface import GetBackendParam, StoreParam, get_backend
+
+        backend = get_backend(GetBackendParam(iri=self.get_iri())).backend
+        backend.store(StoreParam(nodes={self.get_iri(): self}))
 
     def cast(
         self,

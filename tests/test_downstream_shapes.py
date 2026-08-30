@@ -98,3 +98,25 @@ def test_setattr_accepts_the_internal_flag(base):
     # internal=True writes the value as given, bypassing link handling
     m.__setattr__("id", "ex:other", internal=True)
     assert m.id == "ex:other"
+
+
+def test_v1_to_json_encodes_non_json_types():
+    """dict() leaves UUID/datetime as objects; to_json() must not."""
+    import json
+    from datetime import datetime, timezone
+    from uuid import UUID
+
+    class Doc(AutoLinkedModelV1):
+        uuid: UUID
+        at: datetime
+        ref: TargetV1 | None = FieldV1(None, range="Target")
+
+    doc = Doc(
+        uuid=UUID("6dd0a5aa-8b53-4b0f-8a1d-2b1b1a1f0c11"),
+        at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc),
+        ref="ex:t",
+    )
+    out = doc.to_json()
+    assert out["uuid"] == "6dd0a5aa-8b53-4b0f-8a1d-2b1b1a1f0c11"
+    assert out["ref"] == "ex:t"
+    json.dumps(out)  # the whole point: the result is JSON-serialisable

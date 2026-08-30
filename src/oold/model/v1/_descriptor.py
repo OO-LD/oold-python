@@ -390,10 +390,15 @@ class AutoLinkedModelV1(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseM
         return d
 
     def json(self, **kwargs: Any) -> str:
-        return json.dumps(self.dict(**kwargs))
+        # dict() leaves UUIDs, datetimes and enums as Python objects, so the
+        # model's own encoder has to do the conversion - plain json.dumps
+        # rejects them.
+        encoder = kwargs.pop("encoder", None) or self.__json_encoder__
+        kwargs.pop("models_as_dict", None)
+        return json.dumps(self.dict(**kwargs), default=encoder)
 
     def to_json(self, exclude_defaults: bool = False) -> dict[str, Any]:
-        return self.dict(exclude_none=True, exclude_defaults=exclude_defaults)
+        return json.loads(self.json(exclude_none=True, exclude_defaults=exclude_defaults))
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Any:

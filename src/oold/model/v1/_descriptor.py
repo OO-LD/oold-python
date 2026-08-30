@@ -85,6 +85,27 @@ def _register_class_v1(cls: type) -> None:
             _TYPE_REGISTRY[value] = cls
 
 
+def _neutralise_field(field: Any) -> None:
+    """Make a link field optional and defaultless at the pydantic level.
+
+    Link values are routed around pydantic - the descriptor holds them - so the
+    field is always absent from the payload pydantic validates. Whatever default
+    the declaration carries would therefore be evaluated on every construction,
+    and generated models spell that default as ``T.parse_obj("<iri>")``, which
+    raises: a model cannot be parsed from an IRI string. The descriptor is the
+    only source of truth for the value, so the pydantic-level default is dead
+    weight and is dropped.
+    """
+    field.required = False
+    field.allow_none = True
+    field.default = None
+    field.default_factory = None
+    info = getattr(field, "field_info", None)
+    if info is not None:
+        info.default = None
+        info.default_factory = None
+
+
 def _to_ref_v1(value: Any, target: Any) -> Ref | None:
     if value is None:
         return None
@@ -112,6 +133,13 @@ class _AutoLinkV1:
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         if obj is None:
+            if LinkedBaseModelMetaClass._constructing:
+                # A subclass may redeclare an inherited link field. pydantic v1
+                # rejects a field whose name resolves to a truthy attribute on a
+                # base (validate_field_name), so the descriptor has to stay
+                # invisible while a class is being built - same reason the
+                # metaclass carries the flag.
+                raise AttributeError(self.name)
             return self
         stored = obj._links.get(self.name)
         if self.many:
@@ -168,6 +196,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
             descr = _AutoLinkV1(fname, field.type_, field.shape in _MANY_SHAPES)
             setattr(cls, fname, descr)
             links[fname] = descr
+            _neutralise_field(field)
         cls.__link_fields__ = links
         _register_class_v1(cls)
         return cls
@@ -239,15 +268,27 @@ class AutoLinkedModelV1(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseM
         link_fields = type(self).__link_fields__
         link_data = {k: data.pop(k) for k in list(data) if k in link_fields}
         super().__init__(**data)
+        # Pydantic writes each field's default into __dict__, and an entry there
+        # shadows a non-data descriptor - so an unset link would keep returning
+        # that default (None) and never reach __get__. Dropping the entries hands
+        # unset links back to the descriptor, which answers [] for to-many and
+        # None for to-one.
+        for _name in link_fields:
+            self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: Any, internal: bool = False) -> None:
+        # internal=True means "write the value as given": BaseController passes
+        # it through to bypass link handling for controller-only state.
         if name == "__iris__":
             for field, iris in (value or {}).items():
                 descr = type(self).__link_fields__.get(field)
                 if descr is not None:
                     descr.set_value(self, iris)
+            return
+        if internal:
+            super().__setattr__(name, value)
             return
         descr = type(self).__link_fields__.get(name)
         if descr is not None:

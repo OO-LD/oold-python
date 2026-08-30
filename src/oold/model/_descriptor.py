@@ -74,6 +74,38 @@ def links_enabled() -> bool:
     return os.environ.get("OOLD_LINKS", "1") != "0"
 
 
+def _neutralise_link_defaults(namespace: dict) -> None:
+    """Make link fields optional and defaultless at the pydantic level.
+
+    Link values are routed around pydantic - the descriptor holds them - so the
+    field is always absent from the payload pydantic validates. Whatever default
+    the declaration carries would therefore be evaluated on every construction,
+    and generated models spell that default as ``T.model_validate("<iri>")``,
+    which raises: a model cannot be parsed from an IRI string. The descriptor is
+    the only source of truth for the value, so the pydantic-level default is
+    dead weight and is dropped.
+
+    This runs on the class namespace rather than on ``model_fields``, because by
+    the time ``__pydantic_init_subclass__`` sees the fields the core schema -
+    defaults included - has already been built.
+    """
+    for field_name in namespace.get("__annotations__", {}):
+        info = namespace.get(field_name)
+        extra = getattr(info, "json_schema_extra", None)
+        if not isinstance(extra, dict):
+            continue
+        if not (extra.get("x-oold-range") or extra.get("range") or extra.get("x-oold-link")):
+            continue
+        info.default = None
+        info.default_factory = None
+        # FieldInfo.from_annotated_attribute rebuilds the field from
+        # _attributes_set, so clearing the live attributes alone has no effect
+        attributes_set = getattr(info, "_attributes_set", None)
+        if isinstance(attributes_set, dict):
+            attributes_set.pop("default_factory", None)
+            attributes_set["default"] = None
+
+
 class OoldExtraModel(BaseModel):
     """Validated model behind :class:`OoldExtra` (constraints live here)."""
 
@@ -200,6 +232,8 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
     """
 
     def __new__(mcs, name, bases, namespace, **kwargs):
+        if links_enabled():
+            _neutralise_link_defaults(namespace)
         LinkedBaseModelMetaClass._constructing = True
         try:
             return super().__new__(mcs, name, bases, namespace, **kwargs)
@@ -477,6 +511,13 @@ class _AutoLink:
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         if obj is None:
+            if LinkedBaseModelMetaClass._constructing:
+                # A subclass may redeclare an inherited link field. Pydantic
+                # checks the bases for a same-named attribute and rejects the
+                # field if it finds one, so the descriptor has to stay invisible
+                # while a class is being built - same reason the metaclass
+                # carries the flag.
+                raise AttributeError(self.name)
             # Class access returns the descriptor, so Person.knows == "x" can
             # build a Condition without any metaclass involvement.
             return self
@@ -670,11 +711,16 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     def __hash__(self) -> int:
         return id(self)
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: Any, internal: bool = False) -> None:
+        # internal=True means "write the value as given": BaseController passes
+        # it through to bypass link handling for controller-only state.
         if name == "__iris__":
             # a property with a setter on the mixin - pydantic would otherwise
             # reject it as "no field __iris__"
             LinkedApiMixin.__iris__.fset(self, value)
+            return
+        if internal:
+            super().__setattr__(name, value)
             return
         # Targeted: only link names are routed to the descriptor. Needed because
         # pydantic's own __setattr__ writes model fields straight into __dict__,

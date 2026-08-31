@@ -7,6 +7,21 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.19.0 (2026-08-31)
+
+### Features
+
+- **validation**: Add oold meta vendor command
+  ([#146](https://github.com/OO-LD/oold-python/pull/146),
+  [`f714002`](https://github.com/OO-LD/oold-python/commit/f71400241ec08cdaab53dce5570c0341865b9fab))
+
+### Testing
+
+- **validation**: Cover @vocab suppressing the coverage finding
+  ([#137](https://github.com/OO-LD/oold-python/pull/137),
+  [`9f7d12a`](https://github.com/OO-LD/oold-python/commit/9f7d12a4b4a94ada35f9c8319071390ef026499a))
+
+
 ## v0.18.4 (2026-08-31)
 
 ### Bug Fixes

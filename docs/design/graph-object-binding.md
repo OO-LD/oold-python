@@ -122,19 +122,61 @@ full matrix. Both descriptor prototypes use it.
 
 ### 3.2 Static typing
 
-Confirmed on **pyright and mypy**. Annotated declarations type natively; the
-unannotated descriptor form types through overloaded `__get__` (the
-SQLAlchemy-relationship pattern):
+A link has **two** types and one annotation can only state one of them. What you
+read is a resolved object; what you may write is that object *or* a reference to
+it - an IRI string, or a JSON object still to be constructed. Since pydantic's
+`dataclass_transform` takes the annotation as the `__init__` parameter type,
+`knows: list[Person]` necessarily rejects `knows=["ex:bob"]`.
 
-```
-p.knows          -> List[Person]        (LinkList["Person"]() - subscript only)
-p.knows[0].name  -> str
-p.employer       -> Organization | None (Link(Organization))
-p.knows[0].nope  -> error: Cannot access attribute "nope" for class "Person"
+The only mechanism in the typing spec that carries both is the **descriptor
+protocol** (PEP 681): when the annotation *is* a descriptor type, a checker takes
+the `__init__` parameter and the assignment type from `__set__` and the attribute
+type from `__get__`. `Link[T]` and `LinkList[T]` are therefore usable as the
+whole annotation:
+
+```python
+class Person(AutoLinkedModel):
+    knows: LinkList["Person"] = OoldField()
+    employer: Link[Organization] = OoldField()
 ```
 
-`LinkList["Person"]()` needs no second argument: the subscript carries the
-static type, `__orig_class__` the runtime target.
+`__set__` is declared under `TYPE_CHECKING` only, so at runtime the descriptor
+stays **non-data** and the instance-`__dict__` cache from 3.1 is untouched.
+`__get_pydantic_core_schema__` builds the schema of the *target*, so the emitted
+JSON Schema is byte-identical to the plain annotation - `$ref`, arrays, unions
+and forward references included.
+
+#### Coverage
+
+| spelling | read | write by IRI | runtime |
+| --- | --- | --- | --- |
+| `LinkList["Person"]` | `LinkResultList[Person \| None]` | typed | identical |
+| `Link[Organization]` | `Organization \| None` | typed | identical |
+| `list["Person"]` | `list[Person]` | not typed | identical |
+| `Optional[Organization]` | `Organization \| None` | not typed | identical |
+| `knows = LinkList("Person")` | `LinkResultList[Person \| None]` | n/a - no field | identical |
+
+The plain spellings keep working unchanged; what they lack is static coverage of
+reference assignment, and `list[T]` additionally understates that an element may
+be `None`. Consumers that want the rule enforced on generated models can scope it
+per file rather than repo-wide - ty supports `[[tool.ty.overrides]]` with an
+`include` glob.
+
+Element type is `T | None` deliberately: an IRI the backend cannot answer
+resolves to `None` and keeps its slot, so the list stays aligned with the stored
+references. A prefix with *no registered resolver* is different again - that
+raises `ValueError` on read rather than yielding `None`, which the type system
+does not show.
+
+Both **pyright and ty** resolve all of it, including `Model[...]` through the
+metaclass `__getitem__` overloads. `tests/typing/links.py` and
+`tests/typing/query_dsl.py` are checked by both.
+
+One environment trap is worth knowing, because it fails silently rather than
+loudly: if the configured environment cannot resolve pydantic, ty reports a
+spurious `conflicting-metaclass` on every model and then infers `Unknown` for
+class subscription - so every `assert_type` passes vacuously. `tests/test_typing.py`
+therefore points ty at the interpreter running the tests, not at `./.venv`.
 
 ### 3.3 Declaration notations
 
@@ -146,23 +188,23 @@ class Person(OoldModel):
     id: str
     name: Optional[str] = None
 
-    # 1. implicit, zero-config - target inferred from the annotation
-    knows: Optional[List["Person"]] = OoldField()
+    # 1. Link[T] / LinkList[T] as the whole annotation - typed both ways (3.2)
+    knows: LinkList["Person"] = OoldField()
+    employer: Link[Organization] = OoldField()
 
-    # 2. explicit link marker inside the annotation
-    employer: Optional[Link[Organization]] = Field(default=None)
-    friends: Optional[List[Link["Person"]]] = OoldField()
+    # 2. implicit, zero-config - target inferred from the annotation
+    friends: Optional[List["Person"]] = OoldField()
 
     # 3. union arms: literal text | inline object | reference
     location: Union[str, Location, None] = OoldField(link=True)
 
-    # 4. unannotated descriptor (descriptor_binding.py variant)
+    # 4. unannotated descriptor - no annotation, so no static type at all
     #    addresses = LinkList(Address)
 ```
 
-`Link[T]` is `Annotated[T, LinkMarker()]`, so a checker reads it as `T` - and
-unlike the rejected form in 3(c) the runtime value really *is* a `T`, because
-the descriptor returns the resolved object. The union arms discriminate at
+All four are the same field at runtime and produce the same JSON Schema; they
+differ only in what a type checker can see, per the coverage table in 3.2. The
+union arms discriminate at
 construction: a bare string stays a literal when a `str` arm is declared, a
 `{"@id": ...}` object is a reference, and any other object is inline. An inline
 object with no `@id` cannot be emitted as a reference, so it serialises nested -

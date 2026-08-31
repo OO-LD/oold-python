@@ -34,7 +34,9 @@ from __future__ import annotations
 import os
 import types
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
     Generic,
@@ -274,14 +276,23 @@ if hasattr(types, "UnionType"):  # PEP 604: X | None
 
 
 def _extract_target(annotation: Any) -> tuple[Any, bool]:
-    """Return (target_type, is_many) for an annotation like Optional[List[X]]."""
+    """Return (target_type, is_many) for an annotation like Optional[List[X]].
+
+    Also understands the ``Link[X]`` / ``LinkList[X]`` annotation form, where the
+    to-many-ness comes from the class rather than from a surrounding ``list``.
+    """
     many = False
     target = annotation
     changed = True
     while changed:
         changed = False
         origin = get_origin(target)
-        if origin in _UNION_ORIGINS:
+        if isinstance(origin, type) and issubclass(origin, _LinkAnnotation):
+            args = get_args(target)
+            if args:
+                target, changed = args[0], True
+                many = many or origin._many
+        elif origin in _UNION_ORIGINS:
             args = [a for a in get_args(target) if a is not type(None)]
             if len(args) == 1:
                 target, changed = args[0], True
@@ -290,6 +301,22 @@ def _extract_target(annotation: Any) -> tuple[Any, bool]:
             if args:
                 target, many, changed = args[0], True, True
     return target, many
+
+
+def _is_link_annotation(annotation: Any) -> bool:
+    """Whether ``Link[...]`` / ``LinkList[...]`` appears anywhere in an annotation.
+
+    Lets the annotation alone declare a link, so ``knows: LinkList["Person"]``
+    needs no keyword in ``json_schema_extra``.
+    """
+    seen: list[Any] = [annotation]
+    while seen:
+        current = seen.pop()
+        origin = get_origin(current)
+        if isinstance(origin, type) and issubclass(origin, _LinkAnnotation):
+            return True
+        seen.extend(get_args(current))
+    return False
 
 
 _TYPE_REGISTRY: dict[str, type] = {}
@@ -329,7 +356,7 @@ def _resolve_cls(data: dict[str, Any], target: Any) -> Any:
     return target
 
 
-class LinkResultList(list[T]):
+class LinkResultList(list[T | None]):
     """List returned by a to-many link.
 
     Adds IRI lookup, filtering and attribute projection, and keeps mutations in
@@ -338,7 +365,10 @@ class LinkResultList(list[T]):
     without a second write.
 
     Generic in the item type, so ``Entity[cond][0]`` is an ``Entity`` to a type
-    checker rather than ``Any``.
+    checker rather than ``Any``. The element type is ``T | None``, not ``T``: an
+    IRI the backend cannot answer resolves to ``None`` and keeps its slot, so the
+    list stays aligned with the stored references. The same reason the shipped
+    ``LinkedBaseModelList`` is a ``list[T | None]``.
     """
 
     _owner: Any = None
@@ -381,7 +411,7 @@ class LinkResultList(list[T]):
     def __getitem__(self, index: Condition | bool) -> LinkResultList[T]: ...
 
     @overload
-    def __getitem__(self, index: SupportsIndex) -> T: ...
+    def __getitem__(self, index: SupportsIndex) -> T | None: ...
 
     @overload
     def __getitem__(self, index: slice) -> LinkResultList[T]: ...
@@ -597,8 +627,43 @@ class _AutoLink:
         return stored.iri if stored is not None else None
 
 
-class Link(_AutoLink, Generic[T]):
-    """Explicit to-one link descriptor: ``employer = Link(Organization)``."""
+class _LinkAnnotation:
+    """Lets ``Link[T]`` / ``LinkList[T]`` stand in for the target annotation.
+
+    A link has two types, and one annotation cannot state both: what you read is
+    a resolved object, what you may write is that object *or* a reference to it
+    (an IRI string, or a JSON object still to be constructed). Declaring the
+    field as the descriptor type is what carries both - a type checker takes the
+    ``__init__`` parameter and the assignment type from ``__set__`` and the
+    attribute type from ``__get__`` (PEP 681).
+
+    Pydantic is told to build the schema of the *target* instead, so the emitted
+    JSON Schema is byte-identical to the plain annotation - ``$ref``, arrays and
+    unions included - and forward references still resolve on ``model_rebuild``.
+    """
+
+    _many: ClassVar[bool] = False
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type: Any, handler: Any) -> Any:
+        args = get_args(source_type)
+        target = args[0] if args else Any
+        return handler(list[target] if cls._many else target)
+
+
+class Link(_AutoLink, _LinkAnnotation, Generic[T]):
+    """A to-one link.
+
+    Two equivalent spellings::
+
+        employer = Link(Organization)        # explicit descriptor
+        employer: Link[Organization] = ...   # annotation, and statically typed
+
+    The annotation form is the one that types both directions: it reads as
+    ``T | None`` and accepts a ``T``, an IRI or a JSON object on assignment.
+    """
+
+    _many: ClassVar[bool] = False
 
     def __init__(self, target: type[T] | str | None = None):
         super().__init__(name=None, target=target, many=False)
@@ -612,9 +677,29 @@ class Link(_AutoLink, Generic[T]):
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         return _AutoLink.__get__(self, obj, objtype)
 
+    if TYPE_CHECKING:
+        # Declared for the checker only. At runtime this stays a **non-data**
+        # descriptor, so the instance __dict__ keeps shadowing it after the first
+        # read - which is what makes a warm link read cost the same as a plain
+        # field. Writes are intercepted by LinkedModel.__setattr__ instead, which
+        # applies exactly the conversion declared here.
+        def __set__(self, obj: object, value: T | str | Mapping[str, Any] | None) -> None: ...
 
-class LinkList(_AutoLink, Generic[T]):
-    """Explicit to-many link descriptor: ``knows = LinkList["Person"]()``."""
+
+class LinkList(_AutoLink, _LinkAnnotation, Generic[T]):
+    """A to-many link.
+
+    Two equivalent spellings::
+
+        knows = LinkList("Person")        # explicit descriptor
+        knows: LinkList["Person"] = ...   # annotation, and statically typed
+
+    The annotation form reads as ``LinkResultList[T | None]`` - never ``None``
+    itself, an unset link is an empty list - and accepts objects, IRIs or JSON
+    objects on assignment.
+    """
+
+    _many: ClassVar[bool] = True
 
     def __init__(self, target: type[T] | str | None = None):
         super().__init__(name=None, target=target, many=True)
@@ -623,10 +708,14 @@ class LinkList(_AutoLink, Generic[T]):
     def __get__(self, obj: None, objtype: Any = None) -> LinkList[T]: ...
 
     @overload
-    def __get__(self, obj: object, objtype: Any = None) -> list[T]: ...
+    def __get__(self, obj: object, objtype: Any = None) -> LinkResultList[T]: ...
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         return _AutoLink.__get__(self, obj, objtype)
+
+    if TYPE_CHECKING:
+        # see Link.__set__ - checker-only, so the descriptor stays non-data
+        def __set__(self, obj: object, value: Iterable[T | str | Mapping[str, Any]] | None) -> None: ...
 
 
 class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaClass):
@@ -683,11 +772,11 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         # Implicit form: annotated fields carrying a range keyword.
         for name, field in cls.model_fields.items():
             extra = field.json_schema_extra
-            if not isinstance(extra, dict):
-                continue
+            extra = extra if isinstance(extra, dict) else {}
             rng = extra.get("x-oold-range", extra.get("range"))
-            # x-oold-link marks a link whose target comes from the annotation
-            if not rng and not extra.get("x-oold-link"):
+            # x-oold-link marks a link whose target comes from the annotation;
+            # a Link[...] / LinkList[...] annotation says the same on its own
+            if not rng and not extra.get("x-oold-link") and not _is_link_annotation(field.annotation):
                 continue
             target, many = _extract_target(field.annotation)
             if isinstance(rng, str) and not isinstance(target, type):

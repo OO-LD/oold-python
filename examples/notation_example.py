@@ -5,7 +5,10 @@ point. Covers the notations discussed in oold-python#107:
 
 1. ``OoldField()`` with no arguments - the link target is inferred from the
    annotation, so the schema IRI is not repeated in Python.
-2. ``Link[T]`` **inside** an annotation, to-one and inside ``List[...]``.
+2. ``Link[T]`` / ``LinkList[T]`` as the whole annotation. A link has two types -
+   you read a resolved object, you may write that object *or* a reference to it -
+   and these carry both, so a type checker accepts an IRI on construction and
+   still narrows the read to the target type.
 3. **Union arms** mixing a literal, an inline object and a reference.
 
 Run it:
@@ -17,11 +20,9 @@ The recommended variant for generated code is
 ``oold.model._notation`` adds the notations above on top of it.
 """
 
-from pydantic import Field
-
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.model._notation import Link, OoldField, OoldModel
+from oold.model._notation import Link, LinkList, OoldField, OoldModel
 
 
 class Organization(OoldModel):
@@ -41,12 +42,15 @@ class Person(OoldModel):
     name: str | None = None
     type: str | None = "ex:Person"
 
-    # 1. no range= needed: the target is read from the annotation
-    knows: list["Person"] = OoldField()
+    # 1. Link[T] / LinkList[T] as the whole annotation - the recommended form.
+    #    Reads give the resolved object, writes accept an object, an IRI or a
+    #    JSON object, and a type checker sees both (see the coverage note below).
+    knows: LinkList["Person"] = OoldField()
+    employer: Link[Organization] = OoldField()
 
-    # 2. Link[T] inside the annotation (to-one and to-many)
-    employer: Link[Organization] | None = Field(default=None)
-    friends: list[Link["Person"]] = OoldField()
+    # 2. the plain form: identical at runtime, no range= needed either, but a
+    #    type checker only sees list[Person] and so rejects a list of IRIs
+    friends: list["Person"] = OoldField()
 
     # 3. union: literal text | inline object | reference
     location: str | Location | None = OoldField(link=True)
@@ -82,7 +86,7 @@ def main() -> None:
         friends=[Person(id="ex:bob", name="Bob")],  # or by object
     )
 
-    print("1. OoldField() - target inferred from the annotation")
+    print("1. Link[T] / LinkList[T] - target inferred, and statically typed")
     assert alice.knows[0].name == "Bob"
     assert isinstance(alice.knows[0], Person)  # a real Person, not a proxy
     print("   knows[0].name          =", alice.knows[0].name)
@@ -134,8 +138,9 @@ def main() -> None:
     lazy = Person(id="ex:lazy", knows=["ex:bob"])
     assert lazy.link_iris("knows") == ["ex:bob"]  # inspect without resolving
     # The class-level DSL builds a Condition at runtime, but a type checker
-    # sees BaseModel.__eq__ and reads this as bool - it is not expressible in
-    # the type system (see oold-python#107).
+    # sees BaseModel.__eq__ and reads this as bool. The subscript overloads
+    # accept bool for that reason, so Person[cond] is still typed (pyright; ty
+    # has no metaclass __getitem__ support and infers Unknown there).
     condition = Person.name == "Bob"
     assert condition.field == "name"
     print("   link_iris('knows')     =", lazy.link_iris("knows"))

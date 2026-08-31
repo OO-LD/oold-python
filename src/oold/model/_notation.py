@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import types
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     Any,
     ClassVar,
@@ -37,10 +36,23 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
 
 from oold.model._descriptor import (
     _TYPE_REGISTRY,
+    Link,
     LinkedQueryMeta,
+    LinkList,
     OoldExtra,
     _AutoLink,
+    _LinkAnnotation,
 )
+
+# Link and LinkList are re-exported: the notation module is the documented entry
+# point for these declarations, and they are one implementation, not two.
+__all__ = [
+    "Link",
+    "LinkList",
+    "LinkMarker",
+    "OoldField",
+    "OoldModel",
+]
 
 T = TypeVar("T")
 
@@ -57,18 +69,6 @@ class LinkMarker:
 
     def __repr__(self) -> str:
         return f"LinkMarker(required_iri={self.required_iri})"
-
-
-if TYPE_CHECKING:
-    # For type checkers Link[X] is Annotated[X, ...], which reads as X.
-    Link = Annotated[T, "oold-link"]
-else:
-
-    class _LinkAlias:
-        def __getitem__(self, item: Any) -> Any:
-            return Annotated[item, LinkMarker()]
-
-    Link = _LinkAlias()
 
 
 def OoldField(
@@ -114,12 +114,26 @@ def _unwrap(annotation: Any) -> tuple[Any, bool, bool, list[Any]]:
     target = annotation
 
     def strip(tp: Any) -> Any:
-        nonlocal marked
-        while get_origin(tp) is Annotated:
-            args = get_args(tp)
-            if any(isinstance(m, LinkMarker) for m in args[1:]):
+        nonlocal marked, many
+        while True:
+            origin = get_origin(tp)
+            if origin is Annotated:
+                args = get_args(tp)
+                if any(isinstance(m, LinkMarker) for m in args[1:]):
+                    marked = True
+                tp = args[0]
+                continue
+            # Link[X] / LinkList[X]: the annotation itself declares the link,
+            # and LinkList carries the to-many-ness instead of a list wrapper
+            if isinstance(origin, type) and issubclass(origin, _LinkAnnotation):
+                args = get_args(tp)
+                if not args:
+                    break
                 marked = True
-            tp = args[0]
+                many = many or origin._many
+                tp = args[0]
+                continue
+            break
         return tp
 
     changed = True

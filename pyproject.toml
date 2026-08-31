@@ -127,6 +127,12 @@ changelog_file = "CHANGELOG.md"
 [tool.ty.environment]
 python = "./.venv"
 python-version = "3.10"
+# src layout: without this ty cannot resolve `oold.*` from tests, and every
+# import there silently becomes Unknown - which makes those checks vacuous rather
+# than failing, so it is not visible in the output. Note that an incomplete
+# ./.venv has the same effect on third-party imports, and an unresolved pydantic
+# then reports a spurious conflicting-metaclass on every model.
+extra-paths = ["src"]
 
 [tool.ty.src]
 # Excluded from type checking:
@@ -150,6 +156,10 @@ exclude = [
 # they are downgraded to keep `ty check` meaningful without mass inline ignores.
 unresolved-attribute = "ignore"
 not-subscriptable = "ignore"
+# Assigning an IRI to a link field is no longer a reason for this one: the
+# Link[T] / LinkList[T] annotations type both directions, and the override below
+# re-enables the rule for the file that asserts that contract. What remains are
+# unrelated sites (json_tools, the codegen spike) not yet cleaned up.
 invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
 unknown-argument = "ignore"
@@ -275,3 +285,15 @@ skip_empty = true
 [tool.coverage.run]
 branch = true
 source = ["src"]
+
+[[tool.ty.overrides]]
+# The static contract of the link and query API is asserted here, so the rules
+# it exercises must actually run - the repo-wide downgrades above would
+# otherwise make every assert_type in it vacuous.
+include = ["tests/typing/**"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "error"
+invalid-assignment = "error"
+unresolved-attribute = "error"
+not-subscriptable = "error"

@@ -148,7 +148,8 @@ def test_missing_context_term_warns_and_names_the_orphan_property(broken_dir):
 
     `OOLD-SCH-2d05`: an implementation must not treat an unmapped term as a conformance failure.
     The prefix half of the old combined check keeps failing under `context.predicates`, which
-    does have a rule behind it; this half moved to `context.coverage`, which cites none.
+    does have a rule behind it; this half moved to `context.coverage`, which cites
+    `OOLD-SCH-21d7`, a SHOULD, which is why it warns.
     """
     report = validate_schema(broken_dir / "missing_context_term.schema.json", OFFLINE)
     checks = {c.id: c for c in report.checks}
@@ -180,6 +181,28 @@ def test_a_schema_with_no_context_warns_instead_of_failing_the_round_trip(broken
     assert coverage.detail["declared"] == ["name", "orphan"]
     assert "@vocab" in coverage.message and "x-oold-context" in coverage.message
     assert not report.failures()
+
+
+def test_vocab_suppresses_the_coverage_finding(broken_dir):
+    """Declaring `@vocab` maps the remainder, so there is no unmapped term left to report.
+
+    The specification names `@vocab` as the way to stop unmapped terms being dropped silently,
+    so a schema that declares one has no coverage finding to make. This held before the split
+    of `context.predicates` into two checks and was verified only by an ad-hoc probe at the
+    time. The fixture is `missing_context_term.schema.json` with `@vocab` added and nothing
+    else changed, so a regression here is the split losing the permitted case rather than a
+    difference between the two schemas.
+    """
+    report = validate_schema(broken_dir / "vocab_covers_the_remainder.schema.json", OFFLINE)
+    checks = {c.id: c for c in report.checks}
+
+    coverage = checks["context.coverage"]
+    assert coverage.status == OK, coverage.message
+    # OK rather than SKIP: the check ran and found nothing, rather than standing down.
+    assert "context.coverage" not in {c.id for c in report.failures()}
+    # `orphan` carries no term of its own; @vocab is what maps it.
+    assert checks["context.predicates"].status == OK
+    assert checks["context.predicates"].detail["mapped"] == 2
 
 
 def test_a_processor_failure_is_not_downgraded_to_a_coverage_warning(broken_dir, monkeypatch):

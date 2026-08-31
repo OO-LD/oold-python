@@ -1,0 +1,19 @@
+{
+  "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+  "$id": "vocab_covers_the_remainder.schema.json",
+  "title": "VocabCoversTheRemainder",
+  "@context": {
+    "@vocab": "https://example.org/vocab/",
+    "ex": "https://example.org/",
+    "name": "ex:name"
+  },
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "orphan": {
+      "type": "string"
+    }
+  }
+}

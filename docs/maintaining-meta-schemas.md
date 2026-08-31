@@ -158,7 +158,9 @@ but nothing notices a check judging the literal context rather than the resolved
 
 ### Broken fixtures
 
-Each one exists to prove a specific check fires, rather than only that valid input passes.
+Each one exists to prove a specific check fires, rather than only that valid input passes. One is a
+control instead: the same schema without the defect, proving the check stays silent where the
+specification says it must.
 `tests/test_validation/test_pipeline.py` maps each file to the check it must trip.
 
 | Fixture | Trips |
@@ -179,6 +181,7 @@ Each one exists to prove a specific check fires, rather than only that valid inp
 | `root_ref_not_reflected` | `rule.context-reflects-refs` - a single `allOf` `$ref` is not reflected anywhere in `@context` |
 | `branch_context_conflict` | `rule.branch-context-conflict` - two `oneOf`-branch contexts map the same keyword to different IRIs at the root |
 | `narrow_only_relaxation` | `rule.narrow-only` - an `allOf` ancestor's `maximum` is relaxed rather than tightened (`NarrowBase.schema.json` is its sibling ancestor) |
+| `vocab_covers_the_remainder` | nothing, deliberately - `missing_context_term` with `@vocab` added and nothing else changed, the control for `context.coverage` |
 
 ## Why `id_base` is recorded and not assumed
 

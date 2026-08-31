@@ -966,12 +966,13 @@ CHECKS: tuple[CheckInfo, ...] = (
         detects=check_predicates,
         predates_catalog=True,
     ),
-    # Deliberately cites no rule. The specification permits an unmapped term - "an author MAY
-    # leave it unmapped" - and treats deferring semantics as what distinguishes OO-LD from
-    # RDF/SHACL, so an unmapped property is not a conformance failure. It is still worth
-    # reporting: OOLD-SCH-21d7 says a schema should offer at least one complete mapping, which is
-    # a SHOULD, so the warning is the catalogue's own severity rather than one chosen here.
-    # Promote it with --strict where full coverage is intended.
+    # Cites OOLD-SCH-21d7, not the prefix rule the combined check used to borrow. The
+    # specification permits an unmapped term - "an author MAY leave it unmapped" - and treats
+    # deferring semantics as what distinguishes OO-LD from RDF/SHACL, so an unmapped property
+    # is not a conformance failure. It is still worth reporting: OOLD-SCH-21d7 says a schema
+    # should offer at least one complete mapping, which is a SHOULD, so the warning is the
+    # catalogue's own severity rather than one chosen here. Promote it with --strict where
+    # full coverage is intended.
     CheckInfo(
         "context.coverage",
         "every declared property carries a @context term",

@@ -7,6 +7,15 @@ from SPARQLWrapper import JSONLD, SPARQLWrapper
 from oold.backend.auth import UserPwdCredential, get_credential
 from oold.backend.interface import Backend, Resolver, StoreResult
 
+DEFAULT_USER_AGENT = "oold-python (https://github.com/OO-LD/oold-python)"
+"""Sent with every SPARQL request.
+
+Public endpoints identify clients by user agent and throttle the ones they
+cannot attribute: Wikidata answers the SPARQLWrapper default with
+``429 Aggressively rate-limiting to 1 req / min``, so a request that looks
+correct still fails. Their policy asks for a tool name and a contact URL.
+"""
+
 
 class LocalSparqlResolver(Resolver):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -75,11 +84,12 @@ class SparqlResolver(Resolver):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     endpoint: str
+    user_agent: str = DEFAULT_USER_AGENT
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self._sparql = SPARQLWrapper(self.endpoint)
+        self._sparql = SPARQLWrapper(self.endpoint, agent=self.user_agent)
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
@@ -126,12 +136,13 @@ class SparqlResolver(Resolver):
 class WikiDataSparqlResolver(Resolver):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    endpoint: str
+    endpoint: str = "https://query.wikidata.org/sparql"
+    user_agent: str = DEFAULT_USER_AGENT
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self._sparql = SPARQLWrapper(self.endpoint)
+        self._sparql = SPARQLWrapper(self.endpoint, agent=self.user_agent)
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties

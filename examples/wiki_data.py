@@ -1,4 +1,21 @@
-from typing import Optional
+"""Resolve Wikidata entities as typed objects over a public SPARQL endpoint.
+
+Shows the binding against a backend nobody controls: the classes below declare
+only a JSON-LD context and which properties are links, and
+``Person["Item:Q80"]`` turns an IRI into a ``Person`` whose ``father`` is another
+``Person``, fetched on first access.
+
+Run it:
+
+    python examples/wiki_data.py
+
+Two details are specific to Wikidata:
+
+* the class IRI is the **expanded** entity IRI, because that is what arrives in
+  ``@type``; the registry matches type IRIs literally, without prefix expansion;
+* the resolver rewrites ``wdt:P31`` (instance of) into ``@type``, so the context
+  aliases ``type`` to ``@type`` rather than mapping it to P31.
+"""
 
 from pydantic import ConfigDict, Field
 
@@ -8,10 +25,8 @@ from oold.backend.sparql import WikiDataSparqlResolver
 # based on pydantic v2
 from oold.model import LinkedBaseModel
 
-
-class MultiLanguageString(LinkedBaseModel):
-    text: str
-    lang: str
+WD_ENTITY = "http://www.wikidata.org/entity/"
+ENTITY_SCHEMA = "https://oo-ld.org/examples/wikidata/Entity"
 
 
 class WikiDataEntity(LinkedBaseModel):
@@ -20,84 +35,85 @@ class WikiDataEntity(LinkedBaseModel):
             "@context": {
                 # aliases
                 "id": "@id",
+                "type": "@type",
                 # prefixes
                 "p": "http://www.wikidata.org/prop/",
                 "wdt": "http://www.wikidata.org/prop/direct/",
-                "Item": "http://www.wikidata.org/entity/",
-                "type": "wdt:P31",
+                "Item": WD_ENTITY,
                 "name": {
-                    "@id": "wdt:P373",
+                    "@id": "wdt:P373",  # Commons category
                     "@type": "http://www.w3.org/2001/XMLSchema#string",
                 },
-                # "label": {
-                #     "@id": "http://www.w3.org/2000/01/rdf-schema#label",
-                #     "@container": "@set",
-                #     "@context": {
-                #         "text": "@value",
-                #         "lang": "@language",
-                #     }
-                # },
             },
-            "iri": "Entity.json",  # the IRI of the schema
+            "iri": ENTITY_SCHEMA,  # the IRI of the schema
         }
     )
     id: str
-    type: str | None
-    # label: Optional[List[MultiLanguageString]] = None
+    type: str | None = None
     name: str | None = None
 
-    @classmethod
-    def get_class_iri(cls):
-        # return default value of field 'type' if not set
-        if cls.model_fields.get("type") and cls.model_fields["type"].default is not None:
-            return cls.model_fields["type"].default
-
     def get_iri(self):
-        return "ex:" + self.name
+        return self.id
 
 
 class Person(WikiDataEntity):
     model_config = ConfigDict(
         json_schema_extra={
             "@context": [
-                "Entity.json",  # import the context of the parent class
+                ENTITY_SCHEMA,  # import the context of the parent class
                 {
-                    # object property definition
+                    # object property pointing to another Person
                     "father": {
                         "@id": "wdt:P22",
                         "@type": "@id",
                     },
-                    "knows": {
-                        "@id": "schema:knows",
-                        "@type": "@id",
-                        "@container": "@set",
-                    },
                 },
             ],
-            "iri": "Q5",
+            # The class IRI has to be the expanded form: it is compared with the
+            # @type of the incoming document, and Q5 is "human".
+            "iri": WD_ENTITY + "Q5",
         }
     )
-    type: str | None = "wd:Q5"  # Q5 is the Wikidata item for human
-    father: Optional["Person"] = Field(
+    type: str | None = "Item:Q5"
+    father: "Person | None" = Field(
         None,
-        json_schema_extra={"range": "Person.json"},
-    )
-    knows: list["Person"] | None = Field(
-        None,
-        # object property pointing to another Person
-        json_schema_extra={"range": "Person.json"},
+        json_schema_extra={"range": WD_ENTITY + "Q5"},
     )
 
 
-# create a resolver to resolve IRIs to objects
+Person.model_rebuild()
+
+# Wikidata attributes requests by user agent and throttles the ones it cannot
+# place - the SPARQLWrapper default is answered with "429 Aggressively
+# rate-limiting to 1 req / min". The resolver sends a descriptive one by default.
+set_resolver(
+    SetResolverParam(
+        iri="Item",
+        resolver=WikiDataSparqlResolver(endpoint="https://query.wikidata.org/sparql"),
+    )
+)
 
 
-r = WikiDataSparqlResolver(endpoint="https://query.wikidata.org/sparql")
-set_resolver(SetResolverParam(iri="Item", resolver=r))
+def main() -> None:
+    person = Person["Item:Q80"]  # Tim Berners-Lee
+    assert person is not None, "Q80 not resolved - the endpoint may be unavailable"
+    print("resolved:", person.id)
+    print("name:    ", person.name)
+    print("type:    ", person.type)
 
-# Example usage:
-p = Person["Item:Q80"]  # Douglas Adams
-print(p.model_dump_json(indent=2))
-print(p)
-print(p.father)
-print(p.father.father)
+    # the link is an IRI in the payload and a Person once read
+    print("\nfather is fetched on access, not on construction")
+    print("  stored IRI:", person.get_iri_ref("father"))
+    father = person.father
+    assert isinstance(father, Person), type(father)
+    print("  resolved:  ", father.id, "-", father.name)
+
+    print("\nserialisation writes the link back as an IRI")
+    dumped = person.to_json()
+    print("  father ->", dumped["father"])
+
+    print("\nALL CHECKS PASSED")
+
+
+if __name__ == "__main__":
+    main()

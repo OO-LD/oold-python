@@ -40,10 +40,12 @@ class WikiDataEntity(LinkedBaseModel):
                 "p": "http://www.wikidata.org/prop/",
                 "wdt": "http://www.wikidata.org/prop/direct/",
                 "Item": WD_ENTITY,
-                "name": {
-                    "@id": "wdt:P373",  # Commons category
-                    "@type": "http://www.w3.org/2001/XMLSchema#string",
-                },
+                "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+                # rdfs:label is language-tagged and multi-valued; scoping the
+                # term to one language makes it compact to a plain string.
+                # wdt:P373 (Commons category) would read more directly but is
+                # sparse - most entities do not carry one.
+                "name": {"@id": "rdfs:label", "@language": "en"},
             },
             "iri": ENTITY_SCHEMA,  # the IRI of the schema
         }
@@ -107,6 +109,11 @@ def main() -> None:
     father = person.father
     assert isinstance(father, Person), type(father)
     print("  resolved:  ", father.id, "-", father.name)
+
+    print("\nfollowing the same link again walks the graph")
+    grandfather = father.father
+    assert isinstance(grandfather, Person), type(grandfather)
+    print("  grandfather:", grandfather.id, "-", grandfather.name)
 
     print("\nserialisation writes the link back as an IRI")
     dumped = person.to_json()

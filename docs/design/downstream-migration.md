@@ -248,10 +248,37 @@ Parity is asserted only when these pass unchanged against the new base:
    assert on its return shape,
 3. a regenerated `opensemantic.core` diffed against the released package.
 
-Status: step 2 has been run once for a suite that calls `get_iri_ref` and
-asserts on its return shapes. Baseline **2 passed**; with the binding swapped
-(base class *and* metaclass) **2 passed**, same result. The suite exercises a
-live backend, so it covers construction, resolution and serialisation against
-real data rather than fixtures.
+Status: step 2 has been run with `OOLD_DESCRIPTOR_BINDING=1` (the real switch,
+not a shim) against three application suites, each compared to a baseline taken
+on the same machine and the same backend state:
+
+| suite | baseline | with the switch |
+| --- | --- | --- |
+| live-backend controller suite calling `get_iri_ref` | 2 passed | 2 passed |
+| dashboard suite | 20 passed | 20 passed |
+| utilities suite | 194 passed, 9 failed | 194 passed, 9 failed (same set) |
+
+The utilities suite fails identically with and without the switch; those
+failures predate it.
+
+### The shim was not sufficient verification
+
+Swapping the base class through a `sitecustomize` shim passed; the real switch
+failed at import on the first generated package. Four binding defects surfaced
+that fixtures had not provoked - a subclass redeclaring an inherited link field,
+a link field default that can only raise, `__setattr__(..., internal=True)`, and
+`to_json()` leaving `UUID` objects in the v1 path. All are fixed, with
+regression tests in `tests/test_downstream_shapes.py`.
+
+The lesson for the remaining migration steps: verify with the switch, against a
+generated package, on a live backend. Two of the four defects were invisible to
+every unit test.
+
+## The metaclass identity is a migration constraint
+
+Downstream subclasses `LinkedBaseModelMetaClass`, so the name has to keep
+resolving to whatever metaclass `LinkedBaseModel` uses. The query DSL built on
+that metaclass is carried over unchanged, typed subscription overloads included;
+see `graph-object-binding.md`.
 
 [oold-python#107]: https://github.com/OO-LD/oold-python/issues/107

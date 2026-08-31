@@ -285,6 +285,11 @@ def _run_tests(
             return
         try:
             feature_schema = dereference(schema_ref)
+        # This is the compliance suite itself, walking fixture files rather than one committed
+        # document: a bad `schemaRef` in one group must record a "setup" failure for that group
+        # and let `run_suite` move on to the next, not abort the whole suite. `dereference` can
+        # also raise something other than SchemaResolutionError - a fixture resolving to a
+        # non-dict schema fails differently downstream - so the catch stays broad to match.
         except Exception as exc:
             record(str(schema_ref), "setup", False, f"could not dereference: {exc}")
             return
@@ -333,6 +338,9 @@ def _run_tests(
                     got_rdf == want_rdf,
                     "" if got_rdf == want_rdf else f"not isomorphic\n  got:  {got_rdf}\n  want: {want_rdf}",
                 )
+            # One bad fixture case must record an "rdf" failure and let the loop continue to the
+            # next test in the group, not abort the whole suite; fixture `data` is arbitrary, so
+            # this is not limited to JsonLdError.
             except Exception as exc:
                 record(description, "rdf", False, describe_jsonld_error(exc))
 
@@ -359,6 +367,8 @@ def _run_tests(
                     else f"instance != reconstruction\n  in:  {json.dumps(canonical(document))}"
                     f"\n  out: {json.dumps(canonical(restored))}",
                 )
+            # Same reasoning as the "rdf" case above: one bad fixture case records a "roundtrip"
+            # failure and the loop continues, rather than the whole suite aborting.
             except Exception as exc:
                 record(description, "roundtrip", False, describe_jsonld_error(exc))
 
@@ -367,6 +377,9 @@ def _run_tests(
             raised: BaseException | None = None
             try:
                 jsonld.to_rdf(data, loader.options(base=rdf_base, format="application/n-quads"))
+            # An `expectErrorCode` fixture asserts that processing this data *does* raise, so
+            # catching broadly is the point here, not a fallback: whatever comes out is exactly
+            # what `_error_code` and the assertion below need to inspect.
             except Exception as exc:
                 raised = exc
             if raised is None:

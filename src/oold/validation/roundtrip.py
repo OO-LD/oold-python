@@ -21,6 +21,7 @@ from pyld import jsonld
 
 from .frame import embedded_properties, instance_rdf_types, schema_to_frame
 from .loader import DocumentLoader, describe_jsonld_error
+from .resolve import SchemaResolutionError
 
 #: Keys that are metadata rather than data, and are excluded from both comparisons.
 _METADATA_KEYS = frozenset({"@context", "$schema"})
@@ -210,7 +211,12 @@ def roundtrip(
         else:
             result.method = "compacted"
             result.restored = jsonld.compact(back, context_ref, loader.options(base=rdf_base))
-    except Exception as exc:
+    # jsonld.to_rdf/from_rdf/frame/compact raise JsonLdError, and the document loader they call
+    # through converts every resolver failure to one (see loader._loader_error), so those two
+    # types cover this block. Anything else is a bug in this package's own code - `frame.py`'s
+    # `embedded_properties`/`schema_to_frame`, most likely - and must not be misreported as a
+    # `roundtrip.generated` finding against the schema under test.
+    except (jsonld.JsonLdError, SchemaResolutionError) as exc:
         result.ok = False
         result.error = describe_jsonld_error(exc)
         return result

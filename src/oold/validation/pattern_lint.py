@@ -172,6 +172,10 @@ def lint(schema: dict[str, Any], bundle: MetaBundle) -> PatternLintResult:
             key=lambda e: list(e.absolute_path),
         )
         result.schema_errors = [format_error(error) for error in errors]
+    # `schema` here is the same untrusted, not-yet-vetted document `validate_against_meta` sees
+    # (see the comment there), walked the same way by iter_errors, so the exception surface is
+    # the same: not just jsonschema-specific types, but plain AttributeError/TypeError from
+    # malformed keyword values and referencing.exceptions.Unresolvable from a bad `$ref`.
     except Exception as exc:
         result.schema_errors = [f"pattern lint could not run: {type(exc).__name__}: {exc}"]
 

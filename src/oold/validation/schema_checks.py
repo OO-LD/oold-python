@@ -88,6 +88,12 @@ def validate_against_meta(schema: Any, bundle: MetaBundle) -> MetaValidationResu
             bundle.meta_validator().iter_errors(schema),
             key=lambda e: list(e.absolute_path),
         )
+    # `schema` here is a candidate document straight off disk, not yet known to be well-formed
+    # in any way, and iter_errors walks it as jsonschema instance data: a malformed keyword
+    # value (say `"properties": "x"`) surfaces as a plain AttributeError/TypeError from
+    # jsonschema's internals, and an unresolvable `$ref` as a referencing.exceptions.Unresolvable
+    # subclass, not a ValidationError - so no jsonschema-specific type covers this. The docstring
+    # above commits this function to never raising, which is what a broken-schema caller needs.
     except Exception as exc:
         return MetaValidationResult(
             valid=False,

@@ -7,6 +7,25 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.18.4 (2026-08-31)
+
+### Bug Fixes
+
+- **validation**: Narrow roundtrip.py's broad exception handling
+  ([#147](https://github.com/OO-LD/oold-python/pull/147),
+  [`354d966`](https://github.com/OO-LD/oold-python/commit/354d96627239f61c28463009078bdc3f6c242907))
+
+- **validation**: Use jsonschema[format-nongpl] for format checks
+  ([#140](https://github.com/OO-LD/oold-python/pull/140),
+  [`03336e3`](https://github.com/OO-LD/oold-python/commit/03336e3c9aba009f725a424fa3371d89f94d038d))
+
+### Testing
+
+- **parity**: Compare against oold-js instead of oold-schema's scripts
+  ([#144](https://github.com/OO-LD/oold-python/pull/144),
+  [`42d0d74`](https://github.com/OO-LD/oold-python/commit/42d0d740fec4285ca6c3b9bd9c0c028a9368b601))
+
+
 ## v0.18.3 (2026-08-29)
 
 ### Bug Fixes

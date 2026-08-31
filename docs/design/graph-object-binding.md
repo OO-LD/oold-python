@@ -198,6 +198,37 @@ access, so comparison operators live directly on it.
 until the stack overflows. Read `klass.__dict__["__pydantic_fields__"]` along
 the MRO and reject `_`-prefixed names.
 
+**Static types.** The condition expression itself cannot be typed: `Entity.name`
+is a declared field, so pydantic's `dataclass_transform` makes the annotation
+authoritative for class-level access too and the `FieldProxy` really returned is
+invisible, leaving `Entity.name == "x"` as `bool`. The shipped binding handles
+this by accepting `bool` in the `__getitem__` overloads, and the descriptor
+binding does the same: the argument type stays wrong, the result type comes out
+right. What the subscript yields is fully typed:
+
+| expression | static type |
+| --- | --- |
+| `Entity["ex:e1"]` | `Entity \| None` |
+| `Entity[Entity.name == "x"]` | `LinkResultList[Entity] \| None` |
+| `...[0]` | `Entity` |
+| `...[cond]` | `LinkResultList[Entity]` |
+
+`LinkResultList` is generic in the item type, which is what keeps the item type
+through indexing and filtering. Accepting `bool` there widens
+`list.__getitem__`, which answers `T` for a `bool` index - a deliberate
+divergence, since indexing a list by `True` is not something anyone writes.
+`tests/typing/query_dsl.py` pins these with `assert_type`;
+`tests/test_typing.py` runs pyright over it.
+
+The `| None` is the one difference from the shipped overloads, which promise a
+bare `M`: the query really does return `None` when nothing matches, so the
+stricter type is the truthful one.
+
+Instance-level filtering (`entity.links[cond]`) is typed only when the field is
+annotated `LinkResultList[T]`. The `list[T] | None` form the current codegen
+emits stays unfiltered at the type level, so the generator should emit
+`LinkResultList[T]` for to-many links.
+
 ### 3.6 Requirement matrix
 
 From `examples/check_binding_features.py`, which exercises each requirement
@@ -335,10 +366,16 @@ Priority: the JSON-LD/RDF layer, not the object binding.
   (unchanged syntax, so generated packages are untouched), with the explicit
   descriptor and `Link[T]` notations available and `Ref[T]` as an opt-in handle
   for visible or async resolution. Avoid the `Annotated`-over-`Ref` form.
+- **Query DSL:** carried over whole, including the typed subscription overloads
+  (3.5). The `_constructing` guard the metaclass carries is not a cost of the
+  DSL - the descriptor needs it independently, since a descriptor is an ordinary
+  class attribute that pydantic's base-attribute probe trips over without
+  `__getattr__` ever being consulted.
 - **Code generation:** move off text post-processing toward an IR-based
   generator, staging through a hybrid that first deletes the regex. Fold
   `osw-python`'s `fetch_schema` orchestration and the package-generator passes
-  into it.
+  into it. Emit `LinkResultList[T]` for to-many links so instance-level
+  filtering type-checks.
 - **Sequencing into v0.8:** the keyword migration should read `x-oold-range` /
   `x-oold-iri` / `x-oold-uuid` (dual-read with legacy) through the same IR and
   binding, so the generator, the runtime binding and the RDF layer share one

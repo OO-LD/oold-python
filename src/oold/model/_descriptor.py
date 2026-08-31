@@ -38,6 +38,7 @@ from typing import (
     Any,
     ClassVar,
     Generic,
+    SupportsIndex,
     TypeVar,
     Union,
     get_args,
@@ -61,6 +62,7 @@ from oold.model._compat import LinkedApiMixin
 from oold.model._ref import Ref, _construct
 
 T = TypeVar("T")
+_M = TypeVar("_M")
 
 
 def links_enabled() -> bool:
@@ -253,6 +255,15 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
                 return FieldProxy(name)
         raise AttributeError(name)
 
+    @overload
+    def __getitem__(cls: type[_M], item: str) -> _M | None: ...
+
+    @overload
+    def __getitem__(cls: type[_M], item: Condition | bool) -> LinkResultList[_M] | None: ...
+
+    @overload
+    def __getitem__(cls: type[_M], item: list[str]) -> LinkResultList[_M] | None: ...
+
     def __getitem__(cls, item: Any) -> Any:
         return cls.oold_query(item)
 
@@ -318,13 +329,16 @@ def _resolve_cls(data: dict[str, Any], target: Any) -> Any:
     return target
 
 
-class LinkResultList(list[Any]):
+class LinkResultList(list[T]):
     """List returned by a to-many link.
 
     Adds IRI lookup, filtering and attribute projection, and keeps mutations in
     sync with the owner's link storage: appending or removing an item updates
     the stored references too, so ``__iris__`` and serialisation stay correct
     without a second write.
+
+    Generic in the item type, so ``Entity[cond][0]`` is an ``Entity`` to a type
+    checker rather than ``Any``.
     """
 
     _owner: Any = None
@@ -357,7 +371,27 @@ class LinkResultList(list[Any]):
         super().extend(iterable)
         self._sync()
 
-    def __getitem__(self, index: Any) -> Any:
+    # The condition overload has to come first: a condition expression reads as
+    # bool to a type checker (see FieldProxy), and bool satisfies SupportsIndex,
+    # so an index overload placed above it would swallow every filter. That also
+    # makes this a deliberate widening of list.__getitem__, which answers T for
+    # a bool index - indexing a list by True is not a thing anyone writes, and
+    # accepting it is what makes list[Model.field == "x"] type-check.
+    @overload
+    def __getitem__(self, index: Condition | bool) -> LinkResultList[T]: ...
+
+    @overload
+    def __getitem__(self, index: SupportsIndex) -> T: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> LinkResultList[T]: ...
+
+    @overload
+    def __getitem__(self, index: str) -> Any: ...
+
+    def __getitem__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, index: Any
+    ) -> Any:
         if isinstance(index, str):
             if index.startswith("@"):
                 # inline query form: links["@name=='Entity 2'"]

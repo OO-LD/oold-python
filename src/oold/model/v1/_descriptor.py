@@ -18,7 +18,7 @@ downstream API surface (``get_iri_ref``, ``__iris__``, ``to_json`` ...) preserve
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, TypeVar, overload
 
 from pydantic.v1 import BaseModel, PrivateAttr
 from pydantic.v1.fields import SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE
@@ -35,6 +35,8 @@ from oold.model._ref import Ref, _construct
 from oold.static import GenericLinkedBaseModel
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
+
+_M = TypeVar("_M")
 
 _TYPE_REGISTRY: dict[str, type] = {}
 """Type IRI -> model class.
@@ -220,6 +222,15 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
             if fields and name in fields:
                 return FieldProxy(name)
         raise AttributeError(name)
+
+    @overload
+    def __getitem__(cls: type[_M], item: str) -> _M | None: ...
+
+    @overload
+    def __getitem__(cls: type[_M], item: Condition | bool) -> LinkResultList[_M] | None: ...
+
+    @overload
+    def __getitem__(cls: type[_M], item: list[str]) -> LinkResultList[_M] | None: ...
 
     def __getitem__(cls, item: Any) -> Any:
         return cls.oold_query(item)

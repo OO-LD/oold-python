@@ -67,6 +67,18 @@ Exit code is 0 only when no check failed. Warnings do not fail a run.
 | `--json` | Emit the report as JSON. |
 | `--output FILE` | Write the JSON report to a file. |
 
+### What `--offline` pins, and what nothing pins
+
+The vendored meta-schemas are byte-exact per version, so a released version cannot change
+meaning between runs. A document's `@context` carries no equivalent guarantee. `offline` is
+false by default, which is what lets a cross-directory or genuinely remote `@context` resolve
+at all, but it also means two runs over the same document can disagree if a context it reaches
+for has moved in between.
+
+`--offline` closes that gap by refusing to fetch, at the cost of failing on any reference that
+is not already local or in the cache. That is why `make validate` passes it: the committed
+fixtures are meant to give the same answer today and next year.
+
 ## Meta-schema versions
 
 The meta-schemas belong to oold-schema. This package keeps a hand-curated copy of each released

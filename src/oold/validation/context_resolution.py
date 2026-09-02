@@ -7,10 +7,9 @@ other keys are ignored - so a JSON-LD processor can already follow one straight 
 exactly what OO-LD's rule ``OOLD-CMP-b926`` guarantees by requiring a schema to be directly usable
 as a context.
 
-What a processor does not expose is the *flattened active context itself* as a value a caller can
-inspect. Expanding a document tells you the resulting triples, not which terms were in scope or
-where each came from. This module exists for the callers that need that: reporting which terms a
-schema defines, and the per-property attribution in :mod:`~oold.validation.predicates`.
+The callers here need the flattened active context as a *value*: which terms a schema defines,
+and the per-property attribution in :mod:`~oold.validation.predicates`. Expanding a document
+gives the resulting triples, not that.
 
 ``@context`` entries are usually relative siblings, referencing *other OO-LD schemas*::
 
@@ -28,9 +27,21 @@ reference::
 of context objects rather than being merged by hand, so JSON-LD's own override semantics still
 apply.
 
-Replacing this walk with a JSON-LD processor's own context resolution is worth evaluating, if a
-future need exposes that flattened form through a stable API; this module exists because none
-does today, not because a processor could not in principle resolve the chain itself.
+A processor does expose that value. pyld returns it from the public
+``JsonLdProcessor.process_context``, one hop at a time, carrying ``@type``, ``@container``,
+``protected``, ``reverse`` and prefix flags per term; an earlier version of this docstring said
+no processor did, and that was wrong (issue #118). Two things keep the walk here anyway.
+
+``process_context`` never resolves a term's *scoped* ``@context``. It leaves the value exactly as
+authored and defers it to expansion, so ``{"@id": ..., "@context": "Pet.schema.json"}`` survives
+as an unresolved reference. The callers here expand without a document loader, so by the time
+that reference is reached there is nothing left to resolve it against. Something has to embed the
+scoped content eagerly, which is most of what :func:`_resolve_inline` does.
+
+And nothing in the processor stops a caller re-entering it around a reference cycle: successive
+calls share no memory of prior hops. The stack in :func:`_walk_reference` and ``max_scoped_depth``
+in :func:`_resolve_inline` are that bound. No committed fixture is cyclic, so a replacement could
+not be validated against the corpus here either.
 """
 
 from __future__ import annotations

@@ -221,6 +221,76 @@ def test_unresolvable_context_reference_is_reported(resolver, broken_dir):
     assert context.errors and "NoSuchSchema" in context.errors[0]
 
 
+def test_the_walker_and_pyld_agree_on_the_effective_term_set(resolver, data_dir):
+    """Pins the claim the module docstring rests on, across the whole committed corpus.
+
+    The docstring justifies a hand-written walk by naming what pyld does *not* give back: the
+    scoped `@context` content, and a cycle bound across hop-by-hop calls. That argument is only
+    honest while the two agree on everything else. Where a caller needs the effective mapping and
+    nothing more, `process_context` is the better source - it applies JSON-LD's own override
+    semantics rather than `terms()`'s later-key-wins flatten - and a divergence here is the signal
+    that the justification needs revisiting rather than repeating.
+
+    Key sets, not values: this module reports terms as authored (`schema:name`), pyld reports them
+    resolved (`http://schema.org/name`).
+    """
+    from pyld.jsonld import JsonLdProcessor
+
+    from oold.validation.loader import DocumentLoader
+
+    loader = DocumentLoader(resolver, directory=data_dir)
+    processor = JsonLdProcessor()
+    # pyld reads the processing mode off the *initial* context, not the per-call options, and
+    # defaulting to 1.0 rejects every scoped context as "a term definition must not contain
+    # @context" - a failure of the harness that reads exactly like a failure of the subject.
+    options = {"processingMode": "json-ld-1.1"}
+
+    compared = 0
+    for path in sorted(data_dir.glob("*.schema.json")):
+        loaded = resolver.load(path)
+        if "@context" not in loaded.schema:
+            continue
+        context = resolve_context(loaded.schema, loaded.base_uri, resolver)
+        if context.errors or context.is_empty:
+            continue
+
+        active = processor.process_context(
+            processor._get_initial_context(options),
+            context.as_jsonld(),
+            {**options, "base": loader.url_for(path.name), "documentLoader": loader},
+        )
+        theirs = {term for term in active["mappings"] if not term.startswith("@")}
+        assert set(context.terms()) == theirs, path.name
+        compared += 1
+
+    assert compared >= 13, f"only {compared} schemas carried a resolvable @context"
+
+
+def test_pyld_keeps_a_scoped_context_unresolved(resolver, data_dir):
+    """The specific capability the walker adds, as a fact rather than an assertion in prose.
+
+    `process_context` resolves a scoped `@context` eagerly and then discards the result, so the
+    term mapping still holds whatever was authored. Embedding it is `_resolve_inline`'s job.
+    """
+    from pyld.jsonld import JsonLdProcessor
+
+    from oold.validation.loader import DocumentLoader
+
+    loaded = resolver.load(data_dir / "PersonWithPet.schema.json")
+    context = resolve_context(loaded.schema, loaded.base_uri, resolver)
+    loader = DocumentLoader(resolver, directory=data_dir)
+    options = {"processingMode": "json-ld-1.1"}
+
+    active = JsonLdProcessor().process_context(
+        JsonLdProcessor()._get_initial_context(options),
+        context.as_jsonld(),
+        {**options, "base": loader.url_for("PersonWithPet.schema.json"), "documentLoader": loader},
+    )
+    # The walker embedded Pet's terms; pyld hands back the same value it was given and no way to
+    # reach behind it.
+    assert active["mappings"]["pets"]["@context"] == context.terms()["pets"]["@context"]
+
+
 def test_find_alias_keys_discovers_id_and_type_terms():
     assert find_alias_keys({"id": "@id", "type": "@type"}) == ("id", "type")
     assert find_alias_keys({"identifier": {"@id": "@id"}}) == ("identifier", "@type")

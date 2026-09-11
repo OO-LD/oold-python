@@ -32,16 +32,20 @@ A processor does expose that value. pyld returns it from the public
 ``protected``, ``reverse`` and prefix flags per term; an earlier version of this docstring said
 no processor did, and that was wrong (issue #118). Two things keep the walk here anyway.
 
-``process_context`` never resolves a term's *scoped* ``@context``. It leaves the value exactly as
-authored and defers it to expansion, so ``{"@id": ..., "@context": "Pet.schema.json"}`` survives
-as an unresolved reference. The callers here expand without a document loader, so by the time
-that reference is reached there is nothing left to resolve it against. Something has to embed the
-scoped content eagerly, which is most of what :func:`_resolve_inline` does.
+``process_context`` resolves a term's *scoped* ``@context`` and then discards it. The fetch is
+eager, through the document loader, and without one it raises ``invalid scoped context`` rather
+than deferring anything; but the term mapping it returns still carries the value as authored, so
+``{"@id": ..., "@context": "Pet.schema.json"}`` comes back with that string intact and nothing
+reachable behind it. Something has to embed the scoped content itself, which is most of what
+:func:`_resolve_inline` does.
 
-And nothing in the processor stops a caller re-entering it around a reference cycle: successive
-calls share no memory of prior hops. The stack in :func:`_walk_reference` and ``max_scoped_depth``
-in :func:`_resolve_inline` are that bound. No committed fixture is cyclic, so a replacement could
-not be validated against the corpus here either.
+And pyld's own cycle guard does not survive the way this module has to call it. One
+``process_context`` over a loop raises ``Cyclical @context URLs detected``, but attributing a term
+to the hop that defined it means driving the chain a hop at a time, and successive calls share no
+memory of prior hops. Provenance is therefore what costs the guard. The stack in
+:func:`_walk_reference` and ``max_scoped_depth`` in :func:`_resolve_inline` replace it. No
+committed fixture is cyclic, so a replacement could not be validated against the corpus here
+either.
 """
 
 from __future__ import annotations

@@ -151,6 +151,14 @@ in the vendored catalogue, never from a hardcoded column in the check itself. Th
 one code base validate against several specification versions at once: relaxing a `MUST` to a
 `SHOULD` upstream turns a failure into a warning here with no code change.
 
+One severity does not come from the catalogue, because it is not about the document at all. A
+check that raises something it does not expect reports `fault`: a defect in this package, not a
+finding. It fails the run like `fail` does, but says the check produced no verdict, so the
+document is neither condemned nor cleared. A fault keeps the id of the check that raised it
+rather than reporting under one of its own, so "which part of the validator broke" is answered by
+the same identifier that names what it was trying to establish, and the run still reports every
+other target - one broken check costs one check.
+
 A rule absent from the selected version's catalogue, or marked deprecated there, is skipped with
 a message saying so, rather than checked anyway - older meta-schema versions ship no catalogue at
 all and skip the whole `rule.*` family. A false positive costs far more than a missed finding,

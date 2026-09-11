@@ -4,8 +4,15 @@ One serialisable shape carries a whole run, so there is no second representation
 sync. A run is a flat list of :class:`Check` records; grouping (by target, by check id, by
 meta-schema version) is done at render time rather than baked into the structure.
 
-Only ``fail`` is fatal to the verdict. ``warn`` marks a SHOULD-level finding, ``skip`` marks a
-check that could not run for a documented reason (a cyclic scoped ``@context``, for instance).
+``fail`` and ``fault`` are both fatal to the verdict, and they say different things. ``fail`` is a
+finding about the document under test. ``fault`` is a defect in this package: the check raised
+something it does not expect, so it produced no verdict at all and the document is neither
+condemned nor cleared. ``warn`` marks a SHOULD-level finding, ``skip`` marks a check that could
+not run for a documented reason (a cyclic scoped ``@context``, for instance).
+
+A fault keeps the id of the check that raised it rather than reporting under one of its own, so
+"which part of the validator broke" is answered by the same identifier that names what it was
+trying to establish.
 """
 
 from __future__ import annotations
@@ -14,13 +21,14 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-Status = Literal["ok", "fail", "warn", "skip"]
+Status = Literal["ok", "fail", "warn", "skip", "fault"]
 Verbosity = Literal["summary", "full"]
 
 OK: Status = "ok"
 FAIL: Status = "fail"
 WARN: Status = "warn"
 SKIP: Status = "skip"
+FAULT: Status = "fault"
 
 
 @dataclass
@@ -52,6 +60,13 @@ class Check:
     def failed(self) -> bool:
         return self.status == FAIL
 
+    @property
+    def is_fault(self) -> bool:
+        """The check broke rather than the document. Kept separate from :attr:`failed` so that
+        "how many findings" and "how many of our own defects" are never the same number.
+        """
+        return self.status == FAULT
+
     def to_dict(self, verbosity: Verbosity = "summary") -> dict[str, Any]:
         payload: dict[str, Any] = {
             "id": self.id,
@@ -72,7 +87,7 @@ class Check:
         """A single-line rendering: status, rule, check id, target, version and message, each in
         a fixed-width column.
         """
-        label = self.status.upper().ljust(4)
+        label = self.status.upper().ljust(5)
         rule = f" {self.rule}" if self.rule else ""
         version = f" [{self.meta_version}]" if self.meta_version else ""
         message = f": {self.message}" if self.message else ""
@@ -120,18 +135,23 @@ class Report:
 
     @property
     def passed(self) -> bool:
-        return self.fatal_error is None and not any(c.failed for c in self.checks)
+        # A fault is not a finding, but it is not a pass either: the check produced no verdict,
+        # so the run cannot claim the document is clean.
+        return self.fatal_error is None and not any(c.failed or c.is_fault for c in self.checks)
 
     @property
     def counts(self) -> dict[str, int]:
         tally = Counter(c.status for c in self.checks)
-        return {status: tally.get(status, 0) for status in (OK, FAIL, WARN, SKIP)}
+        return {status: tally.get(status, 0) for status in (OK, FAIL, WARN, SKIP, FAULT)}
 
     def by_status(self, status: Status) -> list[Check]:
         return [c for c in self.checks if c.status == status]
 
     def failures(self) -> list[Check]:
         return self.by_status(FAIL)
+
+    def faults(self) -> list[Check]:
+        return self.by_status(FAULT)
 
     def warnings(self) -> list[Check]:
         return self.by_status(WARN)
@@ -172,7 +192,12 @@ class Report:
 
 
 def failure_reasons(report: Report) -> list[str]:
-    """Human-readable reasons the run did not pass, most important first."""
+    """Human-readable reasons the run did not pass, most important first.
+
+    Faults lead. A finding tells the reader to change their document; a fault tells them part of
+    the answer is missing, which they need to know before acting on any of the rest.
+    """
     if report.fatal_error:
         return [report.fatal_error]
-    return [f"{c.id} {c.target}: {c.message}" for c in report.failures()]
+    faults = [f"{c.id} {c.target}: validator fault, {c.message}" for c in report.faults()]
+    return faults + [f"{c.id} {c.target}: {c.message}" for c in report.failures()]

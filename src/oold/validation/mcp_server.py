@@ -60,7 +60,11 @@ class CheckResult(BaseModel):
 
     id: str = Field(description="The check id, e.g. lint.container or rule.id-fragment.")
     target: str = Field(description="What was checked: a schema file, an instance, or a directory entry.")
-    status: str = Field(description="ok, fail, warn, or skip.")
+    status: str = Field(
+        description="ok, fail, warn, skip, or fault. A fault is a defect in the validator: the "
+        "check raised something it does not expect, so it produced no verdict and the document "
+        "is neither condemned nor cleared. Like fail it makes the run not pass."
+    )
     message: str = Field(default="", description="Why the check produced this status, when it is not ok.")
     detail: dict[str, Any] | None = Field(
         default=None, description="Extra structured detail behind the message. Only present with verbosity='full'."

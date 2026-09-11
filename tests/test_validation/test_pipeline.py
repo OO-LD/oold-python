@@ -308,6 +308,55 @@ def test_a_processor_failure_is_not_downgraded_to_a_coverage_warning(broken_dir,
     assert "context.coverage" not in failures
 
 
+def test_an_unexpected_exception_is_a_fault_of_its_check_not_a_finding(data_dir, monkeypatch):
+    """A defect in this package must not read as a defect in the user's schema.
+
+    The fault carries the id of the check that raised it, so the report answers "which part of
+    the validator broke" with the same identifier that names what it was trying to establish.
+    """
+    from oold.validation import pipeline
+
+    monkeypatch.setattr(
+        pipeline, "roundtrip", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("frame derivation broke"))
+    )
+    report = validate_directory(data_dir, OFFLINE)
+
+    faults = report.faults()
+    assert faults, "a raising check produced no fault"
+    # Both checks that call `roundtrip` fault, each under its own id rather than a shared one,
+    # and nothing else is implicated.
+    assert {c.id for c in faults} == {"roundtrip.generated", "variants"}
+    assert all("RuntimeError: frame derivation broke" in c.message for c in faults)
+    assert all("frame derivation broke" in c.detail["traceback"] for c in faults)
+    # A fault is not a finding: nothing was concluded about the document.
+    assert not {c.id for c in report.failures()} & {"roundtrip.generated", "variants"}
+
+
+def test_a_fault_fails_the_run_without_discarding_the_other_verdicts(data_dir, monkeypatch):
+    """Collect-everything-then-report is the model, so one broken check must cost one check.
+
+    Before this, the two available outcomes were a FAIL naming the user's schema or a propagating
+    exception that threw away every verdict already computed in the directory.
+    """
+    from oold.validation import pipeline
+
+    monkeypatch.setattr(
+        pipeline, "roundtrip", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("frame derivation broke"))
+    )
+    report = validate_directory(data_dir, OFFLINE)
+
+    assert not report.passed, "a fault must not read as a pass"
+    assert report.counts["fault"] == len(report.faults())
+    # Every other check still ran, over every target, including on the faulting schemas.
+    assert report.counts["ok"] > 0
+    assert {c.id for c in report.checks} > {"roundtrip.generated"}
+    assert len(report.targets()) > 1
+    # And it leads the reasons, because it means part of the answer is missing.
+    from oold.validation.report import failure_reasons
+
+    assert "validator fault" in failure_reasons(report)[0]
+
+
 def test_strict_promotes_an_unmapped_term_to_a_failure(broken_dir):
     report = validate_schema(
         broken_dir / "missing_context_term.schema.json",

@@ -332,6 +332,44 @@ def test_an_unexpected_exception_is_a_fault_of_its_check_not_a_finding(data_dir,
     assert not {c.id for c in report.failures()} & {"roundtrip.generated", "variants"}
 
 
+def test_ref_resolution_faults_rather_than_blaming_the_schema(data_dir, monkeypatch):
+    """`schema.refs` guards by hand rather than with `_guard`, because it must return.
+
+    Everything below it needs the dereferenced schema, so carrying on would report one defect
+    once per section that tripped over the missing name.
+    """
+    from oold.validation import pipeline
+
+    monkeypatch.setattr(
+        pipeline.Resolver, "dereference", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("resolver broke"))
+    )
+    report = validate_directory(data_dir, OFFLINE)
+    faults = {c.id: c for c in report.faults()}
+
+    assert "schema.refs" in faults, f"no schema.refs fault: {sorted(faults)}"
+    assert "RuntimeError: resolver broke" in faults["schema.refs"].message
+    assert not report.passed
+    # The early return is the point: one fault per schema, and no finding from the same section.
+    assert "schema.refs" not in {c.id for c in report.failures()}
+    assert "roundtrip.generated" not in faults, "the return did not stop the dependent sections"
+
+
+def test_generation_faults_rather_than_blaming_the_schema(data_dir, monkeypatch):
+    """`generate.satisfiable` returns for the same reason: it produces the instance others reuse."""
+    from oold.validation import pipeline
+
+    monkeypatch.setattr(pipeline, "generate", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("generator broke")))
+    report = validate_directory(data_dir, OFFLINE)
+    faults = {c.id: c for c in report.faults()}
+
+    assert "generate.satisfiable" in faults, f"no generate.satisfiable fault: {sorted(faults)}"
+    assert "RuntimeError: generator broke" in faults["generate.satisfiable"].message
+    assert not report.passed
+    assert "generate.satisfiable" not in {c.id for c in report.failures()}
+    # Checks that do not depend on the generated instance still ran and still reported.
+    assert "schema.meta" in {c.id for c in report.checks}
+
+
 def test_a_fault_fails_the_run_without_discarding_the_other_verdicts(data_dir, monkeypatch):
     """Collect-everything-then-report is the model, so one broken check must cost one check.
 

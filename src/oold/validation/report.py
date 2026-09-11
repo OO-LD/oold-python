@@ -83,16 +83,6 @@ class Check:
             payload["detail"] = self.detail
         return payload
 
-    def line(self) -> str:
-        """A single-line rendering: status, rule, check id, target, version and message, each in
-        a fixed-width column.
-        """
-        label = self.status.upper().ljust(5)
-        rule = f" {self.rule}" if self.rule else ""
-        version = f" [{self.meta_version}]" if self.meta_version else ""
-        message = f": {self.message}" if self.message else ""
-        return f"{label}{rule} {self.id:<24} {self.target}{version}{message}"
-
 
 @dataclass
 class Report:

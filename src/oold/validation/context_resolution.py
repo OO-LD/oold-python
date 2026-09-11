@@ -7,10 +7,9 @@ other keys are ignored - so a JSON-LD processor can already follow one straight 
 exactly what OO-LD's rule ``OOLD-CMP-b926`` guarantees by requiring a schema to be directly usable
 as a context.
 
-What a processor does not expose is the *flattened active context itself* as a value a caller can
-inspect. Expanding a document tells you the resulting triples, not which terms were in scope or
-where each came from. This module exists for the callers that need that: reporting which terms a
-schema defines, and the per-property attribution in :mod:`~oold.validation.predicates`.
+The callers here need the flattened active context as a *value*: which terms a schema defines,
+and the per-property attribution in :mod:`~oold.validation.predicates`. Expanding a document
+gives the resulting triples, not that.
 
 ``@context`` entries are usually relative siblings, referencing *other OO-LD schemas*::
 
@@ -28,9 +27,25 @@ reference::
 of context objects rather than being merged by hand, so JSON-LD's own override semantics still
 apply.
 
-Replacing this walk with a JSON-LD processor's own context resolution is worth evaluating, if a
-future need exposes that flattened form through a stable API; this module exists because none
-does today, not because a processor could not in principle resolve the chain itself.
+A processor does expose that value. pyld returns it from the public
+``JsonLdProcessor.process_context``, one hop at a time, carrying ``@type``, ``@container``,
+``protected``, ``reverse`` and prefix flags per term; an earlier version of this docstring said
+no processor did, and that was wrong (issue #118). Two things keep the walk here anyway.
+
+``process_context`` resolves a term's *scoped* ``@context`` and then discards it. The fetch is
+eager, through the document loader, and without one it raises ``invalid scoped context`` rather
+than deferring anything; but the term mapping it returns still carries the value as authored, so
+``{"@id": ..., "@context": "Pet.schema.json"}`` comes back with that string intact and nothing
+reachable behind it. Something has to embed the scoped content itself, which is most of what
+:func:`_resolve_inline` does.
+
+And pyld's own cycle guard does not survive the way this module has to call it. One
+``process_context`` over a loop raises ``Cyclical @context URLs detected``, but attributing a term
+to the hop that defined it means driving the chain a hop at a time, and successive calls share no
+memory of prior hops. Provenance is therefore what costs the guard. The stack in
+:func:`_walk_reference` and ``max_scoped_depth`` in :func:`_resolve_inline` replace it. No
+committed fixture is cyclic, so a replacement could not be validated against the corpus here
+either.
 """
 
 from __future__ import annotations

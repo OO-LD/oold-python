@@ -7,6 +7,25 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v0.20.0 (2026-09-11)
+
+### Features
+
+- **validation**: Report an unexpected exception as a validator fault
+  ([#151](https://github.com/OO-LD/oold-python/pull/151),
+  [`70e0102`](https://github.com/OO-LD/oold-python/commit/70e0102df18a9239fac1407d0acb701c0293ef21))
+
+### Testing
+
+- **validation**: Cover genuine remote retrieval and the warm cache
+  ([#139](https://github.com/OO-LD/oold-python/pull/139),
+  [`7fd050f`](https://github.com/OO-LD/oold-python/commit/7fd050f513dafe715d5fe6dfae6bdf0e1db788a8))
+
+- **validation**: Cover the fault paths the guard-shaped tests missed
+  ([#151](https://github.com/OO-LD/oold-python/pull/151),
+  [`70e0102`](https://github.com/OO-LD/oold-python/commit/70e0102df18a9239fac1407d0acb701c0293ef21))
+
+
 ## v0.19.0 (2026-08-31)
 
 ### Features

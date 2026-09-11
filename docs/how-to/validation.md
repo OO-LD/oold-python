@@ -55,7 +55,13 @@ instance of the document it names, and a file with no `$schema` at all needs `--
 `--as-instance` to say which it is. Pass either flag to skip detection and force one reading, for
 example when a schema is still being drafted and has no `$schema` yet.
 
-Exit code is 0 only when no check failed. Warnings do not fail a run.
+Exit code is 0 only when no check failed and none faulted. Warnings do not fail a run.
+
+A **fault** is a defect in this validator rather than a finding about your document: a check
+raised something it does not expect, so it produced no verdict and the document is neither
+condemned nor cleared. It carries the id of the check that broke, is counted separately from
+failures, and stops that one check rather than the run - every other target still reports. Seeing
+one means filing a bug here, not editing your schema.
 
 ### Options
 

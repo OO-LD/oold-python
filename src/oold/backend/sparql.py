@@ -2,10 +2,22 @@ import json
 
 from pydantic import ConfigDict
 from rdflib import Graph
-from SPARQLWrapper import JSONLD, SPARQLWrapper
+from SPARQLWrapper import JSON, JSONLD, SPARQLWrapper
 
 from oold.backend.auth import UserPwdCredential, get_credential
-from oold.backend.interface import Backend, Resolver, StoreResult
+from oold.backend.interface import (
+    Backend,
+    ComparisonOperator,
+    Query,
+    QueryParam,
+    ResolveParam,
+    Resolver,
+    ResolveResult,
+    StoreResult,
+)
+
+WD_INSTANCE_OF = "http://www.wikidata.org/prop/direct/P31"
+"""Wikidata's "instance of" - what this module maps to ``@type``."""
 
 DEFAULT_USER_AGENT = "oold-python (https://github.com/OO-LD/oold-python)"
 """Sent with every SPARQL request.
@@ -26,6 +38,20 @@ class LocalSparqlResolver(Resolver):
         super().__init__(**kwargs)
         if self.graph is None:
             self.graph = Graph()
+
+    def query(self, param: QueryParam) -> ResolveResult:
+        """Same translation as the remote resolver, run against the local graph.
+
+        Having both go through ``_translate`` is what makes the offline test a
+        check on the translation rather than on a second implementation of it.
+        """
+        model_cls = param.model_cls or self.model_cls
+        if model_cls is None:
+            raise ValueError("No model_cls provided in request or resolver")
+        patterns = _translate(param.query, model_cls, [0])
+        rows = self.graph.query("SELECT DISTINCT ?s WHERE {\n" + patterns + "\n}")
+        iris = [str(row[0]) for row in rows]
+        return self.resolve(ResolveParam(iris=iris, model_cls=model_cls))
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
@@ -76,20 +102,35 @@ class LocalSparqlBackend(LocalSparqlResolver, Backend):
             self.graph += g
         return StoreResult(success=True)
 
-    def query():
-        raise NotImplementedError()
-
 
 class SparqlResolver(Resolver):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     endpoint: str
     user_agent: str = DEFAULT_USER_AGENT
+    query_limit: int = 100
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self._sparql = SPARQLWrapper(self.endpoint, agent=self.user_agent)
+
+    def query(self, param: QueryParam) -> ResolveResult:
+        """Find the subjects matching a Condition / Query, then resolve them.
+
+        Only the comparison operators the DSL already builds are translated
+        (eq, ne, lt, le, gt, ge) plus ``&``. Anything else raises rather than
+        quietly returning the wrong rows.
+        """
+        model_cls = param.model_cls or self.model_cls
+        if model_cls is None:
+            raise ValueError("No model_cls provided in request or resolver")
+        patterns = _translate(param.query, model_cls, [0])
+        self._sparql.setQuery("SELECT DISTINCT ?s WHERE {\n" + patterns + "\n} LIMIT " + str(self.query_limit))
+        self._sparql.setReturnFormat(JSON)
+        rows = self._sparql.query().convert()["results"]["bindings"]
+        iris = [row["s"]["value"] for row in rows]
+        return self.resolve(ResolveParam(iris=iris, model_cls=model_cls))
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
@@ -138,11 +179,39 @@ class WikiDataSparqlResolver(Resolver):
 
     endpoint: str = "https://query.wikidata.org/sparql"
     user_agent: str = DEFAULT_USER_AGENT
+    query_limit: int = 100
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self._sparql = SPARQLWrapper(self.endpoint, agent=self.user_agent)
+
+    def query(self, param: QueryParam) -> ResolveResult:
+        """Find the subjects matching a Condition / Query, then resolve them.
+
+        Only the comparison operators the DSL already builds are translated
+        (eq, ne, lt, le, gt, ge) plus ``&``. Anything else raises rather than
+        quietly returning the wrong rows.
+        """
+        model_cls = param.model_cls or self.model_cls
+        if model_cls is None:
+            raise ValueError("No model_cls provided in request or resolver")
+        patterns = _translate(param.query, model_cls, [0])
+        # Constrain to the class. A label matches far more than one kind of
+        # thing - "Tim Berners-Lee" is also a book edition - and resolving those
+        # would fail on an unknown type IRI. P31 is the same predicate this
+        # resolver rewrites into @type on the way in.
+        class_iri = next(
+            (iri for iri in _as_list(model_cls.get_cls_iri()) if str(iri).startswith("http")),
+            None,
+        )
+        if class_iri:
+            patterns = f"    ?s <{WD_INSTANCE_OF}> <{class_iri}> .\n" + patterns
+        self._sparql.setQuery("SELECT DISTINCT ?s WHERE {\n" + patterns + "\n} LIMIT " + str(self.query_limit))
+        self._sparql.setReturnFormat(JSON)
+        rows = self._sparql.query().convert()["results"]["bindings"]
+        iris = [row["s"]["value"] for row in rows]
+        return self.resolve(ResolveParam(iris=iris, model_cls=model_cls))
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         # sparql query to get a node by IRI with all its properties
@@ -176,3 +245,71 @@ class WikiDataSparqlResolver(Resolver):
             jsonld_dicts[iri] = jsonld_dict
 
         return jsonld_dicts
+
+
+_SPARQL_OPERATORS = {
+    ComparisonOperator.EQ: "=",
+    ComparisonOperator.NE: "!=",
+    ComparisonOperator.LT: "<",
+    ComparisonOperator.LE: "<=",
+    ComparisonOperator.GT: ">",
+    ComparisonOperator.GE: ">=",
+}
+
+
+def _as_list(value) -> list:
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def _expand_term(model_cls, field: str, value) -> tuple[str, str]:
+    """Return (predicate IRI, SPARQL literal) for a field of ``model_cls``.
+
+    Both come from expanding a probe document against the model's own JSON-LD
+    context, so the term definition decides the predicate *and* the literal form
+    - a term scoped to ``@language: en`` yields ``"x"@en``, one with an
+    ``@type`` yields ``"x"^^<datatype>``. Re-deriving either by hand would be a
+    second, divergent reading of the context.
+    """
+    from pydantic import BaseModel as _BaseModel
+    from pyld import jsonld as _jsonld
+
+    from oold.static import build_context, get_jsonld_context_loader
+
+    context = build_context(model_cls, _BaseModel)
+    _jsonld.set_document_loader(get_jsonld_context_loader(model_cls, _BaseModel))
+    expanded = _jsonld.expand({"@context": context, field: value})
+    if not expanded:
+        raise ValueError(f"{model_cls.__name__}.{field} is not mapped by the model context")
+    node = expanded[0]
+    predicate = next((key for key in node if not key.startswith("@")), None)
+    if predicate is None:
+        raise ValueError(f"{model_cls.__name__}.{field} is not mapped by the model context")
+    entry = node[predicate][0]
+    if "@id" in entry:
+        return predicate, f"<{entry['@id']}>"
+    literal = json.dumps(str(entry["@value"]))
+    if entry.get("@language"):
+        return predicate, f"{literal}@{entry['@language']}"
+    if entry.get("@type"):
+        return predicate, f"{literal}^^<{entry['@type']}>"
+    if isinstance(value, (bool, int, float)):
+        return predicate, json.dumps(value)
+    return predicate, literal
+
+
+def _translate(node, model_cls, counter: list[int]) -> str:
+    """Render a Condition or Query as SPARQL graph patterns."""
+    if isinstance(node, Query):
+        if node.operator != "and":
+            raise NotImplementedError(f"Unsupported query operator: {node.operator}")
+        return _translate(node.op1, model_cls, counter) + "\n" + _translate(node.op2, model_cls, counter)
+    predicate, literal = _expand_term(model_cls, node.field, node.value)
+    operator = node.operator or ComparisonOperator.EQ
+    if operator == ComparisonOperator.EQ:
+        # a plain pattern is both selective and index-friendly
+        return f"    ?s <{predicate}> {literal} ."
+    counter[0] += 1
+    var = f"?v{counter[0]}"
+    return f"    ?s <{predicate}> {var} .\n    FILTER({var} {_SPARQL_OPERATORS[operator]} {literal})"

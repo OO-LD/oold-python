@@ -17,19 +17,26 @@ Two details are specific to Wikidata:
   aliases ``type`` to ``@type`` rather than mapping it to P31.
 """
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict
 
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.backend.sparql import WikiDataSparqlResolver
 
-# based on pydantic v2
-from oold.model import LinkedBaseModel
+# The descriptor binding (pydantic v2). Imported directly rather than as
+# oold.model.LinkedBaseModel, because Link[T] is part of this binding and the
+# swap is still behind OOLD_DESCRIPTOR_BINDING.
+from oold.model._descriptor import (
+    AutoLinkedModel,
+    Link,
+    LinkNotResolved,
+    OoldField,
+)
 
 WD_ENTITY = "http://www.wikidata.org/entity/"
 ENTITY_SCHEMA = "https://oo-ld.org/examples/wikidata/Entity"
 
 
-class WikiDataEntity(LinkedBaseModel):
+class WikiDataEntity(AutoLinkedModel):
     model_config = ConfigDict(
         json_schema_extra={
             "@context": {
@@ -77,10 +84,10 @@ class Person(WikiDataEntity):
         }
     )
     type: str | None = "Item:Q5"
-    father: "Person | None" = Field(
-        None,
-        json_schema_extra={"range": WD_ENTITY + "Q5"},
-    )
+    # Link[T] rather than "Person | None": the annotation says what *reading*
+    # the link yields, so a chain can be written plainly and guarded once.
+    # Ancestry does run out - that is what the try/except in main() is for.
+    father: Link["Person"] = OoldField(range=WD_ENTITY + "Q5")
 
 
 Person.model_rebuild()
@@ -110,10 +117,25 @@ def main() -> None:
     assert isinstance(father, Person), type(father)
     print("  resolved:  ", father.id, "-", father.name)
 
-    print("\nfollowing the same link again walks the graph")
-    grandfather = father.father
-    assert isinstance(grandfather, Person), type(grandfather)
-    print("  grandfather:", grandfather.id, "-", grandfather.name)
+    print("\nplain chaining - no guard, no narrowing, no cast")
+    ggf = person.father.father.father
+    print("  great-grandfather:", ggf.name)
+
+    print("\nthe same walk, until the data runs out")
+    ancestor, generations = person, 0
+    try:
+        while True:
+            ancestor = ancestor.father
+            generations += 1
+            print(f"  {generations} generation(s) back:", ancestor.name)
+    except LinkNotResolved:
+        # Ancestry runs out. Declaring the link mandatory is what turns that
+        # into one exception at the end rather than a guard at every hop.
+        print(f"  no father recorded for {ancestor.name} - walked {generations} generation(s)")
+
+    print("\nquery: the same DSL, translated to SPARQL by the resolver")
+    found = Person[Person.name == "Tim Berners-Lee"]
+    print("  Person[Person.name == 'Tim Berners-Lee'] ->", [p.id for p in found or []])
 
     print("\nserialisation writes the link back as an IRI")
     dumped = person.to_json()

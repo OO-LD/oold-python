@@ -150,10 +150,25 @@ def test_optional_link_keeps_the_slot_of_an_unresolvable_reference(store):
     assert p.link_iris("knows") == ["annot:bob", "annot:nobody"]
 
 
-def test_mandatory_link_is_rejected_when_absent(store):
-    """Knowable without resolving, so it fails when the object is built."""
-    with pytest.raises(LinkNotResolved, match="missing mandatory link"):
-        Employee(id="annot:e")
+def test_mandatory_link_unset_raises_on_access_not_on_construction(store):
+    """Partial graph data must still load; the promise is about reading."""
+    e = Employee(id="annot:e")  # builds fine
+    with pytest.raises(LinkNotResolved, match="not set"):
+        _ = e.employer
+
+
+def test_a_whole_chain_needs_one_except_not_a_guard_per_hop(store):
+    """The point of declaring a link mandatory."""
+
+    class Node(AutoLinkedModel):
+        id: str
+        type: str | None = "annot:Node"
+        parent: Link["Node"] = OoldField()
+
+    Node.model_rebuild()
+    leaf = Node(id="annot:leaf", parent={"id": "annot:mid"})
+    with pytest.raises(LinkNotResolved):
+        _ = leaf.parent.parent.parent
 
 
 def test_mandatory_link_resolves(store):

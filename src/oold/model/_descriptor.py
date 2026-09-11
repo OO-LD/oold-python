@@ -628,8 +628,17 @@ class _AutoLink:
                 raise LinkNotResolved(self._message(obj, missing))
             result = LinkResultList(items)._bind(obj, self.name)
         elif stored is None:
-            # Unset. A mandatory link is rejected when the object is built, so
-            # reaching here means the field really is optional.
+            if not self.optional:
+                # Raised on access, not at construction. The annotation says what
+                # *reading* the link yields, not that every instance carries one:
+                # graph data is routinely partial, and rejecting such objects when
+                # they are built would make them unloadable. Declaring the link
+                # mandatory states an intent to traverse it, so one try/except
+                # around a whole chain replaces a guard at every hop.
+                raise LinkNotResolved(
+                    f"{type(obj).__name__}.{self.name} is declared mandatory but is "
+                    f"not set. Declare it as Link[T | None] if absence is data."
+                )
             result = None
         else:
             result = _batch_resolve([stored], target)[0]
@@ -864,17 +873,6 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
-        # A mandatory link that is simply absent is knowable here, without
-        # resolving anything - so it is rejected when the object is built rather
-        # than whenever someone happens to read it. That is what lets Link[T]
-        # promise a T for every instance that exists.
-        missing = [name for name, descr in link_fields.items() if not descr.optional and not self._links.get(name)]
-        if missing:
-            raise LinkNotResolved(
-                f"{type(self).__name__} is missing mandatory link(s) "
-                f"{', '.join(sorted(missing))}. Declare the field as "
-                f"Link[T | None] if it may be absent."
-            )
 
     def __eq__(self, other: Any) -> bool:
         """Compare by data, not by what happens to be cached.

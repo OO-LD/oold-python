@@ -13,6 +13,7 @@ deliberately rather than arriving with the next push.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,6 +21,11 @@ from pathlib import Path
 import pytest
 
 from oold.validation import Options, run_compliance, validate_directory
+from oold.validation.context_resolution import resolve_context
+from oold.validation.loader import DocumentLoader
+from oold.validation.resolve import Resolver
+
+from .conftest import embedded_schemas
 
 pytestmark = pytest.mark.parity
 
@@ -149,3 +155,49 @@ def test_every_mapped_rule_resolves_against_the_upstream_catalog(upstream):
     known = {r["id"] for r in json.loads(catalog.read_text(encoding="utf-8"))["rules"]}
     unknown = {check: rule for check, rule in rule_map().items() if rule not in known}
     assert not unknown, f"the registry cites ids absent from the upstream catalog: {unknown}"
+
+
+def test_the_walker_and_pyld_agree_across_the_upstream_corpus(upstream):
+    """The same equivalence the committed slice pins, over a corpus that is still moving.
+
+    `context_resolution`'s docstring justifies a hand-written walk by what pyld does not return.
+    The fixture slice is a snapshot and can only pin that against constructs upstream had when it
+    was taken; this runs it against whatever `main` has now, which is where a construct that
+    breaks the claim would appear first.
+    """
+    from pyld.jsonld import JsonLdProcessor
+
+    resolver = Resolver(offline=False)
+    processor = JsonLdProcessor()
+    options = {"processingMode": "json-ld-1.1"}
+    compared = 0
+
+    def agree(schema, base_uri, base_url, loader, label):
+        if "@context" not in schema:
+            return False
+        context = resolve_context(schema, base_uri, resolver)
+        if context.errors or context.is_empty:
+            return False
+        active = processor.process_context(
+            processor._get_initial_context(options),
+            context.as_jsonld(),
+            {**options, "base": base_url, "documentLoader": loader},
+        )
+        theirs = {term for term in active["mappings"] if not term.startswith("@")}
+        assert set(context.terms()) == theirs, label
+        return True
+
+    examples = upstream / "examples"
+    loader = DocumentLoader(resolver, directory=examples)
+    for path in sorted(examples.glob("*.schema.json")):
+        loaded = resolver.load(path)
+        compared += agree(loaded.schema, loaded.base_uri, loader.url_for(path.name), loader, path.name)
+
+    compliance = examples / "compliance"
+    comp_loader = DocumentLoader(resolver, directory=compliance)
+    synthetic = comp_loader.url_for("compliance-case.schema.json")
+    for path in sorted(compliance.glob("*.json")):
+        for index, schema in enumerate(embedded_schemas(json.loads(path.read_text(encoding="utf-8")))):
+            compared += agree(schema, synthetic, synthetic, comp_loader, f"{path.name}[{index}]")
+
+    assert compared >= 20, f"only {compared} upstream schemas carried a resolvable @context"

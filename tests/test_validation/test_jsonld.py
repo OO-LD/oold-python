@@ -26,7 +26,7 @@ from oold.validation.roundtrip import (
     roundtrip,
 )
 
-from .conftest import read
+from .conftest import embedded_schemas, read
 
 # ------------------------------------------------------------------ canonical / lost_keys
 
@@ -245,25 +245,36 @@ def test_the_walker_and_pyld_agree_on_the_effective_term_set(resolver, data_dir)
     # @context" - a failure of the harness that reads exactly like a failure of the subject.
     options = {"processingMode": "json-ld-1.1"}
 
-    compared = 0
-    for path in sorted(data_dir.glob("*.schema.json")):
-        loaded = resolver.load(path)
-        if "@context" not in loaded.schema:
-            continue
-        context = resolve_context(loaded.schema, loaded.base_uri, resolver)
+    def agree(schema, base_uri, base_url, label):
+        """True when both produce the same term set; None when the schema has nothing to compare."""
+        if "@context" not in schema:
+            return None
+        context = resolve_context(schema, base_uri, resolver)
         if context.errors or context.is_empty:
-            continue
-
+            return None
         active = processor.process_context(
             processor._get_initial_context(options),
             context.as_jsonld(),
-            {**options, "base": loader.url_for(path.name), "documentLoader": loader},
+            {**options, "base": base_url, "documentLoader": loader},
         )
         theirs = {term for term in active["mappings"] if not term.startswith("@")}
-        assert set(context.terms()) == theirs, path.name
-        compared += 1
+        assert set(context.terms()) == theirs, label
+        return True
 
-    assert compared >= 13, f"only {compared} schemas carried a resolvable @context"
+    compared = 0
+    for path in sorted(data_dir.glob("*.schema.json")):
+        loaded = resolver.load(path)
+        compared += bool(agree(loaded.schema, loaded.base_uri, loader.url_for(path.name), path.name))
+
+    # The compliance fixtures carry as many schemas again as the examples do, and they are where
+    # the unusual constructs live - that is what they are for - so leaving them out would test the
+    # equivalence on exactly the documents least likely to break it.
+    synthetic = loader.url_for("compliance-case.schema.json")
+    for path in sorted((data_dir / "compliance").glob("*.json")):
+        for index, schema in enumerate(embedded_schemas(json.loads(path.read_text(encoding="utf-8")))):
+            compared += bool(agree(schema, synthetic, synthetic, f"{path.name}[{index}]"))
+
+    assert compared >= 26, f"only {compared} schemas carried a resolvable @context"
 
 
 def test_pyld_keeps_a_scoped_context_unresolved(resolver, data_dir):

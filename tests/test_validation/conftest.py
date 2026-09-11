@@ -16,6 +16,18 @@ X_OOLD_CONTEXT = DATA / "x_oold_context"
 RESOLVER_CACHE = DATA.parent / "resolver_cache"
 
 
+def embedded_schemas(node):
+    """Every schema inside a compliance fixture, whatever nesting that file happens to use."""
+    if isinstance(node, dict):
+        if isinstance(node.get("schema"), dict):
+            yield node["schema"]
+        for value in node.values():
+            yield from embedded_schemas(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from embedded_schemas(value)
+
+
 @pytest.fixture
 def data_dir() -> Path:
     """The committed slice of oold-schema's examples."""

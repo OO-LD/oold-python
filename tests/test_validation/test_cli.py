@@ -35,6 +35,33 @@ def test_a_broken_schema_exits_nonzero(run, broken_dir):
     assert "context.predicates" in result.output
 
 
+def test_a_validator_fault_is_named_as_ours_and_exits_nonzero(run, data_dir, monkeypatch):
+    """A fault must not send the reader looking for a defect in their own document.
+
+    So the count is reported separately from failures, and only when there are some: a permanent
+    "0 fault(s)" would train people to skip the field, which is the opposite of what it is for.
+    """
+    from oold.validation import pipeline
+
+    monkeypatch.setattr(
+        pipeline, "roundtrip", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("frame derivation broke"))
+    )
+    result = run("validate", str(data_dir), "--offline")
+
+    assert result.exit_code == 1
+    assert "VALIDATOR FAULT(S)" in result.output
+    assert "FAULT roundtrip.generated" in result.output
+    assert "RuntimeError: frame derivation broke" in result.output
+    # Nothing was concluded about the documents, so nothing is reported as failing.
+    assert "0 failed" in result.output
+
+
+def test_a_clean_run_does_not_mention_faults(run, data_dir):
+    result = run("validate", str(data_dir), "--offline")
+    assert result.exit_code == 0, result.output
+    assert "FAULT" not in result.output
+
+
 def test_failures_are_shown_by_default_and_passes_are_not(run, data_dir):
     result = run("validate", str(data_dir), "--offline")
     assert "hidden" in result.output

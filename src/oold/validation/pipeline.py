@@ -13,6 +13,9 @@ Check ids are stable and dotted, so results can be filtered and compared across 
 from __future__ import annotations
 
 import json
+import traceback
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -32,7 +35,7 @@ from .loader import DocumentLoader
 from .meta_store import MetaBundle, MetaSchemaError, Rule, resolve_selection
 from .pattern_lint import lint
 from .predicates import check_predicates
-from .report import FAIL, OK, SKIP, WARN, Report
+from .report import FAIL, FAULT, OK, SKIP, WARN, Report
 from .resolve import Resolver, SchemaResolutionError, bound_schema
 from .roundtrip import roundtrip
 from .schema_checks import check_usable_as_validator, validate_against_meta
@@ -171,6 +174,32 @@ def _read(path: Path) -> Any:
 # ---------------------------------------------------------------------------- schema checks
 
 
+@contextmanager
+def _guard(run: _Run, check_id: str, target: str) -> Iterator[None]:
+    """Record an unexpected exception as a fault of ``check_id`` rather than a finding.
+
+    A check raising something it does not expect is a defect in this package, and the two ways
+    of handling it without this are both wrong: reporting FAIL names the user's document for a
+    fault of ours, and letting it propagate discards the verdicts already computed for every
+    other target in the run.
+
+    The guard is deliberately broad where the code it wraps is not. Narrowing a call site (#127)
+    is what turns a swallowed exception into a propagating one, and this is where the propagating
+    one is allowed to land. The traceback goes in ``detail`` because a fault is a bug report
+    against this package and the message alone will not locate it.
+    """
+    try:
+        yield
+    except Exception as exc:
+        run.add(
+            check_id,
+            target,
+            FAULT,
+            f"{type(exc).__name__}: {exc}",
+            {"traceback": traceback.format_exc()},
+        )
+
+
 def _check_schema(run: _Run, name: str) -> None:
     """Every check that applies to one schema file."""
     try:
@@ -179,28 +208,34 @@ def _check_schema(run: _Run, name: str) -> None:
         return
 
     # -- meta-schema well-formedness (per version) ---------------------------------
-    for bundle in run.bundles:
-        result = validate_against_meta(raw, bundle)
-        problems = list(result.errors) + check_usable_as_validator(raw)
-        if problems:
-            extra = f" (+{result.truncated} more)" if result.truncated else ""
-            run.add(
-                "schema.meta",
-                name,
-                FAIL,
-                problems[0] + extra,
-                {"errors": problems},
-                bundle.version,
-            )
-        else:
-            run.add("schema.meta", name, OK, meta_version=bundle.version)
+    with _guard(run, "schema.meta", name):
+        for bundle in run.bundles:
+            result = validate_against_meta(raw, bundle)
+            problems = list(result.errors) + check_usable_as_validator(raw)
+            if problems:
+                extra = f" (+{result.truncated} more)" if result.truncated else ""
+                run.add(
+                    "schema.meta",
+                    name,
+                    FAIL,
+                    problems[0] + extra,
+                    {"errors": problems},
+                    bundle.version,
+                )
+            else:
+                run.add("schema.meta", name, OK, meta_version=bundle.version)
 
     # -- $ref composition (version independent) ------------------------------------
+    # Not guarded as a section: everything downstream needs `deref`, so a fault here has to stop
+    # this schema rather than let the later checks raise on a name that was never bound.
     try:
         resolved = run.resolver.load(run.directory / name)
         deref = run.resolver.dereference(resolved)
     except SchemaResolutionError as exc:
         run.add("schema.refs", name, FAIL, str(exc))
+        return
+    except Exception as exc:
+        run.add("schema.refs", name, FAULT, f"{type(exc).__name__}: {exc}", {"traceback": traceback.format_exc()})
         return
 
     if deref.unresolved:
@@ -210,77 +245,91 @@ def _check_schema(run: _Run, name: str) -> None:
 
     # -- pattern lint --------------------------------------------------------------
     first = None
-    for bundle in run.bundles:
-        result = lint(raw, bundle)
-        first = first or result
-        gate = run.catalog_gate("lint.pattern", bundle)
-        if gate is not None:
-            run.add("lint.pattern", name, gate.status, gate.message, meta_version=bundle.version)
-        elif result.schema_errors:
-            run.add(
-                "lint.pattern",
-                name,
-                FAIL,
-                result.schema_errors[0],
-                {"errors": result.schema_errors},
-                bundle.version,
-            )
-        else:
-            run.add("lint.pattern", name, OK, meta_version=bundle.version)
+    with _guard(run, "lint.pattern", name):
+        for bundle in run.bundles:
+            result = lint(raw, bundle)
+            first = first or result
+            gate = run.catalog_gate("lint.pattern", bundle)
+            if gate is not None:
+                run.add("lint.pattern", name, gate.status, gate.message, meta_version=bundle.version)
+            elif result.schema_errors:
+                run.add(
+                    "lint.pattern",
+                    name,
+                    FAIL,
+                    result.schema_errors[0],
+                    {"errors": result.schema_errors},
+                    bundle.version,
+                )
+            else:
+                run.add("lint.pattern", name, OK, meta_version=bundle.version)
 
     if first is not None:
         # These two correlate `properties` with `@context`, so no meta-schema version can
         # express them and they are reported once rather than per version, gated against the
         # first selected bundle - the same one `first` was computed from.
-        gate = run.catalog_gate("lint.container", run.bundles[0])
-        if gate is not None:
-            run.add("lint.container", name, gate.status, gate.message)
-        elif first.missing_container:
-            joined = ", ".join(first.missing_container)
-            plural = "ies" if len(first.missing_container) > 1 else "y"
-            run.add(
-                "lint.container",
-                name,
-                FAIL,
-                f"strict array propert{plural} without @container @set/@list: {joined}",
-                {"properties": first.missing_container},
-            )
-        else:
-            run.add("lint.container", name, OK)
+        with _guard(run, "lint.container", name):
+            gate = run.catalog_gate("lint.container", run.bundles[0])
+            if gate is not None:
+                run.add("lint.container", name, gate.status, gate.message)
+            elif first.missing_container:
+                joined = ", ".join(first.missing_container)
+                plural = "ies" if len(first.missing_container) > 1 else "y"
+                run.add(
+                    "lint.container",
+                    name,
+                    FAIL,
+                    f"strict array propert{plural} without @container @set/@list: {joined}",
+                    {"properties": first.missing_container},
+                )
+            else:
+                run.add("lint.container", name, OK)
 
-        gate = run.catalog_gate("lint.iri-format", run.bundles[0])
-        if gate is not None:
-            run.add("lint.iri-format", name, gate.status, gate.message)
-        elif first.missing_iri_format:
-            joined = ", ".join(first.missing_iri_format)
-            plural = "ies" if len(first.missing_iri_format) > 1 else "y"
-            run.add(
-                "lint.iri-format",
-                name,
-                WARN,
-                f"IRI reference propert{plural} without an iri-reference/uri* format: {joined}",
-                {"properties": first.missing_iri_format},
-            )
+        with _guard(run, "lint.iri-format", name):
+            gate = run.catalog_gate("lint.iri-format", run.bundles[0])
+            if gate is not None:
+                run.add("lint.iri-format", name, gate.status, gate.message)
+            elif first.missing_iri_format:
+                joined = ", ".join(first.missing_iri_format)
+                plural = "ies" if len(first.missing_iri_format) > 1 else "y"
+                run.add(
+                    "lint.iri-format",
+                    name,
+                    WARN,
+                    f"IRI reference propert{plural} without an iri-reference/uri* format: {joined}",
+                    {"properties": first.missing_iri_format},
+                )
 
     _check_schema_jsonld(run, name, raw)
 
 
 def _check_schema_jsonld(run: _Run, name: str, raw: dict[str, Any]) -> None:
     """Generation, round-trip, remote-context and attribution for one schema."""
+    from jsonschema import Draft202012Validator
     from pyld import jsonld
 
-    schema = run.bounded(name)
-
     # -- satisfiability ------------------------------------------------------------
-    generated = generate(schema)
-    if not generated.ok:
-        run.add("generate.satisfiable", name, FAIL, generated.error or "generation failed")
+    # An early return on fault rather than a guarded section: every check below needs `schema`,
+    # `generated` and `validator`, so carrying on would raise on names that were never bound and
+    # report one defect once per section that tripped over it.
+    try:
+        schema = run.bounded(name)
+        generated = generate(schema)
+        if not generated.ok:
+            run.add("generate.satisfiable", name, FAIL, generated.error or "generation failed")
+            return
+        validator = Draft202012Validator(schema, format_checker=OOLD_FORMAT_CHECKER)
+        errors = sorted(validator.iter_errors(generated.instance), key=lambda e: list(e.absolute_path))
+    except Exception as exc:
+        run.add(
+            "generate.satisfiable",
+            name,
+            FAULT,
+            f"{type(exc).__name__}: {exc}",
+            {"traceback": traceback.format_exc()},
+        )
         return
 
-    from jsonschema import Draft202012Validator
-
-    validator = Draft202012Validator(schema, format_checker=OOLD_FORMAT_CHECKER)
-    errors = sorted(validator.iter_errors(generated.instance), key=lambda e: list(e.absolute_path))
     if errors:
         run.add(
             "generate.satisfiable",
@@ -297,78 +346,85 @@ def _check_schema_jsonld(run: _Run, name: str, raw: dict[str, Any]) -> None:
     promoted = promoted_terms(raw)
 
     # -- generated-instance round-trip ---------------------------------------------
-    if cyclic:
-        run.add("roundtrip.generated", name, SKIP, CYCLIC_NOTE)
-    else:
-        result = roundtrip(schema, generated.instance, context_url, run.loader, promoted=promoted)
-        # A property with no @context term does not reach RDF, so it cannot come back. That is
-        # permitted (OOLD-SCH-2d05) and is context.coverage's finding, not a round-trip defect.
-        # Reporting it here as well would fail the schema for something the specification allows,
-        # under a check that cites no rule. What is left is a genuine loss: a property that was
-        # mapped and still did not survive.
-        unmapped = _unmapped_properties(run, name, raw, schema, generated.instance)
-        lost = [key for key in result.lost if key.split("[")[0].split(".")[0] not in unmapped]
-        if result.error:
-            run.add("roundtrip.generated", name, FAIL, result.error)
-        elif lost:
-            joined = ", ".join(lost)
-            plural = "ies" if len(lost) > 1 else "y"
-            run.add(
-                "roundtrip.generated",
-                name,
-                FAIL,
-                f"propert{plural} lost through RDF despite being mapped: {joined}",
-                {"lost": lost, "unmapped": sorted(unmapped)},
-            )
+    with _guard(run, "roundtrip.generated", name):
+        if cyclic:
+            run.add("roundtrip.generated", name, SKIP, CYCLIC_NOTE)
         else:
-            re_errors = sorted(validator.iter_errors(result.restored), key=lambda e: list(e.absolute_path))
-            if re_errors:
+            result = roundtrip(schema, generated.instance, context_url, run.loader, promoted=promoted)
+            # A property with no @context term does not reach RDF, so it cannot come back. That is
+            # permitted (OOLD-SCH-2d05) and is context.coverage's finding, not a round-trip defect.
+            # Reporting it here as well would fail the schema for something the specification allows,
+            # under a check that cites no rule. What is left is a genuine loss: a property that was
+            # mapped and still did not survive.
+            unmapped = _unmapped_properties(run, name, raw, schema, generated.instance)
+            lost = [key for key in result.lost if key.split("[")[0].split(".")[0] not in unmapped]
+            if result.error:
+                run.add("roundtrip.generated", name, FAIL, result.error)
+            elif lost:
+                joined = ", ".join(lost)
+                plural = "ies" if len(lost) > 1 else "y"
                 run.add(
                     "roundtrip.generated",
                     name,
                     FAIL,
-                    "reconstruction fails its schema (shape not preserved by @context?): " + re_errors[0].message,
-                    {"restored": result.restored},
+                    f"propert{plural} lost through RDF despite being mapped: {joined}",
+                    {"lost": lost, "unmapped": sorted(unmapped)},
                 )
             else:
-                run.add(
-                    "roundtrip.generated",
-                    name,
-                    OK,
-                    "",
-                    {"triples": result.triples, "method": result.method},
-                )
+                re_errors = sorted(validator.iter_errors(result.restored), key=lambda e: list(e.absolute_path))
+                if re_errors:
+                    run.add(
+                        "roundtrip.generated",
+                        name,
+                        FAIL,
+                        "reconstruction fails its schema (shape not preserved by @context?): " + re_errors[0].message,
+                        {"restored": result.restored},
+                    )
+                else:
+                    run.add(
+                        "roundtrip.generated",
+                        name,
+                        OK,
+                        "",
+                        {"triples": result.triples, "method": result.method},
+                    )
 
     # -- schema usable as a remote context -----------------------------------------
-    if cyclic:
-        run.add("context.remote", name, SKIP, CYCLIC_NOTE)
-    else:
-        try:
-            jsonld.expand(
-                {"@context": context_url, "@id": "https://example.org/dummy"},
-                run.loader.options(base=run.loader.base_url),
-            )
-            run.add("context.remote", name, OK)
-        # Kept broad deliberately. This calls jsonld.expand on the same shared pyld.jsonld
-        # module predicates.py calls it through, so an unexpected exception here has the same
-        # nowhere-to-go problem as the one documented there: no attribution path of its own, and
-        # no per-file guard in validate_directory to land in if it propagates. Narrowing this
-        # waits on #145 for the same reason predicates.py's catch does.
-        except Exception as exc:
-            from .loader import describe_jsonld_error
+    with _guard(run, "context.remote", name):
+        if cyclic:
+            run.add("context.remote", name, SKIP, CYCLIC_NOTE)
+        else:
+            try:
+                jsonld.expand(
+                    {"@context": context_url, "@id": "https://example.org/dummy"},
+                    run.loader.options(base=run.loader.base_url),
+                )
+                run.add("context.remote", name, OK)
+            # Still broad, so nothing reaches the guard above yet. Narrowing it to JsonLdError is
+            # #127's remaining work; what changed is that there is now somewhere for the
+            # unexpected case to land, which is what that narrowing was waiting for.
+            except Exception as exc:
+                from .loader import describe_jsonld_error
 
-            run.add("context.remote", name, FAIL, describe_jsonld_error(exc))
+                run.add("context.remote", name, FAIL, describe_jsonld_error(exc))
 
-    _check_predicates(run, name, raw, schema, generated.instance)
+    # Attributed to `context.predicates` although the call also produces `context.coverage`: the
+    # guard has to name one id before knowing where the fault came from, and coverage is derived
+    # from the predicate attribution rather than computed independently.
+    with _guard(run, "context.predicates", name):
+        _check_predicates(run, name, raw, schema, generated.instance)
 
     # -- per-branch variant coverage -----------------------------------------------
     if cyclic:
         return
-    variants, total = collect_variants(schema, limit=run.options.max_variants)
-    if total > len(variants):
-        run.report.notes.append(f"{name}: {total} oneOf/anyOf branches, checking the first {len(variants)}")
-    for variant in variants:
-        _check_variant(run, name, schema, variant, validator, context_url, promoted)
+    with _guard(run, "variants", name):
+        variants, total = collect_variants(schema, limit=run.options.max_variants)
+        if total > len(variants):
+            run.report.notes.append(f"{name}: {total} oneOf/anyOf branches, checking the first {len(variants)}")
+        for variant in variants:
+            # Per variant, so one broken branch does not cost the verdicts of the others.
+            with _guard(run, "variants", f"{name} {variant.label}"):
+                _check_variant(run, name, schema, variant, validator, context_url, promoted)
 
 
 def _check_variant(
@@ -616,25 +672,26 @@ def _check_instance_file(run: _Run, name: str, instance: Any = None) -> None:
         run.add("roundtrip.instance", name, SKIP, f"its schema {CYCLIC_NOTE}")
         return
 
-    rt = roundtrip_instance(instance, schema, run.loader, run.loader.url_for(name), run.loader.url_for(schema_ref))
-    if rt.error:
-        run.add("roundtrip.instance", name, FAIL, rt.error)
-    elif not rt.lossless:
-        run.add(
-            "roundtrip.instance",
-            name,
-            FAIL,
-            "instance != roundtrip (incomplete @context?)",
-            {"in": rt.original_canonical, "out": rt.restored_canonical},
-        )
-    else:
-        run.add(
-            "roundtrip.instance",
-            name,
-            OK,
-            f"{rt.triples} triples, lossless ({rt.method})",
-            {"triples": rt.triples, "method": rt.method},
-        )
+    with _guard(run, "roundtrip.instance", name):
+        rt = roundtrip_instance(instance, schema, run.loader, run.loader.url_for(name), run.loader.url_for(schema_ref))
+        if rt.error:
+            run.add("roundtrip.instance", name, FAIL, rt.error)
+        elif not rt.lossless:
+            run.add(
+                "roundtrip.instance",
+                name,
+                FAIL,
+                "instance != roundtrip (incomplete @context?)",
+                {"in": rt.original_canonical, "out": rt.restored_canonical},
+            )
+        else:
+            run.add(
+                "roundtrip.instance",
+                name,
+                OK,
+                f"{rt.triples} triples, lossless ({rt.method})",
+                {"triples": rt.triples, "method": rt.method},
+            )
 
 
 # ---------------------------------------------------------------------------- entry points
@@ -672,10 +729,16 @@ def validate_directory(path: str | Path, options: Options | None = None) -> Repo
         return run.report
 
     _collect(run, schema_names)
+    # The last-resort guard. The per-check ones above attribute a fault precisely; this one
+    # exists so that a fault raised between them - or by the guard machinery itself - still
+    # costs one file rather than the whole directory, which is what collect-everything-then-
+    # report means.
     for name in schema_names:
-        _check_schema(run, name)
+        with _guard(run, "schema.meta", name):
+            _check_schema(run, name)
     for name in instance_names:
-        _check_instance_file(run, name)
+        with _guard(run, "instance.schema", name):
+            _check_instance_file(run, name)
     return run.report
 
 

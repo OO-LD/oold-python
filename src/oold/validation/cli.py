@@ -21,7 +21,7 @@ import click
 from .meta_store import MetaSchemaError, describe_store, fetch_remote, load_index, resolve_selection
 from .meta_vendor import vendor_version
 from .pipeline import Options, run_compliance, validate_directory, validate_instance, validate_schema
-from .report import FAIL, OK, SKIP, WARN, Report
+from .report import FAIL, FAULT, OK, SKIP, WARN, Report
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -86,6 +86,9 @@ _STATUS_STYLE = {
     FAIL: {"fg": "red", "bold": True},
     WARN: {"fg": "yellow"},
     SKIP: {"fg": "cyan"},
+    # Brighter than FAIL on purpose: a fault is our bug, and the reader should not spend time
+    # looking for it in their own document.
+    FAULT: {"fg": "magenta", "bold": True},
 }
 
 _meta_option = click.option(
@@ -136,9 +139,12 @@ def _print_human(report: Report, verbose: bool) -> None:
     versions = ", ".join(report.meta_versions) or "none"
     click.echo(f"{status}  {report.source}")
     click.echo(f"      meta-schema: {versions}")
+    # Faults appear only when there are some. A permanent "0 fault(s)" would train the reader to
+    # skip the field, which is the opposite of what it is for.
+    faults = f", {counts[FAULT]} VALIDATOR FAULT(S)" if counts[FAULT] else ""
     click.echo(
         f"      {counts[OK]} ok, {counts[FAIL]} failed, {counts[WARN]} warning(s), "
-        f"{counts[SKIP]} skipped, across {len(report.targets())} target(s)"
+        f"{counts[SKIP]} skipped{faults}, across {len(report.targets())} target(s)"
     )
 
     shown = report.checks if verbose else [c for c in report.checks if c.status != OK]
@@ -146,7 +152,7 @@ def _print_human(report: Report, verbose: bool) -> None:
         click.echo()
         for check in shown:
             style = _STATUS_STYLE.get(check.status, {})
-            label = click.style(check.status.upper().ljust(4), **style)
+            label = click.style(check.status.upper().ljust(5), **style)
             rule = click.style(f" {check.rule}", fg="blue") if check.rule else ""
             version = f" [{check.meta_version}]" if check.meta_version else ""
             message = f": {check.message}" if check.message else ""

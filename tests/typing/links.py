@@ -10,8 +10,11 @@ IRI string, or a JSON object still to be constructed. ``Link[T]`` and
 ``__init__`` parameter and the assignment type from ``__set__`` and the attribute
 type from ``__get__`` (PEP 681).
 
-Elements are ``T | None``: an IRI the backend cannot answer resolves to ``None``
-and keeps its slot, so a guard at the use site is warranted.
+Optionality is **declared**, not assumed. ``Link[T]`` reads as ``T`` and the
+binding keeps that promise - a reference that cannot be resolved raises rather
+than returning a ``None`` the type denies. ``Link[T | None]`` reads as
+``T | None``, because absence is then part of the model. That is what lets a
+chain of mandatory links be written without a guard at every hop.
 """
 
 from typing_extensions import assert_type
@@ -27,9 +30,13 @@ class Org(AutoLinkedModel):
 class Entity(AutoLinkedModel):
     id: str
     name: str | None = None
-    # covered spelling: typed in both directions
-    links: LinkList["Entity"] = OoldField()
+    # mandatory: every reference resolves, or the read raises
     owner: Link[Org] = OoldField()
+    parent: Link["Entity"] = OoldField()
+    links: LinkList["Entity"] = OoldField()
+    # optional: absence is data
+    sponsor: Link["Org | None"] = OoldField()
+    maybe_links: LinkList["Entity | None"] = OoldField()
     # plain spelling: runtime-identical, but a checker only sees list[Entity]
     plain: list["Entity"] = OoldField()
 
@@ -39,26 +46,31 @@ written = Entity(
     id="ex:e1",
     links=["ex:a", Entity(id="ex:b"), {"id": "ex:c"}],
     owner="ex:acme",
+    sponsor=None,
 )
 written.links = ["ex:d", {"id": "ex:e"}]
 written.owner = {"id": "ex:other"}
 
-# -- reads: narrow, and honest about unresolvable references -----------------
+# -- reads: exactly what was declared ---------------------------------------
 # A separate instance: ty narrows an attribute to the assigned type after a
 # write, which would otherwise mask what __get__ declares.
 read = Entity(id="ex:e2")
+assert_type(read.owner, Org)
 assert_type(read.links, LinkResultList[Entity])
-assert_type(read.links[0], Entity | None)
-assert_type(read.owner, Org | None)
+assert_type(read.links[0], Entity)
+assert_type(read.links[0].name, str | None)
 
-first = read.links[0]
-if first is not None:
-    assert_type(first.name, str | None)
+# the point of declaring a link mandatory: chaining needs no guard per hop
+assert_type(read.parent.parent.parent, Entity)
+assert_type(read.parent.parent.owner.name, str | None)
 
-owner = read.owner
-if owner is not None:
-    assert_type(owner.name, str | None)
+# declared optional, so the guard is required - and warranted
+assert_type(read.sponsor, Org | None)
+assert_type(read.maybe_links[0], Entity | None)
+sponsor = read.sponsor
+if sponsor is not None:
+    assert_type(sponsor.name, str | None)
 
-# The plain spelling reads as declared - which is why it cannot report that an
-# element may be None, and why an IRI cannot be assigned to it statically.
+# The plain spelling reads as declared - which is why an IRI cannot be assigned
+# to it statically, and why it cannot express either promise.
 assert_type(read.plain, list[Entity])

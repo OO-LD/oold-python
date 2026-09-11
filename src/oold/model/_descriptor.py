@@ -67,6 +67,15 @@ T = TypeVar("T")
 _M = TypeVar("_M")
 
 
+class LinkNotResolved(LookupError):
+    """A mandatory link did not yield an object.
+
+    Raised only for links declared ``Link[T]`` rather than ``Link[T | None]``:
+    the declaration promises a ``T``, so handing back a ``None`` the type denies
+    would be the real error. Declare the ``None`` arm where absence is data.
+    """
+
+
 def links_enabled() -> bool:
     """Whether OO-LD link behaviour is active.
 
@@ -275,13 +284,22 @@ if hasattr(types, "UnionType"):  # PEP 604: X | None
     _UNION_ORIGINS.add(types.UnionType)
 
 
-def _extract_target(annotation: Any) -> tuple[Any, bool]:
-    """Return (target_type, is_many) for an annotation like Optional[List[X]].
+def _extract_target(annotation: Any) -> tuple[Any, bool, bool]:
+    """Return (target_type, is_many, optional) for a link annotation.
 
-    Also understands the ``Link[X]`` / ``LinkList[X]`` annotation form, where the
-    to-many-ness comes from the class rather than from a surrounding ``list``.
+    Understands ``Optional[List[X]]`` and the ``Link[X]`` / ``LinkList[X]`` form,
+    where the to-many-ness comes from the class rather than a surrounding
+    ``list``.
+
+    ``optional`` says whether a missing value is a legitimate answer. Only the
+    ``Link[...]`` form can say no: writing ``Link[Person]`` rather than
+    ``Link[Person | None]`` declares the link mandatory, and the binding then
+    keeps that promise instead of handing back a ``None`` the type denies. Every
+    other spelling stays optional, so existing declarations are unaffected.
     """
     many = False
+    optional = True
+    seen_link_annotation = False
     target = annotation
     changed = True
     while changed:
@@ -292,7 +310,14 @@ def _extract_target(annotation: Any) -> tuple[Any, bool]:
             if args:
                 target, changed = args[0], True
                 many = many or origin._many
+                if not seen_link_annotation:
+                    # the first Link[...] seen carries the promise; a None arm
+                    # inside it is picked up by the union branch below
+                    optional = False
+                    seen_link_annotation = True
         elif origin in _UNION_ORIGINS:
+            if seen_link_annotation and type(None) in get_args(target):
+                optional = True
             args = [a for a in get_args(target) if a is not type(None)]
             if len(args) == 1:
                 target, changed = args[0], True
@@ -300,7 +325,7 @@ def _extract_target(annotation: Any) -> tuple[Any, bool]:
             args = get_args(target)
             if args:
                 target, many, changed = args[0], True, True
-    return target, many
+    return target, many, optional
 
 
 def _is_link_annotation(annotation: Any) -> bool:
@@ -356,7 +381,7 @@ def _resolve_cls(data: dict[str, Any], target: Any) -> Any:
     return target
 
 
-class LinkResultList(list[T | None]):
+class LinkResultList(list[T]):
     """List returned by a to-many link.
 
     Adds IRI lookup, filtering and attribute projection, and keeps mutations in
@@ -365,10 +390,10 @@ class LinkResultList(list[T | None]):
     without a second write.
 
     Generic in the item type, so ``Entity[cond][0]`` is an ``Entity`` to a type
-    checker rather than ``Any``. The element type is ``T | None``, not ``T``: an
-    IRI the backend cannot answer resolves to ``None`` and keeps its slot, so the
-    list stays aligned with the stored references. The same reason the shipped
-    ``LinkedBaseModelList`` is a ``list[T | None]``.
+    checker rather than ``Any``. Whether an element may be ``None`` is declared:
+    ``LinkList[Person]`` promises every reference resolves and raises if one does
+    not, ``LinkList[Person | None]`` keeps the slot as ``None``. The slot is kept
+    either way, so the list stays aligned with the stored references.
     """
 
     _owner: Any = None
@@ -411,7 +436,7 @@ class LinkResultList(list[T | None]):
     def __getitem__(self, index: Condition | bool) -> LinkResultList[T]: ...
 
     @overload
-    def __getitem__(self, index: SupportsIndex) -> T | None: ...
+    def __getitem__(self, index: SupportsIndex) -> T: ...
 
     @overload
     def __getitem__(self, index: slice) -> LinkResultList[T]: ...
@@ -536,10 +561,18 @@ class _AutoLink:
     runtime behaviour is identical.
     """
 
-    def __init__(self, name: str | None = None, target: Any = None, many: bool = False):
+    def __init__(
+        self,
+        name: str | None = None,
+        target: Any = None,
+        many: bool = False,
+        optional: bool = True,
+    ):
         self.name = name
         self.target = target
         self.many = many
+        # False only for the Link[T] / LinkList[T] form without a None arm
+        self.optional = optional
         self.owner: Any = None
 
     def __set_name__(self, owner: type, name: str) -> None:
@@ -588,13 +621,20 @@ class _AutoLink:
         stored = obj._links.get(self.name)
         target = self._target_cls(objtype or type(obj))
         if self.many:
-            result = (LinkResultList(_batch_resolve(stored, target)) if stored else LinkResultList())._bind(
-                obj, self.name
-            )
+            items = _batch_resolve(stored, target) if stored else []
+            if not self.optional and any(item is None for item in items):
+                # the declaration promised every element resolves
+                missing = [r.iri for r, item in zip(stored, items, strict=False) if item is None]
+                raise LinkNotResolved(self._message(obj, missing))
+            result = LinkResultList(items)._bind(obj, self.name)
         elif stored is None:
+            # Unset. A mandatory link is rejected when the object is built, so
+            # reaching here means the field really is optional.
             result = None
         else:
             result = _batch_resolve([stored], target)[0]
+            if result is None and not self.optional:
+                raise LinkNotResolved(self._message(obj, [stored.iri]))
         # Store the resolved value in the instance __dict__. This descriptor is
         # deliberately NON-data (no __set__), so from now on normal attribute
         # lookup finds the instance dict first and never calls back into Python:
@@ -602,6 +642,15 @@ class _AutoLink:
         # pattern). Writes are still intercepted, by LinkedModel.__setattr__.
         obj.__dict__[self.name] = result
         return result
+
+    def _message(self, obj: Any, iris: list[Any]) -> str:
+        listed = ", ".join(str(iri) for iri in iris if iri)
+        return (
+            f"{type(obj).__name__}.{self.name} is declared mandatory, but "
+            f"{listed or 'the reference'} could not be resolved. The backend "
+            f"answered without it - declare the link as optional if that is a "
+            f"legitimate answer."
+        )
 
     def set_value(self, obj: Any, value: Any) -> None:
         target = self._target_cls(type(obj))
@@ -672,7 +721,7 @@ class Link(_AutoLink, _LinkAnnotation, Generic[T]):
     def __get__(self, obj: None, objtype: Any = None) -> Link[T]: ...
 
     @overload
-    def __get__(self, obj: object, objtype: Any = None) -> T | None: ...
+    def __get__(self, obj: object, objtype: Any = None) -> T: ...
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         return _AutoLink.__get__(self, obj, objtype)
@@ -749,6 +798,11 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
                 node_list.extend(nodes)
             except NotImplementedError:
                 continue
+        # A query answers with what it found. An IRI the backend cannot place is
+        # not a match, and keeping a None for it would contradict the element
+        # type - unlike a to-many link, there is no declaration here promising
+        # the result stays aligned with anything.
+        node_list = [node for node in node_list if node is not None]
         if isinstance(item, str):
             return node_list[0] if node_list else None
         return LinkResultList(node_list) if node_list else None
@@ -778,10 +832,10 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             # a Link[...] / LinkList[...] annotation says the same on its own
             if not rng and not extra.get("x-oold-link") and not _is_link_annotation(field.annotation):
                 continue
-            target, many = _extract_target(field.annotation)
+            target, many, optional = _extract_target(field.annotation)
             if isinstance(rng, str) and not isinstance(target, type):
                 target = rng
-            descr = _AutoLink(name, target, many)
+            descr = _AutoLink(name, target, many, optional)
             setattr(cls, name, descr)
             links[name] = descr
         cls.__link_fields__ = links
@@ -810,6 +864,17 @@ class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
+        # A mandatory link that is simply absent is knowable here, without
+        # resolving anything - so it is rejected when the object is built rather
+        # than whenever someone happens to read it. That is what lets Link[T]
+        # promise a T for every instance that exists.
+        missing = [name for name, descr in link_fields.items() if not descr.optional and not self._links.get(name)]
+        if missing:
+            raise LinkNotResolved(
+                f"{type(self).__name__} is missing mandatory link(s) "
+                f"{', '.join(sorted(missing))}. Declare the field as "
+                f"Link[T | None] if it may be absent."
+            )
 
     def __eq__(self, other: Any) -> bool:
         """Compare by data, not by what happens to be cached.

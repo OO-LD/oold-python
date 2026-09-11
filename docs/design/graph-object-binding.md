@@ -136,7 +136,7 @@ whole annotation:
 
 ```python
 class Person(AutoLinkedModel):
-    knows: LinkList["Person"] = OoldField()
+    knows: LinkList["Person | None"] = OoldField()
     employer: Link[Organization] = OoldField()
 ```
 
@@ -146,27 +146,65 @@ stays **non-data** and the instance-`__dict__` cache from 3.1 is untouched.
 JSON Schema is byte-identical to the plain annotation - `$ref`, arrays, unions
 and forward references included.
 
+#### Optionality is declared, not assumed
+
+`Link[T]` reads as `T`, not `T | None`. The declaration is a promise the binding
+keeps, so a chain of mandatory links needs no guard per hop:
+
+```python
+class Person(AutoLinkedModel):
+    father: Link["Person"] = OoldField()          # mandatory
+    mother: Link["Person | None"] = OoldField()   # optional
+
+person.father.father.father.name    # no guards - the type says it resolves
+mother = person.mother              # guard required, and warranted
+```
+
+Without this, every hop needs an `is not None` check and chaining collapses -
+the type would be truthful and useless at once. Handing back a `None` the
+declaration denies is the alternative, and that is the same polite fiction the
+`Annotated`-over-`Ref` form was rejected for in 3(c).
+
+What the promise costs, by case:
+
+| | detectable | `Link[T]` | `Link[T \| None]` |
+| --- | --- | --- | --- |
+| not set, no IRI | at construction | **rejected when built** | `None` |
+| backend error | on access | propagates | propagates |
+| answered, no such entity | on access | **raises `LinkNotResolved`** | `None` |
+
+The first row is why the promise holds: absence is knowable without resolving
+anything, so it is rejected when the object is built rather than whenever
+someone happens to read it. The second row is unchanged and important - a
+transport failure is not "has no father", and conflating them would be the real
+bug. Only the third row can surprise.
+
+Mandatory links are **viral**: every instance the backend hands back during
+resolution must carry them too, so a mandatory *self*-link is unsatisfiable.
+Declare `Link[T | None]` when walking patchy data.
+
 #### Coverage
 
 | spelling | read | write by IRI | runtime |
 | --- | --- | --- | --- |
-| `LinkList["Person"]` | `LinkResultList[Person \| None]` | typed | identical |
-| `Link[Organization]` | `Organization \| None` | typed | identical |
-| `list["Person"]` | `list[Person]` | not typed | identical |
-| `Optional[Organization]` | `Organization \| None` | not typed | identical |
-| `knows = LinkList("Person")` | `LinkResultList[Person \| None]` | n/a - no field | identical |
+| `Link[Organization]` | `Organization` | typed | mandatory |
+| `Link[Organization \| None]` | `Organization \| None` | typed | optional |
+| `LinkList["Person"]` | `LinkResultList[Person]` | typed | mandatory elements |
+| `LinkList["Person \| None"]` | `LinkResultList[Person \| None]` | typed | optional elements |
+| `list["Person"]` | `list[Person]` | not typed | optional |
+| `Optional[Organization]` | `Organization \| None` | not typed | optional |
+| `knows = LinkList("Person")` | `LinkResultList[Person]` | n/a - no field | optional |
 
-The plain spellings keep working unchanged; what they lack is static coverage of
-reference assignment, and `list[T]` additionally understates that an element may
-be `None`. Consumers that want the rule enforced on generated models can scope it
-per file rather than repo-wide - ty supports `[[tool.ty.overrides]]` with an
-`include` glob.
+Every spelling except the two `Link[...]` forms stays optional, so existing
+declarations - including everything the generator emits - behave exactly as
+before. Consumers that want reference assignment enforced on generated models can
+scope the rule per file rather than repo-wide: ty supports
+`[[tool.ty.overrides]]` with an `include` glob.
 
-Element type is `T | None` deliberately: an IRI the backend cannot answer
-resolves to `None` and keeps its slot, so the list stays aligned with the stored
-references. A prefix with *no registered resolver* is different again - that
-raises `ValueError` on read rather than yielding `None`, which the type system
-does not show.
+A to-many link keeps the slot of an unresolvable reference, so the list stays
+aligned with the stored references - as `None` when the element type admits it,
+otherwise as a raise. A query result is different: it answers with what it found,
+so an IRI it could not place is dropped rather than kept.
 
 Both **pyright and ty** resolve all of it, including `Model[...]` through the
 metaclass `__getitem__` overloads. `tests/typing/links.py` and

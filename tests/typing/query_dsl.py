@@ -29,11 +29,10 @@ assert_type(Entity[["ex:e1", "ex:e2"]], LinkResultList[Entity] | None)
 
 many = Entity[Entity.name == "x"]
 if many is not None:
-    # indexing and filtering keep the item type; elements stay optional,
-    # because an IRI the backend cannot answer resolves to None
-    assert_type(many[0], Entity | None)
+    # indexing and filtering keep the item type. Elements are not optional:
+    # a query answers with what it found, so an IRI it could not place is
+    # dropped rather than kept as a None
+    assert_type(many[0], Entity)
     assert_type(many[0:2], LinkResultList[Entity])
     assert_type(many[Entity.name == "y"], LinkResultList[Entity])
-    first = many[0]
-    if first is not None:
-        assert_type(first.name, str | None)
+    assert_type(many[0].name, str | None)

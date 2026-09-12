@@ -40,10 +40,16 @@ REPRO = textwrap.dedent(
     class QuantityValue(OswLike, metaclass=QuantityValueMetaclass):
         pass
 
-    print("BASE", LinkedBaseModel.__name__)
+    # __module__, not __name__: both bindings are called LinkedBaseModel, so a
+    # name check cannot tell them apart and passes whichever is selected.
+    print("BASE", LinkedBaseModel.__module__)
     print("HOOK", hook_ran.get("QuantityValue", False))
     print("METACLASS_MATCHES", isinstance(QuantityValue, type(LinkedBaseModel)))
-    print("REGISTRY_IS_TYPES", m.registered_types() is m._types)
+    # registered_types() is `return _types`, so comparing the two is a
+    # tautology. The property that matters is that the binding writes into that
+    # very mapping rather than keeping its own.
+    from oold.model import _descriptor as d
+    print("REGISTRY_IS_TYPES", d._TYPE_REGISTRY is m._types)
     """
 )
 
@@ -60,14 +66,12 @@ def run(enabled: bool) -> dict:
     return dict(line.split(" ", 1) for line in proc.stdout.strip().splitlines() if " " in line)
 
 
-def test_default_keeps_the_shipped_binding():
-    out = run(enabled=False)
-    assert out["BASE"] == "LinkedBaseModel"
+def test_default_keeps_the_legacy_binding():
+    assert run(enabled=False)["BASE"] == "oold.model"
 
 
 def test_switch_selects_the_descriptor_binding():
-    out = run(enabled=True)
-    assert out["BASE"] == "LinkedBaseModel"
+    assert run(enabled=True)["BASE"] == "oold.model._descriptor"
 
 
 def test_downstream_metaclass_subclassing_survives_the_switch():
@@ -78,9 +82,15 @@ def test_downstream_metaclass_subclassing_survives_the_switch():
         assert out["HOOK"] == "True", enabled  # the custom hook still runs
 
 
-def test_registry_identity_is_preserved_either_way():
-    for enabled in (False, True):
-        assert run(enabled=enabled)["REGISTRY_IS_TYPES"] == "True", enabled
+def test_registry_identity_is_preserved_when_the_binding_is_active():
+    """Downstream writes into oold.model._types, so the binding must share it.
+
+    Only meaningful with the binding enabled: with it off the descriptor module
+    is unused and keeps its own mapping, which is harmless. The old form of this
+    test asserted `registered_types() is _types` for both, which is `return
+    _types` compared against itself - true whatever the binding does.
+    """
+    assert run(enabled=True)["REGISTRY_IS_TYPES"] == "True"
 
 
 PLAIN = textwrap.dedent(

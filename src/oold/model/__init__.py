@@ -1232,15 +1232,18 @@ _LinkedBaseModelLegacy = LinkedBaseModel
 
 
 # ---------------------------------------------------------------------------
-# The descriptor binding
+# Opt-in descriptor binding
 # ---------------------------------------------------------------------------
 # The descriptor binding (see docs/design/graph-object-binding.md) replaces the
-# per-attribute interception above with one descriptor per link field. It is a
-# strict superset of it - same semantics, plus list projection, typed extras, the
-# Link[T] notations and no pydantic monkeypatch - and is what LinkedBaseModel
-# means from here on. The legacy binding remains one environment variable away:
+# per-attribute interception above with one descriptor per link field. It was
+# briefly the default; a review then found behaviour it does not yet reproduce -
+# BaseController.to_json() stripping data fields, FieldProxy losing truthiness
+# and default forwarding, x-oold-required-iri no longer enforced, __iris__
+# assignment merging instead of replacing, and get_raw answering [None]. Until
+# those match, the parity claim that justified the swap does not hold, so it is
+# opt-in again:
 #
-#     OOLD_DESCRIPTOR_BINDING=0
+#     OOLD_DESCRIPTOR_BINDING=1
 #
 # Two names move with the base class, because downstream imports them and relies
 # on their identity (see docs/design/downstream-migration.md):
@@ -1249,14 +1252,13 @@ _LinkedBaseModelLegacy = LinkedBaseModel
 #     must remain a subclass of whatever LinkedBaseModel actually uses;
 #   * _types - written to downstream, so the binding must share the very same
 #     mapping rather than keep its own.
-if os.environ.get("OOLD_DESCRIPTOR_BINDING", "1") != "0":
+if os.environ.get("OOLD_DESCRIPTOR_BINDING") == "1":  # pragma: no cover
     from oold.model import _descriptor as _descriptor_module
 
     _descriptor_module.use_type_registry(_types)
     LinkedBaseModel = _descriptor_module.LinkedBaseModel
     LinkedBaseModelMetaClass = _descriptor_module.LinkedBaseModelMetaClass
-else:  # pragma: no cover
-    _logger.info("oold: legacy binding selected (OOLD_DESCRIPTOR_BINDING=0)")
+    _logger.info("oold: descriptor binding enabled (OOLD_DESCRIPTOR_BINDING=1)")
 
 # The link notations are part of the public surface either way: importing them
 # from a private module is not something an example should have to do. They are
@@ -1273,6 +1275,6 @@ from oold.model._descriptor import OoldField as OoldField  # noqa: E402
 LINK_NOTATIONS_ACTIVE = LinkedBaseModel is not _LinkedBaseModelLegacy
 """Whether ``Link[T]`` / ``LinkList[T]`` annotations are honoured.
 
-True unless ``OOLD_DESCRIPTOR_BINDING=0``: the legacy binding recognises links
+False unless ``OOLD_DESCRIPTOR_BINDING=1``: the legacy binding recognises links
 only through the ``range`` keyword.
 """

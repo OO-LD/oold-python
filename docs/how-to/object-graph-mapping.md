@@ -166,7 +166,8 @@ object *or* a reference to it - an IRI string, or a JSON object still to be
 constructed. A single annotation can only state one, so `knows: list[Person]`
 rejects `knows=["ex:bob"]` even though the library accepts it at runtime.
 
-`Link[T]` and `LinkList[T]` carry both. They are exported from `oold.model`:
+`Link[T]` and `LinkList[T]` carry both. They are exported from `oold.model`, and need the descriptor binding
+(`OOLD_DESCRIPTOR_BINDING=1`, opt-in for now):
 
 ```python
 from oold.model import Link, LinkedBaseModel, LinkList, OoldField

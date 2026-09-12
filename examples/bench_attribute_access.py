@@ -87,7 +87,7 @@ def build_gated_real():
 
 
 def build_shipped_v2():
-    from oold.model import LinkedBaseModel
+    from oold.model import _LinkedBaseModelLegacy as LinkedBaseModel
 
     class M(LinkedBaseModel):
         id: str
@@ -97,7 +97,7 @@ def build_shipped_v2():
 
 
 def build_shipped_v1():
-    from oold.model.v1 import LinkedBaseModel
+    from oold.model.v1 import _LinkedBaseModelLegacy as LinkedBaseModel
 
     class M(LinkedBaseModel):
         id: str

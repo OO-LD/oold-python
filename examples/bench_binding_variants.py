@@ -62,7 +62,7 @@ def build_gated():
 def build_shipped_v1():
     from pydantic.v1 import Field as F1
 
-    from oold.model.v1 import LinkedBaseModel
+    from oold.model.v1 import _LinkedBaseModelLegacy as LinkedBaseModel
 
     class T(LinkedBaseModel):
         id: str
@@ -80,7 +80,7 @@ def build_shipped_v1():
 def build_shipped_v2():
     from pydantic import Field
 
-    from oold.model import LinkedBaseModel
+    from oold.model import _LinkedBaseModelLegacy as LinkedBaseModel
 
     class T(LinkedBaseModel):
         id: str
@@ -151,8 +151,8 @@ VARIANTS = {
     "plain_v1": ("plain pydantic v1", build_plain_v1),
     "plain_v2": ("plain pydantic v2", build_plain_v2),
     "gated": ("gated __getattribute__", build_gated),
-    "shipped_v1": ("shipped LinkedBaseModel v1", build_shipped_v1),
-    "shipped_v2": ("shipped LinkedBaseModel v2", build_shipped_v2),
+    "shipped_v1": ("legacy binding v1     ", build_shipped_v1),
+    "shipped_v2": ("legacy binding v2     ", build_shipped_v2),
     "auto_implicit": ("auto-descriptor (implicit)", build_auto_implicit),
     "auto_explicit": ("auto-descriptor (explicit)", build_auto_explicit),
     "ref": ("explicit Ref[T]", build_ref),

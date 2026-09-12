@@ -16,11 +16,11 @@ from pydantic import Field
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import Field as FieldV1
 
-from oold.model._descriptor import AutoLinkedModel
-from oold.model.v1._descriptor import AutoLinkedModelV1
+from oold.model._descriptor import LinkedBaseModel
+from oold.model.v1._descriptor import LinkedBaseModel as LinkedBaseModelV1
 
 
-class Target(AutoLinkedModel):
+class Target(LinkedBaseModel):
     id: str | None = None
     label: str | None = None
 
@@ -31,7 +31,7 @@ class TargetV1(BaseModelV1):
 
 
 def test_subclass_may_redeclare_a_link_field():
-    class Base(AutoLinkedModel):
+    class Base(LinkedBaseModel):
         id: str
         ref: Target | None = Field(None, json_schema_extra={"range": "Target"})
 
@@ -45,7 +45,7 @@ def test_subclass_may_redeclare_a_link_field():
 
 
 def test_subclass_may_redeclare_a_link_field_v1():
-    class Base(AutoLinkedModelV1):
+    class Base(LinkedBaseModelV1):
         id: str
         ref: TargetV1 | None = FieldV1(None, range="Target")
 
@@ -63,7 +63,7 @@ def _explode(_cls):
 def test_link_field_default_is_never_evaluated():
     """The declared default is dead weight - the descriptor owns the value."""
 
-    class M(AutoLinkedModel):
+    class M(LinkedBaseModel):
         id: str
         ref: Target = Field(
             default_factory=lambda: _explode(Target),
@@ -75,7 +75,7 @@ def test_link_field_default_is_never_evaluated():
 
 
 def test_link_field_default_is_never_evaluated_v1():
-    class M(AutoLinkedModelV1):
+    class M(LinkedBaseModelV1):
         id: str
         ref: TargetV1 = FieldV1(default_factory=lambda: _explode(TargetV1), range="Target")
 
@@ -83,12 +83,12 @@ def test_link_field_default_is_never_evaluated_v1():
     assert M(id="ex:m", ref="ex:t").link_iris("ref") == "ex:t"
 
 
-@pytest.mark.parametrize("base", [AutoLinkedModel, AutoLinkedModelV1])
+@pytest.mark.parametrize("base", [LinkedBaseModel, LinkedBaseModelV1])
 def test_setattr_accepts_the_internal_flag(base):
     """``BaseController.__setattr__`` forwards ``internal=`` to the model."""
-    field = Field if base is AutoLinkedModel else FieldV1
-    extra = {"json_schema_extra": {"range": "Target"}} if base is AutoLinkedModel else {"range": "Target"}
-    target = Target if base is AutoLinkedModel else TargetV1
+    field = Field if base is LinkedBaseModel else FieldV1
+    extra = {"json_schema_extra": {"range": "Target"}} if base is LinkedBaseModel else {"range": "Target"}
+    target = Target if base is LinkedBaseModel else TargetV1
 
     class M(base):
         id: str
@@ -106,7 +106,7 @@ def test_v1_to_json_encodes_non_json_types():
     from datetime import datetime, timezone
     from uuid import UUID
 
-    class Doc(AutoLinkedModelV1):
+    class Doc(LinkedBaseModelV1):
         uuid: UUID
         at: datetime
         ref: TargetV1 | None = FieldV1(None, range="Target")

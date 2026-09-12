@@ -97,12 +97,12 @@ def build_shipped_v2():
 
 def build_auto_implicit():
     """Auto-descriptor, implicit form: annotated field + range keyword."""
-    from oold.model._descriptor import AutoLinkedModel, OoldField
+    from oold.model._descriptor import LinkedBaseModel, OoldField
 
-    class T(AutoLinkedModel):
+    class T(LinkedBaseModel):
         id: str
 
-    class M(AutoLinkedModel):
+    class M(LinkedBaseModel):
         id: str
         literal: str | None = None
         link: T | None = OoldField(default=None, range="T")
@@ -115,12 +115,12 @@ def build_auto_implicit():
 
 def build_auto_explicit():
     """Auto-descriptor, explicit form: descriptor declared in the class body."""
-    from oold.model._descriptor import AutoLinkedModel, Link
+    from oold.model._descriptor import Link, LinkedBaseModel
 
-    class T(AutoLinkedModel):
+    class T(LinkedBaseModel):
         id: str
 
-    class M(AutoLinkedModel):
+    class M(LinkedBaseModel):
         id: str
         literal: str | None = None
         link = Link(T)

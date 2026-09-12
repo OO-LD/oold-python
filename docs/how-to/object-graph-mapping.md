@@ -166,13 +166,12 @@ object *or* a reference to it - an IRI string, or a JSON object still to be
 constructed. A single annotation can only state one, so `knows: list[Person]`
 rejects `knows=["ex:bob"]` even though the library accepts it at runtime.
 
-`Link[T]` and `LinkList[T]` carry both. They are available with the descriptor
-binding (`OOLD_DESCRIPTOR_BINDING=1`):
+`Link[T]` and `LinkList[T]` carry both. They are exported from `oold.model`:
 
 ```python
-from oold.model._descriptor import AutoLinkedModel, Link, LinkList, OoldField
+from oold.model import Link, LinkedBaseModel, LinkList, OoldField
 
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     id: str
     name: str | None = None
     employer: Link["Organization | None"] = OoldField(range="Organization.json")
@@ -192,7 +191,7 @@ checker sees changes.
 reads as `T | None`, because absence is then part of the model:
 
 ```python
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     father: Link["Person"] = OoldField()          # promises a Person
     mother: Link["Person | None"] = OoldField()   # may legitimately be absent
 
@@ -203,7 +202,7 @@ A link declared mandatory raises `LinkNotResolved` when it is unset or when the
 backend cannot place the reference, so one `try/except` covers a whole walk:
 
 ```python
-from oold.model._descriptor import LinkNotResolved
+from oold.model import LinkNotResolved
 
 try:
     while True:

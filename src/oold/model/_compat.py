@@ -160,9 +160,9 @@ class LinkedApiMixin(GenericLinkedBaseModel):
 
     @classmethod
     def _root_cls(cls) -> type:
-        from oold.model._descriptor import AutoLinkedModel
+        from oold.model._descriptor import LinkedBaseModel
 
-        return AutoLinkedModel
+        return LinkedBaseModel
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Any:

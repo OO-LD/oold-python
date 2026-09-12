@@ -122,9 +122,9 @@ def build_auto_descriptor():
 
     from pydantic import Field
 
-    from oold.model._descriptor import AutoLinkedModel
+    from oold.model._descriptor import LinkedBaseModel
 
-    class M(AutoLinkedModel):
+    class M(LinkedBaseModel):
         id: str
         literal: str | None = None
         links: list["M"] | None = Field(None, json_schema_extra={"x-oold-range": "M"})

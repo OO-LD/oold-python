@@ -23,7 +23,8 @@ top of it. Which notation supports what is tabulated in
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.model._notation import Link, LinkList, OoldField, OoldModel
+from oold.model import Link, LinkList, OoldField
+from oold.model._notation import OoldModel
 
 
 class Organization(OoldModel):

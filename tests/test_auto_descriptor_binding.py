@@ -12,8 +12,8 @@ import pytest
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.model._descriptor import (
-    AutoLinkedModel,
     Link,
+    LinkedBaseModel,
     LinkList,
     OoldExtra,
     OoldField,
@@ -28,13 +28,13 @@ class CountingStore(SimpleDictDocumentStore):
         return super().resolve_iris(iris)
 
 
-class Org(AutoLinkedModel):
+class Org(LinkedBaseModel):
     id: str
     name: str | None = None
     type: str | None = "ex:Org"
 
 
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     id: str
     name: str | None = None
     type: str | None = "ex:Person"
@@ -67,7 +67,7 @@ def store():
 def test_oold_field_without_arguments(store):
     """OoldField() with no args: the target is inferred from the annotation."""
 
-    class Team(AutoLinkedModel):
+    class Team(LinkedBaseModel):
         id: str
         type: str | None = "ex:Team"
         members: list[Org] | None = OoldField()

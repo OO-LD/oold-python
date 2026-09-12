@@ -11,8 +11,8 @@ from pydantic.v1 import Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.model.v1 import LinkedBaseModel
-from oold.model.v1._descriptor import AutoLinkedModelV1
+from oold.model.v1 import _LinkedBaseModelLegacy as LegacyLinkedBaseModel
+from oold.model.v1._descriptor import LinkedBaseModel as LinkedBaseModelV1
 
 
 def build(base, tag):
@@ -46,7 +46,7 @@ def store():
 
 
 def both():
-    return [(tag, *build(base, tag)) for base, tag in ((LinkedBaseModel, "SV"), (AutoLinkedModelV1, "AV"))]
+    return [(tag, *build(base, tag)) for base, tag in ((LegacyLinkedBaseModel, "SV"), (LinkedBaseModelV1, "AV"))]
 
 
 def collect(fn):
@@ -121,5 +121,5 @@ def test_api_surface_present():
         "dict",
         "json",
     ]
-    missing = [a for a in required if not hasattr(AutoLinkedModelV1, a)]
+    missing = [a for a in required if not hasattr(LinkedBaseModelV1, a)]
     assert missing == [], f"missing downstream API: {missing}"

@@ -25,13 +25,13 @@ from oold.backend.interface import (
     set_resolver,
 )
 from oold.backend.sparql import LocalSparqlBackend, _translate
-from oold.model._descriptor import AutoLinkedModel
+from oold.model._descriptor import LinkedBaseModel
 
 EX = "https://sparqltest.example/"
 XSD_INT = "http://www.w3.org/2001/XMLSchema#integer"
 
 
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "@context": {

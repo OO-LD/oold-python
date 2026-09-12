@@ -15,8 +15,8 @@ from pydantic import Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
-from oold.model import LinkedBaseModel
-from oold.model._descriptor import AutoLinkedModel
+from oold.model import _LinkedBaseModelLegacy as LegacyLinkedBaseModel
+from oold.model._descriptor import LinkedBaseModel
 
 
 def build(base, tag):
@@ -51,7 +51,7 @@ def store():
 
 def both():
     """Yield (tag, T, M) for the shipped and the descriptor binding."""
-    return [(tag, *build(base, tag)) for base, tag in ((LinkedBaseModel, "S"), (AutoLinkedModel, "A"))]
+    return [(tag, *build(base, tag)) for base, tag in ((LegacyLinkedBaseModel, "S"), (LinkedBaseModel, "A"))]
 
 
 def normalised(value, tag):
@@ -156,5 +156,5 @@ def test_api_surface_present():
         "get_cls_iri",
         "store_jsonld",
     ]
-    missing = [a for a in required if not hasattr(AutoLinkedModel, a)]
+    missing = [a for a in required if not hasattr(LinkedBaseModel, a)]
     assert missing == [], f"missing downstream API: {missing}"

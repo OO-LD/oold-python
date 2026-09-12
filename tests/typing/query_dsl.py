@@ -14,10 +14,10 @@ argument type is not.
 
 from typing_extensions import assert_type
 
-from oold.model._descriptor import AutoLinkedModel, LinkResultList
+from oold.model._descriptor import LinkedBaseModel, LinkResultList
 
 
-class Entity(AutoLinkedModel):
+class Entity(LinkedBaseModel):
     id: str
     name: str | None = None
 

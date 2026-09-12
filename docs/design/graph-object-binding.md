@@ -13,8 +13,10 @@ the package proper:
 | `src/oold/model/_notation.py` | the reviewed notations on top of it: `OoldField()`, union arms |
 | `src/oold/experimental/codegen_spike.py` | IR-based code generation without text post-processing (still a spike) |
 
-It is opt-in behind `OOLD_DESCRIPTOR_BINDING=1`, which rebinds
-`oold.model.LinkedBaseModel` and its metaclass.
+It **is** `oold.model.LinkedBaseModel` as of this branch. The legacy
+per-attribute-interception binding remains reachable with
+`OOLD_DESCRIPTOR_BINDING=0`, and `oold.model.LINK_NOTATIONS_ACTIVE` reports which
+one is in force.
 
 Verification scripts under `examples/`: `check_binding_features.py` (requirement
 matrix), `bench_binding_variants.py` (per-operation benchmarks),
@@ -139,7 +141,7 @@ type from `__get__`. `Link[T]` and `LinkList[T]` are therefore usable as the
 whole annotation:
 
 ```python
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     knows: LinkList["Person | None"] = OoldField()
     employer: Link[Organization] = OoldField()
 ```
@@ -156,7 +158,7 @@ and forward references included.
 keeps, so a chain of mandatory links needs no guard per hop:
 
 ```python
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     father: Link["Person"] = OoldField()          # mandatory
     mother: Link["Person | None"] = OoldField()   # optional
 

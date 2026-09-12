@@ -236,7 +236,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         return cls.oold_query(item)
 
 
-class AutoLinkedModelV1(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass):
+class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass):
     """pydantic v1 base with the descriptor binding and the downstream API."""
 
     _links: dict = PrivateAttr(default_factory=dict)
@@ -415,7 +415,7 @@ class AutoLinkedModelV1(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseM
     def from_json(cls, data: dict[str, Any]) -> Any:
         from oold.static import import_json
 
-        return import_json(BaseModel, AutoLinkedModelV1, cls, data, _TYPE_REGISTRY)
+        return import_json(BaseModel, LinkedBaseModel, cls, data, _TYPE_REGISTRY)
 
     def to_jsonld(self) -> dict[str, Any]:
         from oold.static import export_jsonld
@@ -426,7 +426,7 @@ class AutoLinkedModelV1(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseM
     def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
         from oold.static import import_jsonld
 
-        return import_jsonld(BaseModel, AutoLinkedModelV1, cls, jsonld, _TYPE_REGISTRY)
+        return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _TYPE_REGISTRY)
 
     def store_jsonld(self) -> None:
         from oold.backend.interface import GetBackendParam, StoreParam, get_backend

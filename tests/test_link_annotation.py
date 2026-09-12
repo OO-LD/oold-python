@@ -17,21 +17,21 @@ from oold.backend import interface
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.model._descriptor import (
-    AutoLinkedModel,
     Link,
+    LinkedBaseModel,
     LinkList,
     LinkNotResolved,
     OoldField,
 )
 
 
-class Org(AutoLinkedModel):
+class Org(LinkedBaseModel):
     id: str
     name: str | None = None
     type: str | None = "annot:Organization"
 
 
-class Person(AutoLinkedModel):
+class Person(LinkedBaseModel):
     id: str
     name: str | None = None
     type: str | None = "annot:Person"
@@ -40,7 +40,7 @@ class Person(AutoLinkedModel):
     mixed: LinkList["Person | Org | None"] = OoldField()
 
 
-class Employee(AutoLinkedModel):
+class Employee(LinkedBaseModel):
     """Every employee has an employer - declared, and enforced."""
 
     id: str
@@ -48,7 +48,7 @@ class Employee(AutoLinkedModel):
     employer: Link[Org] = OoldField()
 
 
-class Plain(AutoLinkedModel):
+class Plain(LinkedBaseModel):
     id: str
     type: str | None = "annot:Plain"
     knows: list["Person"] | None = Field(None, json_schema_extra={"range": "Person"})
@@ -124,7 +124,7 @@ def test_serialises_back_to_iris(store):
 def test_explicit_descriptor_form_still_works(store):
     """The same classes remain usable as unannotated descriptors."""
 
-    class Explicit(AutoLinkedModel):
+    class Explicit(LinkedBaseModel):
         id: str
         type: str | None = "annot:Explicit"
         employer = Link(Org)
@@ -160,7 +160,7 @@ def test_mandatory_link_unset_raises_on_access_not_on_construction(store):
 def test_a_whole_chain_needs_one_except_not_a_guard_per_hop(store):
     """The point of declaring a link mandatory."""
 
-    class Node(AutoLinkedModel):
+    class Node(LinkedBaseModel):
         id: str
         type: str | None = "annot:Node"
         parent: Link["Node"] = OoldField()

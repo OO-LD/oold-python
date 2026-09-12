@@ -19,15 +19,15 @@ chain of mandatory links be written without a guard at every hop.
 
 from typing_extensions import assert_type
 
-from oold.model._descriptor import AutoLinkedModel, Link, LinkList, LinkResultList, OoldField
+from oold.model._descriptor import Link, LinkedBaseModel, LinkList, LinkResultList, OoldField
 
 
-class Org(AutoLinkedModel):
+class Org(LinkedBaseModel):
     id: str
     name: str | None = None
 
 
-class Entity(AutoLinkedModel):
+class Entity(LinkedBaseModel):
     id: str
     name: str | None = None
     # mandatory: every reference resolves, or the read raises

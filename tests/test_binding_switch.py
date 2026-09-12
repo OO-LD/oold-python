@@ -67,7 +67,7 @@ def test_default_keeps_the_shipped_binding():
 
 def test_switch_selects_the_descriptor_binding():
     out = run(enabled=True)
-    assert out["BASE"] == "AutoLinkedModel"
+    assert out["BASE"] == "LinkedBaseModel"
 
 
 def test_downstream_metaclass_subclassing_survives_the_switch():

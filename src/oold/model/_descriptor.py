@@ -3,7 +3,7 @@
 Models are declared exactly as they are today - standard annotations, including
 plain ``List[...]`` for to-many links:
 
-    class Person(AutoLinkedModel):
+    class Person(LinkedBaseModel):
         id: str
         name: Optional[str] = None
         knows: Optional[List["Person"]] = Field(
@@ -784,7 +784,7 @@ class LinkList(_AutoLink, _LinkAnnotation, Generic[T]):
         def __set__(self, obj: object, value: Iterable[T | str | Mapping[str, Any]] | None) -> None: ...
 
 
-class AutoLinkedModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaClass):
+class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaClass):
     """Base model supporting both implicit and explicit link declarations."""
 
     model_config = ConfigDict(ignored_types=(Link, LinkList, _AutoLink))

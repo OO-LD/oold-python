@@ -172,7 +172,7 @@ def check_shipped(version: int) -> dict:
 
 def check_auto(explicit: bool) -> dict:
     from oold.model._descriptor import (
-        AutoLinkedModel,
+        LinkedBaseModel,
         LinkList,
         OoldExtra,
         OoldField,
@@ -180,7 +180,7 @@ def check_auto(explicit: bool) -> dict:
 
     p = Probe()
 
-    class T(AutoLinkedModel):
+    class T(LinkedBaseModel):
         id: str
         label: str | None = None
         type: str | None = "ex:T"
@@ -190,7 +190,7 @@ def check_auto(explicit: bool) -> dict:
 
     if explicit:
 
-        class M(AutoLinkedModel):
+        class M(LinkedBaseModel):
             id: str
             name: str | None = None
             links = LinkList(T)
@@ -198,7 +198,7 @@ def check_auto(explicit: bool) -> dict:
         p.set("syntax_unchanged", False)  # unannotated descriptor assignment
     else:
 
-        class M(AutoLinkedModel):
+        class M(LinkedBaseModel):
             id: str
             name: str | None = None
             links: list[T] | None = OoldField(default=None, range="T")

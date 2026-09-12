@@ -248,8 +248,7 @@ Parity is asserted only when these pass unchanged against the new base:
    assert on its return shape,
 3. a regenerated `opensemantic.core` diffed against the released package.
 
-Status: step 2 has been run with `OOLD_DESCRIPTOR_BINDING=1` (the real switch,
-not a shim) against three application suites, each compared to a baseline taken
+Status: step 2 has been run with the real switch (not a shim) against three application suites, each compared to a baseline taken
 on the same machine and the same backend state:
 
 | suite | baseline | with the switch |
@@ -260,6 +259,10 @@ on the same machine and the same backend state:
 
 The utilities suite fails identically with and without the switch; those
 failures predate it.
+
+On the strength of that, the descriptor binding is now the **default**:
+`oold.model.LinkedBaseModel` is the descriptor model, and the legacy binding is
+reachable with `OOLD_DESCRIPTOR_BINDING=0`.
 
 ### The shim was not sufficient verification
 

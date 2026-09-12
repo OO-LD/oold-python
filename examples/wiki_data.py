@@ -22,21 +22,14 @@ from pydantic import ConfigDict
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.backend.sparql import WikiDataSparqlResolver
 
-# The descriptor binding (pydantic v2). Imported directly rather than as
-# oold.model.LinkedBaseModel, because Link[T] is part of this binding and the
-# swap is still behind OOLD_DESCRIPTOR_BINDING.
-from oold.model._descriptor import (
-    AutoLinkedModel,
-    Link,
-    LinkNotResolved,
-    OoldField,
-)
+# based on pydantic v2
+from oold.model import Link, LinkedBaseModel, LinkNotResolved, OoldField
 
 WD_ENTITY = "http://www.wikidata.org/entity/"
 ENTITY_SCHEMA = "https://oo-ld.org/examples/wikidata/Entity"
 
 
-class WikiDataEntity(AutoLinkedModel):
+class WikiDataEntity(LinkedBaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "@context": {

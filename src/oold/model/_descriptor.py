@@ -56,8 +56,9 @@ from typing import (
     overload,
 )
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, SerializationInfo, model_serializer
 from pydantic._internal._model_construction import ModelMetaclass
+from pydantic_core import PydanticUndefined
 
 from oold.backend import interface
 from oold.backend.interface import (
@@ -203,13 +204,35 @@ def OoldField(
     return Field(**kwargs, json_schema_extra=extra)
 
 
+def _has_default(value: Any) -> bool:
+    """Whether a field default is a real value rather than a placeholder."""
+    return value is not None and value is not ... and value is not PydanticUndefined
+
+
 class FieldProxy:
-    """Class-level field handle enabling ``Person.name == "John"``."""
+    """Class-level field handle enabling ``Person.name == "John"``.
 
-    __slots__ = ("name",)
+    Carries the field's default as well as its name, because the legacy proxy
+    did: downstream writes ``if Model.field:`` and ``Model.type.startswith(...)``
+    against class attributes, which resolve to a proxy rather than to the
+    default. Without ``__bool__`` every such test is unconditionally true, and
+    without ``__getattr__`` every such call raises.
+    """
 
-    def __init__(self, name: str):
+    __slots__ = ("default", "name")
+
+    def __init__(self, name: str, default: Any = None):
         self.name = name
+        self.default = default
+
+    def __bool__(self) -> bool:
+        return bool(self.default) if _has_default(self.default) else False
+
+    def __getattr__(self, item: str) -> Any:
+        default = object.__getattribute__(self, "default")
+        if _has_default(default):
+            return getattr(default, item)
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {item!r}")
 
     def __eq__(self, other: Any) -> Any:  # type: ignore[override]
         return Condition(field=self.name, operator="eq", value=other)
@@ -271,7 +294,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         for klass in cls.__mro__:
             fields = klass.__dict__.get("__pydantic_fields__")
             if fields and name in fields:
-                return FieldProxy(name)
+                return FieldProxy(name, getattr(fields[name], "default", None))
         raise AttributeError(name)
 
     @overload
@@ -306,8 +329,8 @@ def _extract_target(annotation: Any) -> tuple[Any, bool, bool]:
     other spelling stays optional, so existing declarations are unaffected.
     """
     many = False
-    optional = True
     seen_link_annotation = False
+    saw_none_arm = False
     target = annotation
     changed = True
     while changed:
@@ -318,14 +341,14 @@ def _extract_target(annotation: Any) -> tuple[Any, bool, bool]:
             if args:
                 target, changed = args[0], True
                 many = many or origin._many
-                if not seen_link_annotation:
-                    # the first Link[...] seen carries the promise; a None arm
-                    # inside it is picked up by the union branch below
-                    optional = False
-                    seen_link_annotation = True
+                seen_link_annotation = True
         elif origin in _UNION_ORIGINS:
-            if seen_link_annotation and type(None) in get_args(target):
-                optional = True
+            # Order-independent: Optional[Link[T]] meets the union first and
+            # Link[T | None] meets it second, and both mean the same thing. An
+            # earlier version only looked once a Link had been seen, so the
+            # outer-Optional spelling came out as its opposite - mandatory.
+            if type(None) in get_args(target):
+                saw_none_arm = True
             args = [a for a in get_args(target) if a is not type(None)]
             if len(args) == 1:
                 target, changed = args[0], True
@@ -333,6 +356,9 @@ def _extract_target(annotation: Any) -> tuple[Any, bool, bool]:
             args = get_args(target)
             if args:
                 target, many, changed = args[0], True, True
+    # Only the Link[...] form can declare a link mandatory, and only when no
+    # None arm appears anywhere in the annotation.
+    optional = not seen_link_annotation or saw_none_arm
     return target, many, optional
 
 
@@ -575,12 +601,15 @@ class _AutoLink:
         target: Any = None,
         many: bool = False,
         optional: bool = True,
+        required_iri: bool = False,
     ):
         self.name = name
         self.target = target
         self.many = many
         # False only for the Link[T] / LinkList[T] form without a None arm
         self.optional = optional
+        # x-oold-required-iri: the schema says this link must carry a reference
+        self.required_iri = required_iri
         self.owner: Any = None
 
     def __set_name__(self, owner: type, name: str) -> None:
@@ -784,12 +813,39 @@ class LinkList(_AutoLink, _LinkAnnotation, Generic[T]):
         def __set__(self, obj: object, value: Iterable[T | str | Mapping[str, Any]] | None) -> None: ...
 
 
+def _excluded(info: Any, name: str) -> bool:
+    """Whether the caller asked for an unset link to be left out."""
+    if getattr(info, "exclude_none", False):
+        return True
+    if getattr(info, "exclude_unset", False) or getattr(info, "exclude_defaults", False):
+        return True
+    exclude = getattr(info, "exclude", None)
+    return bool(exclude) and name in exclude
+
+
+def _emit_inline(stored: Any) -> Any:
+    """Serialise references that have no IRI, so they are not silently lost."""
+
+    def one(ref: Any) -> Any:
+        obj = getattr(ref, "_obj", None) if ref is not None else None
+        if obj is None:
+            return None
+        return obj.model_dump(exclude_none=True) if hasattr(obj, "model_dump") else obj
+
+    if isinstance(stored, list):
+        return [one(r) for r in stored]
+    return one(stored)
+
+
 class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaClass):
     """Base model supporting both implicit and explicit link declarations."""
 
     model_config = ConfigDict(ignored_types=(Link, LinkList, _AutoLink))
 
     _links: dict[str, Any] = PrivateAttr(default_factory=dict)
+    # references assigned through __iris__ for names that are not link fields;
+    # the shipped side-dict kept them, so reading them back has to work
+    _extra_iris: dict[str, Any] = PrivateAttr(default_factory=dict)
     _link_cache: dict[str, Any] = PrivateAttr(default_factory=dict)
     __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
 
@@ -852,7 +908,7 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             target, many, optional = _extract_target(field.annotation)
             if isinstance(rng, str) and not isinstance(target, type):
                 target = rng
-            descr = _AutoLink(name, target, many, optional)
+            descr = _AutoLink(name, target, many, optional, bool(extra.get("x-oold-required-iri")))
             setattr(cls, name, descr)
             links[name] = descr
         cls.__link_fields__ = links
@@ -881,6 +937,12 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
+        missing = [name for name, d in link_fields.items() if d.required_iri and not self._links.get(name)]
+        if missing:
+            # x-oold-required-iri, enforced as the legacy binding did. It raised
+            # on the mere presence of the keyword; this raises on a true value,
+            # so required_iri=False no longer means "required".
+            raise ValueError(f"{', '.join(sorted(missing))} is required but not set")
 
     def __eq__(self, other: Any) -> bool:
         """Compare by data, not by what happens to be cached.
@@ -934,14 +996,29 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         return type(self).__link_fields__[name].iris(self)
 
     @model_serializer(mode="wrap")
-    def _serialize_links(self, handler: Any) -> dict[str, Any]:
+    def _serialize_links(self, handler: Any, info: SerializationInfo) -> dict[str, Any]:
         d = handler(self)
         for name, descr in type(self).__link_fields__.items():
             iris = descr.iris(self)
             if iris:
                 d[name] = iris
-            else:
-                d.pop(name, None)
+                continue
+            stored = self._links.get(name)
+            if stored is None and name not in self._links:
+                # Never set: emit the key holding None, as the legacy binding
+                # does - but only when the caller has not asked for exactly this
+                # to be left out. Writing it unconditionally runs *after*
+                # handler() has applied the exclusions, which would leak an
+                # explicit null past exclude_none, exclude_unset,
+                # exclude_defaults and exclude={...} into every stored document.
+                if not _excluded(info, name):
+                    d[name] = None
+                continue
+            # Set, but nothing to reference: either an explicit empty list - a
+            # different statement from "unset" and one that must round-trip - or
+            # an inline object with no IRI, which has to serialise nested rather
+            # than vanish, since cast() is built on this.
+            d[name] = _emit_inline(stored)
         return d
 
 

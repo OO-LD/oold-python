@@ -120,3 +120,20 @@ def test_v1_to_json_encodes_non_json_types():
     assert out["uuid"] == "6dd0a5aa-8b53-4b0f-8a1d-2b1b1a1f0c11"
     assert out["ref"] == "ex:t"
     json.dumps(out)  # the whole point: the result is JSON-serialisable
+
+
+def test_unset_links_honour_the_exclude_flags():
+    """The unset-key was written after handler(), so it survived every
+    exclusion - putting an explicit null into every stored document."""
+
+    class M(LinkedBaseModel):
+        id: str
+        one: Target | None = Field(None, json_schema_extra={"range": "Target"})
+        links: list[Target] | None = Field(None, json_schema_extra={"range": "Target"})
+
+    M.model_rebuild()
+    m = M(id="ex:m", one="ex:1")
+    assert "links" not in m.to_json()
+    assert "links" not in m.model_dump(exclude_none=True)
+    assert "links" not in m.model_dump(exclude={"links"})
+    assert m.model_dump()["links"] is None  # still there when nothing is excluded

@@ -1118,8 +1118,18 @@ class BaseController:
         """
 
         def _is_data_model(cls):
+            # A data model is recognised by carrying fields, not only by not
+            # being on a name list: the descriptor binding mixes in
+            # LinkedApiMixin, which answers to_json/from_json but declares no
+            # fields, and a name-only test picked it as the data model - so
+            # to_json() intersected against an empty field set and returned
+            # nothing but the type.
+            fields = getattr(cls, "model_fields", None)
+            if fields is None:  # pydantic v1 classes
+                fields = getattr(cls, "__fields__", None)
             return (
                 cls is not type(self)
+                and bool(fields)
                 and cls.__name__
                 not in (
                     "LinkedBaseModel",

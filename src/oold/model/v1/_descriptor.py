@@ -24,6 +24,7 @@ from pydantic.v1 import BaseModel, PrivateAttr
 from pydantic.v1.fields import SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE
 from pydantic.v1.main import ModelMetaclass
 
+from oold.model._compat import LinkedApiMixin
 from oold.model._descriptor import (
     Condition,
     FieldProxy,
@@ -128,10 +129,12 @@ def _to_ref_v1(value: Any, target: Any) -> Ref | None:
 class _AutoLinkV1:
     """Non-data descriptor backing a v1 link field."""
 
-    def __init__(self, name: str, target: Any, many: bool):
+    def __init__(self, name: str, target: Any, many: bool, required_iri: bool = False):
         self.name = name
         self.target = target
         self.many = many
+        # x-oold-required-iri: the schema says this link must carry a reference
+        self.required_iri = required_iri
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         if obj is None:
@@ -195,7 +198,11 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
                 continue
             # v1 resolves the target for us: type_ is the item type and shape
             # tells us whether the field is to-many
-            descr = _AutoLinkV1(fname, field.type_, field.shape in _MANY_SHAPES)
+            # v1 cannot pass a hyphenated keyword to Field(), so downstream
+            # spells it with underscores - the legacy v1 binding reads only that
+            # form. Accept both.
+            required_iri = bool(extra.get("x_oold_required_iri") or extra.get("x-oold-required-iri"))
+            descr = _AutoLinkV1(fname, field.type_, field.shape in _MANY_SHAPES, required_iri)
             setattr(cls, fname, descr)
             links[fname] = descr
             _neutralise_field(field)
@@ -220,7 +227,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         for klass in cls.__mro__:
             fields = klass.__dict__.get("__fields__")
             if fields and name in fields:
-                return FieldProxy(name)
+                return FieldProxy(name, getattr(fields[name], "default", None))
         raise AttributeError(name)
 
     @overload
@@ -288,15 +295,18 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
             self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
+        missing = [name for name, d in link_fields.items() if d.required_iri and not self._links.get(name)]
+        if missing:
+            # see the v2 note: enforced on a true value, not on key presence
+            raise ValueError(f"{', '.join(sorted(missing))} is required but not set")
 
     def __setattr__(self, name: str, value: Any, internal: bool = False) -> None:
         # internal=True means "write the value as given": BaseController passes
         # it through to bypass link handling for controller-only state.
         if name == "__iris__":
-            for field, iris in (value or {}).items():
-                descr = type(self).__link_fields__.get(field)
-                if descr is not None:
-                    descr.set_value(self, iris)
+            # delegate to the shared property, so a v1 model gets the same
+            # replace semantics as a v2 one
+            LinkedApiMixin.__iris__.fset(self, value)
             return
         if internal:
             super().__setattr__(name, value)

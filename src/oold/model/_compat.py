@@ -46,6 +46,29 @@ from oold.static import (
 )
 
 
+def _raw_of(stored: Any) -> Any:
+    """The nested form of references that carry no IRI."""
+
+    def one(ref: Any) -> Any:
+        obj = getattr(ref, "_obj", None) if ref is not None else None
+        if obj is None:
+            return None
+        return obj._raw_dict() if hasattr(obj, "_raw_dict") else obj
+
+    if isinstance(stored, list):
+        out = [one(r) for r in stored]
+        return out or None
+    return one(stored)
+
+
+def _drop_iri(stored: Any) -> None:
+    """Forget the IRI of a stored reference, keeping any object it holds."""
+    refs = stored if isinstance(stored, list) else [stored]
+    for ref in refs:
+        if ref is not None:
+            ref.iri = None
+
+
 class LinkedApiMixin(GenericLinkedBaseModel):
     """Re-implements the shipped ``LinkedBaseModel`` API over ``_links``."""
 
@@ -63,14 +86,34 @@ class LinkedApiMixin(GenericLinkedBaseModel):
             iris = descr.iris(self)
             if iris:
                 out[name] = iris
+        out.update(self._extra_iris)
         return out
 
     @__iris__.setter
     def __iris__(self, value: dict[str, Any]) -> None:
+        """Replace the stored *references*, and only those.
+
+        The shipped side-dict is a plain attribute, so assigning to it drops
+        whatever was there - merging would silently keep links the caller meant
+        to clear, and ``= {}`` would do nothing at all.
+
+        Two things it must not do. Destroy a value: a ``Ref`` carries both an
+        IRI and the object once it has one, so clearing the slot outright would
+        lose a resolved or inline object the side-dict never held - only the IRI
+        goes. And overwrite a field: a key that is not a link field is remembered
+        as a reference rather than written over the model field of that name.
+        """
         link_fields = type(self).__link_fields__
-        for name, iris in (value or {}).items():
+        value = value or {}
+        for name in link_fields:
+            if name in value:
+                continue
+            _drop_iri(self._links.get(name))
+            self.__dict__.pop(name, None)
+        for name, iris in value.items():
             descr = link_fields.get(name)
             if descr is None:
+                self._extra_iris[name] = iris
                 continue
             descr.set_value(self, iris)
 
@@ -118,7 +161,11 @@ class LinkedApiMixin(GenericLinkedBaseModel):
             return self.__dict__.get(field_name)
         stored = self._links.get(field_name)
         if isinstance(stored, list):
-            return [r._obj for r in stored if r is not None] or None
+            # filter on the resolved object, not on the Ref: an unresolved
+            # reference has a Ref but no object, and answering [None] would read
+            # as "there is one, and it is nothing"
+            objs = [r._obj for r in stored if r is not None and r._obj is not None]
+            return objs or None
         return stored._obj if stored is not None else None
 
     # -- serialisation ------------------------------------------------------
@@ -134,7 +181,13 @@ class LinkedApiMixin(GenericLinkedBaseModel):
         d: dict[str, Any] = {}
         for name in type(self).model_fields:
             if name in links:
-                d[name] = self.get_iri_ref(name)
+                iri = self.get_iri_ref(name)
+                if iri is None:
+                    # No IRI to reference. An inline object that has not been
+                    # given one still has to appear, or cast() drops it - the
+                    # shipped _raw_dict keeps it, nested.
+                    iri = _raw_of(self._links.get(name))
+                d[name] = iri
                 continue
             value = self.__dict__.get(name)
             if isinstance(value, list):

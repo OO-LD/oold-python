@@ -2,15 +2,19 @@
 
 Status: draft for discussion, tracked in [oold-python#107].
 
-Companion prototypes, all runnable and under `src/oold/experimental/`:
+The recommended binding has been promoted out of the prototypes and now lives in
+the package proper:
 
-| module | what it explores |
+| module | what it is |
 |---|---|
-| `auto_descriptor_binding.py` | **recommended.** Descriptors installed automatically from annotations; unchanged declaration syntax |
-| `notation.py` | the reviewed notations: `OoldField()` / `link=True`, `Link[T]` inside annotations, union arms |
-| `descriptor_binding.py` | the same binding declared explicitly as unannotated descriptors |
-| `ref_binding.py` | explicit `Ref[T]` handle for visible / async resolution |
-| `codegen_spike.py` | IR-based code generation without text post-processing |
+| `src/oold/model/_descriptor.py` | **the binding.** Descriptors installed from annotations, the `Link[T]` / `LinkList[T]` notation, the query DSL |
+| `src/oold/model/v1/_descriptor.py` | the same for pydantic v1 |
+| `src/oold/model/_compat.py` | the downstream API surface (`__iris__`, `get_iri_ref`, `to_json` ...) |
+| `src/oold/model/_notation.py` | the reviewed notations on top of it: `OoldField()`, union arms |
+| `src/oold/experimental/codegen_spike.py` | IR-based code generation without text post-processing (still a spike) |
+
+It is opt-in behind `OOLD_DESCRIPTOR_BINDING=1`, which rebinds
+`oold.model.LinkedBaseModel` and its metaclass.
 
 Verification scripts under `examples/`: `check_binding_features.py` (requirement
 matrix), `bench_binding_variants.py` (per-operation benchmarks),
@@ -167,21 +171,23 @@ declaration denies is the alternative, and that is the same polite fiction the
 
 What the promise costs, by case:
 
-| | detectable | `Link[T]` | `Link[T \| None]` |
-| --- | --- | --- | --- |
-| not set, no IRI | at construction | **rejected when built** | `None` |
-| backend error | on access | propagates | propagates |
-| answered, no such entity | on access | **raises `LinkNotResolved`** | `None` |
+| | `Link[T]` | `Link[T \| None]` |
+| --- | --- | --- |
+| not set, no IRI | **raises `LinkNotResolved`** | `None` |
+| backend error | propagates | propagates |
+| answered, no such entity | **raises `LinkNotResolved`** | `None` |
 
-The first row is why the promise holds: absence is knowable without resolving
-anything, so it is rejected when the object is built rather than whenever
-someone happens to read it. The second row is unchanged and important - a
-transport failure is not "has no father", and conflating them would be the real
-bug. Only the third row can surprise.
+All three fire on *access*, not at construction. An earlier version rejected an
+absent mandatory link when the object was built - knowable without resolving
+anything, and tempting for that reason - but it over-enforces: the annotation
+says what *reading* the link yields, not that every instance carries one. Graph
+data is routinely partial (most Wikidata people have no recorded father), and
+rejecting those objects makes them unloadable. Declaring a link mandatory states
+an intent to **traverse** it, so one `try/except` around a whole walk replaces a
+guard at every hop.
 
-Mandatory links are **viral**: every instance the backend hands back during
-resolution must carry them too, so a mandatory *self*-link is unsatisfiable.
-Declare `Link[T | None]` when walking patchy data.
+The middle row is unchanged and matters: a transport failure is not "has no
+father", and conflating the two would be the real bug.
 
 #### Coverage
 
@@ -248,6 +254,43 @@ construction: a bare string stays a literal when a `str` arm is declared, a
 object with no `@id` cannot be emitted as a reference, so it serialises nested -
 a blank node.
 
+#### Which notation supports what
+
+Every row is the same field at runtime - they resolve, batch, serialise and
+query identically. They differ in what a type checker sees and what reaches the
+JSON Schema. Measured, not asserted: read types from `ty`, schema keys from
+`model_json_schema()`.
+
+| notation | codegen emits it | target inferred | range keyword in schema | read type | IRI write typed | optionality declarable |
+|---|---|---|---|---|---|---|
+| `Optional[List[T]] = Field(None, json_schema_extra={"range": ...})` | yes | no | `range` (legacy) | `list[T] \| None` | no | no |
+| `= OoldField(range="...")` | no | no | `x-oold-range` | as annotated | no | no |
+| `= OoldField()` | no | **yes** | **none** | as annotated | no | no |
+| `Link[T]` / `LinkList[T]` | not yet | **yes** | `x-oold-range` if `range=` given | **exact** (`T`, `LinkResultList[T]`) | **yes** | **yes** |
+| `= Link(T)` / `= LinkList(T)` | no | yes (from the argument) | **field absent from schema** | exact | n/a - not a field | no |
+| `str \| Location \| None = OoldField(link=True)` | no | yes | none | union as declared | no | via the `None` arm |
+
+Two entries deserve their qualifier. `OoldField()` infers the target from the
+annotation - the convenience the notation was proposed for - but then **nothing
+writes `x-oold-range` into the emitted schema**, so the schema no longer declares
+its own range. Pair it with `range=` where the schema is the artifact. And the
+unannotated descriptor form is not a pydantic field at all, so it neither appears
+in the schema nor gets an `__init__` parameter, though its read type is exact.
+
+#### Notations considered and dropped
+
+| notation | why it is not used |
+|---|---|
+| `list[Link[T]]`, `Optional[Link[T]]` - `Link` nested inside another annotation | Silently degrades. A descriptor nested in a `list` or union is not treated as one, so the read type comes back as `list[Link[T]]` - not merely untyped but **wrong**. Superseded by `LinkList[T]`, which carries the to-many-ness itself. Still works at runtime, which is what makes it dangerous. |
+| `Annotated[Person, OoldRange(...)]` wrapping a `Ref` value | The static type is not backed by the runtime value: a checker reads `Person`, `isinstance` says `Ref`. Rejected in 3(c). |
+| `Ref[T]` as the field type | Honest, but `p.knows[0]` is a `Ref`, not a `Person` - `isinstance` fails and the list operations, polymorphic dispatch and query DSL go with it (3.6). Kept only as an opt-in handle for visible or async resolution. |
+| `~Person.name == "x"` for match filters | `~` binds tighter than `==`, so this parses and would work - but pandas established `~` as NOT, and colliding with that is worse than a method. |
+
+Two **semantics** were dropped along the way, for the record: elements of a
+to-many link were briefly `T | None` unconditionally (replaced by declaring it),
+and a mandatory link was briefly rejected at construction rather than on access
+(see the table above).
+
 ### 3.4 Typed `json_schema_extra`
 
 The raw dict can be replaced by a validated class, but it **must subclass
@@ -308,6 +351,36 @@ Instance-level filtering (`entity.links[cond]`) is typed only when the field is
 annotated `LinkResultList[T]`. The `list[T] | None` form the current codegen
 emits stays unfiltered at the type level, so the generator should emit
 `LinkResultList[T]` for to-many links.
+
+#### The DSL against a real query language
+
+A `Condition` is consumed by two things, and the check that matters is that they
+agree: `apply_operator`, which filters objects already in memory, and the SPARQL
+resolvers, which have to ask a triple store the same question. `query()` on
+`SparqlResolver`, `LocalSparqlResolver` and `WikiDataSparqlResolver` translates
+`eq, ne, lt, le, gt, ge` and `&`; anything else raises rather than quietly
+returning the wrong rows.
+
+Two things fell out of doing it, which is why it was worth doing before adding
+more operators:
+
+- **The predicate and the literal both come from the model's own context.** A
+  probe document is expanded through it, so a term scoped `@language: en` yields
+  `"x"@en` and one with an `@type` yields `"x"^^<xsd:integer>`. Deriving either
+  by hand would be a second, divergent reading of the same context.
+- **A match needs a type constraint.** `rdfs:label "Tim Berners-Lee"@en` also
+  matches a book edition, and resolving that fails on an unknown type IRI. The
+  Wikidata resolver constrains on P31 - the predicate it already rewrites into
+  `@type` on the way in.
+
+`tests/test_sparql_query.py` asserts the SPARQL answer against `apply_operator`
+over the same data rather than against hand-written expectations, so it tests
+the agreement rather than one implementation twice. It runs offline against an
+rdflib graph.
+
+Still missing, and visible from here: there is no `|` (the model defines
+`__and__` but not `__or__`), no `~`, and link descriptors carry only `==` / `!=`,
+not the ordering operators.
 
 ### 3.6 Requirement matrix
 

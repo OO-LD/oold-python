@@ -1,8 +1,7 @@
-"""Prototype: auto-installed descriptors, with NO declaration syntax change.
+"""The descriptor graph-object binding, with no declaration syntax change.
 
-This combines the advantages of the shipped binding and the explicit descriptor
-form. Models are declared exactly as they are today - standard annotations,
-including plain ``List[...]`` for to-many links:
+Models are declared exactly as they are today - standard annotations, including
+plain ``List[...]`` for to-many links:
 
     class Person(AutoLinkedModel):
         id: str
@@ -11,22 +10,31 @@ including plain ``List[...]`` for to-many links:
             None, json_schema_extra={"x-oold-range": "Person"}
         )
 
-No wrapper types, no unannotated assignments; the generated code that
-``datamodel-code-generator`` already emits keeps working unchanged.
+so the code ``datamodel-code-generator`` already emits keeps working untouched.
+``Link[T]`` / ``LinkList[T]`` are available on top for declarations that should
+also be typed in both directions - see ``docs/design/graph-object-binding.md``.
 
 After pydantic finishes building the class, ``__pydantic_init_subclass__`` scans
 ``model_fields`` for a ``x-oold-range`` (or legacy ``range``) annotation and
-**installs a data descriptor** for each such field. Because a data descriptor
-takes precedence over an instance ``__dict__`` entry during normal attribute
-lookup, the descriptor handles link reads while every other field keeps native
-pydantic access. The "is this a range field?" test is therefore performed by the
-interpreter's C-level attribute lookup instead of a Python ``__getattribute__``,
-so plain fields cost nothing.
+installs a descriptor for each such field. Because attribute lookup consults the
+type before the instance ``__dict__``, the descriptor handles link reads while
+every other field keeps native pydantic access: the "is this a range field?"
+test is performed by the interpreter's C-level attribute lookup rather than a
+Python ``__getattribute__``, so plain fields cost nothing.
 
-Semantics match the shipped binding: reading a link returns the **real**
-resolved object (``isinstance`` holds), resolution is lazy, and references
-serialise back to IRIs. Resolution is additionally **batched** - a list resolves
-in one backend call.
+The descriptor is deliberately **non-data** - it defines ``__get__`` but no
+runtime ``__set__`` - and caches the resolved value in the instance ``__dict__``,
+which then shadows it. Warm link reads are therefore a plain dict lookup that
+never re-enters Python (the ``functools.cached_property`` pattern, worth 32x);
+writes are intercepted by ``__setattr__`` instead, which drops the cache entry.
+
+Semantics match the shipped binding: reading a link returns the **real** resolved
+object (``isinstance`` holds), resolution is lazy, and references serialise back
+to IRIs. Resolution is additionally **batched** - a list resolves in one backend
+call.
+
+Selected with ``OOLD_DESCRIPTOR_BINDING=1``; ``OOLD_LINKS=0`` turns link
+behaviour off entirely and leaves plain pydantic.
 """
 
 from __future__ import annotations

@@ -155,3 +155,74 @@ A field can carry a default IRI that is resolved automatically on instantiation:
 ```
 
 When you instantiate the model without supplying `b_default`, the IRI `"ex:tag-python"` is used and resolved on first access.
+
+---
+
+## Typed link declarations
+
+The declaration above works, but a type checker only sees half of it. A link has
+**two** types: reading it yields a resolved object, while writing it accepts that
+object *or* a reference to it - an IRI string, or a JSON object still to be
+constructed. A single annotation can only state one, so `knows: list[Person]`
+rejects `knows=["ex:bob"]` even though the library accepts it at runtime.
+
+`Link[T]` and `LinkList[T]` carry both. They are available with the descriptor
+binding (`OOLD_DESCRIPTOR_BINDING=1`):
+
+```python
+from oold.model._descriptor import AutoLinkedModel, Link, LinkList, OoldField
+
+class Person(AutoLinkedModel):
+    id: str
+    name: str | None = None
+    employer: Link["Organization | None"] = OoldField(range="Organization.json")
+    knows: LinkList["Person | None"] = OoldField(range="Person.json")
+
+# accepted: an object, an IRI, or a JSON object
+alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
+alice.knows[0]        # a Person, not a str
+```
+
+Nothing changes at runtime - same resolution, same JSON Schema. Only what the
+checker sees changes.
+
+### Optionality is declared
+
+`Link[T]` reads as `T`, so a chain needs no guard at every hop. `Link[T | None]`
+reads as `T | None`, because absence is then part of the model:
+
+```python
+class Person(AutoLinkedModel):
+    father: Link["Person"] = OoldField()          # promises a Person
+    mother: Link["Person | None"] = OoldField()   # may legitimately be absent
+
+person.father.father.father.name    # no guards
+```
+
+A link declared mandatory raises `LinkNotResolved` when it is unset or when the
+backend cannot place the reference, so one `try/except` covers a whole walk:
+
+```python
+from oold.model._descriptor import LinkNotResolved
+
+try:
+    while True:
+        person = person.father
+        print(person.name)
+except LinkNotResolved:
+    print("ancestry ends here")
+```
+
+A **transport failure is not absence** - a connection error propagates unchanged
+rather than being reported as a missing link.
+
+!!! note "Write the whole annotation"
+    `Link[T]` has to be the entire annotation. Nested - `list[Link[T]]` or
+    `Optional[Link[T]]` - a checker does not apply descriptor rules and the read
+    type comes back wrong, while the runtime keeps working. Use `LinkList[T]`
+    and `Link[T | None]`.
+
+!!! note "Keep the range in the schema"
+    `OoldField()` infers the target from the annotation, but then nothing writes
+    `x-oold-range` into the emitted schema. Pass `range=` where the schema is the
+    artifact you publish.

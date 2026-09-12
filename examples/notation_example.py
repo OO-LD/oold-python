@@ -15,9 +15,10 @@ Run it:
 
     python examples/notation_example.py
 
-The recommended variant for generated code is
-``oold.model._descriptor`` (unchanged declaration syntax);
-``oold.model._notation`` adds the notations above on top of it.
+Generated code keeps the unchanged declaration syntax of
+``oold.model._descriptor``; ``oold.model._notation`` adds the notations above on
+top of it. Which notation supports what is tabulated in
+``docs/design/graph-object-binding.md`` section 3.3.
 """
 
 from oold.backend.document_store import SimpleDictDocumentStore
@@ -92,7 +93,7 @@ def main() -> None:
     print("   knows[0].name          =", alice.knows[0].name)
     print("   isinstance(.., Person) =", isinstance(alice.knows[0], Person))
 
-    print("\n2. Link[T] inside the annotation")
+    print("\n2. the plain list[T] form - identical at runtime")
     assert isinstance(alice.employer, Organization)
     assert alice.employer.name == "ACME"
     assert isinstance(alice.friends[0], Person)
@@ -139,8 +140,7 @@ def main() -> None:
     assert lazy.link_iris("knows") == ["ex:bob"]  # inspect without resolving
     # The class-level DSL builds a Condition at runtime, but a type checker
     # sees BaseModel.__eq__ and reads this as bool. The subscript overloads
-    # accept bool for that reason, so Person[cond] is still typed (pyright; ty
-    # has no metaclass __getitem__ support and infers Unknown there).
+    # accept bool for that reason, so Person[cond] keeps its result type.
     condition = Person.name == "Bob"
     assert condition.field == "name"
     print("   link_iris('knows')     =", lazy.link_iris("knows"))

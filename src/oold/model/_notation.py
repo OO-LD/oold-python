@@ -1,22 +1,26 @@
-"""Prototype of the notations proposed in issue #107 review comments.
-
-Three proposals are implemented and exercised here:
+"""The link declaration notations proposed in issue #107 review comments.
 
 1. ``OoldField()`` / ``OoldField(link=True)`` - no ``range=`` argument. The link
    target is inferred from the annotation, so the schema IRI is not repeated in
-   Python. ``OoldField()`` with no arguments at all is equivalent for a
-   non-literal target.
-2. ``Link[T]`` **inside** the annotation, e.g.
-   ``employer: Optional[Link[Organization]]`` or
-   ``friends: Optional[List[Link["Person"]]]``. ``Link[T]`` is
-   ``Annotated[T, LinkMarker()]``, so a type checker reads it as ``T`` - and,
-   unlike the rejected ``Annotated``-over-``Ref`` form, the runtime value really
-   *is* a ``T``, because the descriptor returns the resolved object.
+   Python. Note the trade-off: nothing then writes ``x-oold-range`` into the
+   emitted schema, so pass ``range=`` where the schema is the artifact.
+2. ``Link[T]`` / ``LinkList[T]`` as the **whole** annotation, e.g.
+   ``employer: Link[Organization]`` or ``knows: LinkList["Person"]``. These are
+   descriptor types, so a checker takes the ``__init__`` parameter and the
+   assignment type from ``__set__`` and the attribute type from ``__get__``
+   (PEP 681) - which is how one field carries both the resolved read type and
+   the IRI-or-object write type. Optionality is declared in the parameter:
+   ``Link[T]`` reads as ``T``, ``Link[T | None]`` as ``T | None``.
+
+   They must be the whole annotation. Nested - ``list[Link[T]]`` or
+   ``Optional[Link[T]]`` - a checker does not apply descriptor rules and the
+   read type comes back wrong; use ``LinkList[T]`` and ``Link[T | None]``.
 3. **Union forms** mixing literal, inline object and reference, e.g.
-   ``location: Union[str, Location, Link[Location]]``.
+   ``location: Union[str, Location, None] = OoldField(link=True)``.
 
 Everything reuses the descriptor machinery from
-:mod:`oold.model._descriptor`.
+:mod:`oold.model._descriptor`; ``Link`` and ``LinkList`` are re-exported from
+there rather than redefined, so there is one implementation, not two.
 """
 
 from __future__ import annotations

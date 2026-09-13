@@ -29,8 +29,8 @@ from oold.model._descriptor import (
     Condition,
     FieldProxy,
     LinkResultList,
-    _batch_resolve,
-    _to_ref,
+    _AutoLink,
+    _Constructing,
 )
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
@@ -107,69 +107,29 @@ def _neutralise_field(field: Any) -> None:
         info.default_factory = None
 
 
-class _AutoLinkV1:
-    """Non-data descriptor backing a v1 link field."""
+class _AutoLinkV1(_AutoLink):
+    """The shared link descriptor, with v1's way of naming the target.
 
-    def __init__(self, name: str, target: Any, many: bool, required_iri: bool = False):
-        self.name = name
-        self.target = target
-        self.many = many
-        # x-oold-required-iri: the schema says this link must carry a reference
-        self.required_iri = required_iri
+    Everything else - the construction guard, batched resolution, the instance
+    cache, ``set_value``, ``iris`` and the comparison operators - was a
+    copy of the v2 descriptor differing only in how the target is reached:
+    pydantic v1 resolves it eagerly into ``field.type_``, so there is nothing to
+    look up later.
+    """
 
-    def __get__(self, obj: Any, objtype: Any = None) -> Any:
-        if obj is None:
-            if LinkedBaseModelMetaClass._constructing:
-                # A subclass may redeclare an inherited link field. pydantic v1
-                # rejects a field whose name resolves to a truthy attribute on a
-                # base (validate_field_name), so the descriptor has to stay
-                # invisible while a class is being built - same reason the
-                # metaclass carries the flag.
-                raise AttributeError(self.name)
-            return self
-        stored = obj._links.get(self.name)
-        if self.many:
-            result = (LinkResultList(_batch_resolve(stored, self.target)) if stored else LinkResultList())._bind(
-                obj, self.name, stored
-            )
-        elif stored is None:
-            result = None
-        else:
-            result = _batch_resolve([stored], self.target)[0]
-        # non-data descriptor: the instance dict shadows it from now on, so
-        # subsequent reads are a plain C-level lookup
-        obj.__dict__[self.name] = result
-        return result
-
-    def set_value(self, obj: Any, value: Any) -> None:
-        obj.__dict__.pop(self.name, None)  # invalidate the cached read
-        if self.many:
-            obj._links[self.name] = [] if value is None else [_to_ref(v, self.target) for v in value]
-        else:
-            obj._links[self.name] = _to_ref(value, self.target)
-
-    def iris(self, obj: Any) -> Any:
-        stored = obj._links.get(self.name)
-        if self.many:
-            return [r.iri for r in (stored or []) if r is not None and r.iri]
-        return stored.iri if stored is not None else None
-
-    def __eq__(self, other: Any) -> Any:  # type: ignore[override]
-        return Condition(field=self.name, operator="eq", value=other)
-
-    def __hash__(self) -> int:
-        return id(self)
+    def _target_cls(self, owner: Any = None) -> Any:
+        return self.target
 
 
 class LinkedBaseModelMetaClass(ModelMetaclass):
     """Installs link descriptors and provides the class-level query DSL."""
 
     def __new__(mcs, name, bases, namespace, **kwargs):
-        LinkedBaseModelMetaClass._constructing = True
+        _Constructing.enter()
         try:
             cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
-            LinkedBaseModelMetaClass._constructing = False
+            _Constructing.leave()
         links: dict[str, _AutoLinkV1] = {}
         for base in reversed(cls.__mro__):
             links.update(getattr(base, "__link_fields__", {}) or {})
@@ -183,7 +143,16 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
             # spells it with underscores - the legacy v1 binding reads only that
             # form. Accept both.
             required_iri = bool(extra.get("x_oold_required_iri") or extra.get("x-oold-required-iri"))
-            descr = _AutoLinkV1(fname, field.type_, field.shape in _MANY_SHAPES, required_iri)
+            # keywords, not positions: the shared __init__ takes
+            # (name, target, many, optional, required_iri), and passing
+            # required_iri positionally lands it in `optional` - which makes
+            # every v1 link mandatory and disables required_iri entirely.
+            descr = _AutoLinkV1(
+                fname,
+                field.type_,
+                many=field.shape in _MANY_SHAPES,
+                required_iri=required_iri,
+            )
             setattr(cls, fname, descr)
             links[fname] = descr
             _neutralise_field(field)
@@ -191,17 +160,8 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         _register_class_v1(cls)
         return cls
 
-    _constructing: bool = False
-    """Set while a class is being built.
-
-    pydantic v1 calls ``hasattr(base, field_name)`` to reject fields that shadow
-    a BaseModel attribute. Field names are exactly what ``__getattr__`` answers
-    with a FieldProxy, so without this guard every model declaring ``type``
-    fails to build. Same reason the v2 metaclass carries the flag.
-    """
-
     def __getattr__(cls, name: str) -> Any:
-        if LinkedBaseModelMetaClass._constructing:
+        if _Constructing.is_active():
             raise AttributeError(name)
         if name.startswith("_"):
             raise AttributeError(name)

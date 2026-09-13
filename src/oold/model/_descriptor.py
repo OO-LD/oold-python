@@ -78,6 +78,37 @@ T = TypeVar("T")
 _M = TypeVar("_M")
 
 
+class _Constructing:
+    """Whether a model class is being built, for either pydantic version.
+
+    One flag, not one per version: the descriptor's ``__get__`` consults it, and
+    that descriptor is shared, so two flags would mean v1 class construction set
+    one while the guard read the other. Pydantic probes the bases for
+    same-named attributes while building a class, and an installed descriptor is
+    exactly such an attribute - without this the probe finds it and rejects the
+    field (v2 warns and mis-assigns, v1 raises NameError).
+
+    A **counter**, not a boolean: class bodies nest. A model defined while
+    another is being built - a lazy import, ``create_model`` from a metaclass
+    hook, a forward reference resolved mid-build - would otherwise clear the
+    flag on its way out and leave the enclosing build unguarded.
+    """
+
+    depth: int = 0
+
+    @classmethod
+    def enter(cls) -> None:
+        cls.depth += 1
+
+    @classmethod
+    def leave(cls) -> None:
+        cls.depth = max(0, cls.depth - 1)
+
+    @classmethod
+    def is_active(cls) -> bool:
+        return cls.depth > 0
+
+
 class LinkNotResolved(LookupError):
     """A mandatory link did not yield an object.
 
@@ -299,7 +330,10 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
     naturally and lands here at no cost to any other attribute access.
     """
 
-    _constructing: bool = False
+    _constructing = False
+    """Deprecated alias. The state lives on :class:`_Constructing`; this stays a
+    plain ``False`` so downstream ``if LinkedBaseModelMetaClass._constructing:``
+    keeps meaning what it did, rather than becoming permanently true."""
     """Set while a class is being built.
 
     Pydantic probes ``getattr(base, field_name, None)`` during class
@@ -312,16 +346,16 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
     def __new__(mcs, name, bases, namespace, **kwargs):
         if links_enabled():
             _neutralise_link_defaults(namespace)
-        LinkedBaseModelMetaClass._constructing = True
+        _Constructing.enter()
         try:
             return super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
-            LinkedBaseModelMetaClass._constructing = False
+            _Constructing.leave()
 
     def __getattr__(cls, name: str) -> Any:
         # Never call getattr(cls, ...) here: cls.model_fields is a property
         # that itself calls getattr, which would recurse until the stack blows.
-        if LinkedBaseModelMetaClass._constructing:
+        if _Constructing.is_active():
             raise AttributeError(name)
         if name.startswith("_"):
             raise AttributeError(name)
@@ -768,7 +802,7 @@ class _AutoLink:
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         if obj is None:
-            if LinkedBaseModelMetaClass._constructing:
+            if _Constructing.is_active():
                 # A subclass may redeclare an inherited link field. Pydantic
                 # checks the bases for a same-named attribute and rejects the
                 # field if it finds one, so the descriptor has to stay invisible

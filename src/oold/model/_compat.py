@@ -135,12 +135,15 @@ class LinkedApiMixin(GenericLinkedBaseModel):
                 break
         type_field = cls.model_fields.get(cls.get_type_field())
         if type_field is not None:
-            # append the default as-is: a list default is one identity (a type
-            # array), not several. Flattening it changes the registry keys and
-            # the type array that serialisation emits.
+            # A list default is a type *array*: the class answers to every IRI
+            # in it, so flatten. Appending the list as one element left a
+            # non-string in the result, which _register_class skips - so a class
+            # with a type array registered under its $id only and was
+            # unreachable by type. v1 already flattened, as does _iri_set.
             default = type_field.default
-            if default is not None and default not in out:
-                out.append(default)
+            for value in default if isinstance(default, list) else [default]:
+                if value is not None and value not in out:
+                    out.append(value)
         if not out:
             return None
         return out[0] if len(out) == 1 else out

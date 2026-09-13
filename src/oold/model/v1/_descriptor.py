@@ -399,12 +399,20 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
     def dict(self, **kwargs: Any) -> dict[str, Any]:
         """v1 serialisation; link fields collapse to their IRIs."""
         exclude_none = kwargs.pop("exclude_none", False)
-        d = super().dict(**kwargs)
-        for name, descr in type(self).__link_fields__.items():
+        links = type(self).__link_fields__
+        # Reading a link caches the resolved value in __dict__, which pydantic v1
+        # serialises - so whether a link had been read changed the output. Drop
+        # the cache entries for the duration, then restore them.
+        cached = {name: self.__dict__.pop(name) for name in links if name in self.__dict__}
+        try:
+            d = super().dict(**kwargs)
+        finally:
+            self.__dict__.update(cached)
+        for name, descr in links.items():
             iris = descr.iris(self)
             if iris:
                 d[name] = iris
-            elif name in d and not d[name]:
+            else:
                 d[name] = None
         if exclude_none:
             d = {k: v for k, v in d.items() if v is not None}

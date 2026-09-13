@@ -46,6 +46,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     ClassVar,
     Generic,
@@ -112,21 +113,51 @@ def _neutralise_link_defaults(namespace: dict) -> None:
     the time ``__pydantic_init_subclass__`` sees the fields the core schema -
     defaults included - has already been built.
     """
-    for field_name in namespace.get("__annotations__", {}):
-        info = namespace.get(field_name)
+    import copy as _copy
+
+    def _is_link_field_info(info: Any) -> bool:
         extra = getattr(info, "json_schema_extra", None)
         if not isinstance(extra, dict):
-            continue
-        if not (extra.get("x-oold-range") or extra.get("range") or extra.get("x-oold-link")):
-            continue
+            return False
+        return bool(extra.get("x-oold-range") or extra.get("range") or extra.get("x-oold-link"))
+
+    def _neutralised(info: Any) -> Any:
+        # Copy first: a FieldInfo can be shared between models (a module-level
+        # SHARED = Field(...) assigned to several classes), and mutating it in
+        # place stripped that default process-wide, including from plain
+        # BaseModels that have nothing to do with links.
+        info = _copy.copy(info)
         info.default = None
         info.default_factory = None
         # FieldInfo.from_annotated_attribute rebuilds the field from
         # _attributes_set, so clearing the live attributes alone has no effect
         attributes_set = getattr(info, "_attributes_set", None)
         if isinstance(attributes_set, dict):
+            attributes_set = dict(attributes_set)
             attributes_set.pop("default_factory", None)
             attributes_set["default"] = None
+            info._attributes_set = attributes_set
+        return info
+
+    for field_name, annotation in namespace.get("__annotations__", {}).items():
+        info = namespace.get(field_name)
+        if _is_link_field_info(info):
+            namespace[field_name] = _neutralised(info)
+            continue
+        # A Field() living in Annotated metadata rather than as the assigned
+        # value was never seen here, so its default survived and was evaluated
+        # on every construction - the very failure this function exists to stop.
+        if get_origin(annotation) is not Annotated:
+            continue
+        args = get_args(annotation)
+        rebuilt = [_neutralised(m) if _is_link_field_info(m) else m for m in args[1:]]
+        if rebuilt != list(args[1:]):
+            namespace["__annotations__"][field_name] = Annotated[(args[0], *rebuilt)]
+            if field_name not in namespace:
+                # Annotated-only declarations are required at the pydantic
+                # level; the value is routed to the descriptor, so give it the
+                # same absent default the assigned form gets.
+                namespace[field_name] = None
 
 
 class OoldExtraModel(BaseModel):
@@ -1045,6 +1076,13 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         """
         if other.__class__ is not self.__class__:
             return NotImplemented
+        # Compare the same state pydantic does - extras and private attributes
+        # included. Looking at __dict__ alone made two models with different
+        # extra="allow" fields compare equal.
+        if self.__pydantic_extra__ != other.__pydantic_extra__:
+            return False
+        if self.__pydantic_private__ != other.__pydantic_private__:
+            return False
         links = type(self).__link_fields__
         if links:
             mine = {k: v for k, v in self.__dict__.items() if k not in links}
@@ -1054,8 +1092,13 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             return all(links[name].iris(self) == links[name].iris(other) for name in links)
         return self.__dict__ == other.__dict__
 
-    def __hash__(self) -> int:
-        return id(self)
+    __hash__ = None  # type: ignore[assignment]
+    """Unhashable, as pydantic models are.
+
+    An earlier ``__hash__ = id(self)`` made models hashable, so ``set(models)``
+    deduplicated by identity instead of raising - silently different from both
+    the legacy binding and plain pydantic.
+    """
 
     def __setattr__(self, name: str, value: Any, internal: bool = False) -> None:
         # internal=True means "write the value as given": BaseController passes

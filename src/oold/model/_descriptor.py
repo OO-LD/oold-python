@@ -39,6 +39,7 @@ behaviour off entirely and leaves plain pydantic.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import types
 from collections import defaultdict
@@ -432,40 +433,119 @@ class LinkResultList(list[T]):
 
     _owner: Any = None
     _field: str | None = None
+    _refs: list[Any] | None = None
 
-    def _bind(self, owner: Any, field: str) -> LinkResultList:
+    def _bind(self, owner: Any, field: str, refs: Any = None) -> LinkResultList:
         self._owner = owner
         self._field = field
+        # the references this list was built from, so an entry that could not be
+        # resolved can be written back as the reference it still is
+        self._refs = list(refs) if refs else []
         return self
 
     def _sync(self) -> None:
         if self._owner is None or self._field is None:
             return
-        # delegate to the descriptor so the reference coercion is the one that
-        # belongs to this pydantic version, not a hard-coded v2 helper
+        # A slot that did not resolve reads as None, but dropping it would
+        # delete the reference from storage - the list would shrink and the IRI
+        # be lost. `_refs` is kept positionally aligned with this list by every
+        # mutator below, so the reference for a None slot is the one at the same
+        # index. Matching them up in order instead deleted the wrong element.
+        refs = self._refs or []
+        values = []
+        for index, value in enumerate(self):
+            if value is not None:
+                values.append(value)
+                continue
+            ref = refs[index] if index < len(refs) else None
+            if ref is not None:
+                values.append(ref)
         descr = type(self._owner).__link_fields__[self._field]
-        descr.set_value(self._owner, [v for v in self if v is not None])
+        descr.set_value(self._owner, values)
         # keep the cached read pointing at this very list
         self._owner.__dict__[self._field] = self
 
+    # Every mutating operation syncs, and applies the same structural change to
+    # _refs so the two stay aligned. Covering only append/remove/extend left
+    # `links[0] = x`, `pop()`, `insert()`, `clear()`, `del` and `+=` changing
+    # what you see while storage kept the old references.
+    def _refs_list(self) -> list:
+        if self._refs is None:
+            self._refs = []
+        return self._refs
+
     def append(self, item: Any) -> None:
         super().append(item)
+        self._refs_list().append(None)
         self._sync()
 
     def remove(self, item: Any) -> None:
+        index = self.index(item)
         super().remove(item)
+        refs = self._refs_list()
+        if index < len(refs):
+            refs.pop(index)
         self._sync()
 
     def extend(self, iterable: Any) -> None:
-        super().extend(iterable)
+        items = list(iterable)
+        super().extend(items)
+        self._refs_list().extend([None] * len(items))
         self._sync()
 
-    # The condition overload has to come first: a condition expression reads as
-    # bool to a type checker (see FieldProxy), and bool satisfies SupportsIndex,
-    # so an index overload placed above it would swallow every filter. That also
-    # makes this a deliberate widening of list.__getitem__, which answers T for
-    # a bool index - indexing a list by True is not a thing anyone writes, and
-    # accepting it is what makes list[Model.field == "x"] type-check.
+    def insert(self, index: SupportsIndex, item: Any) -> None:
+        super().insert(index, item)
+        self._refs_list().insert(index, None)
+        self._sync()
+
+    def pop(self, index: SupportsIndex = -1) -> Any:
+        item = super().pop(index)
+        refs = self._refs_list()
+        with contextlib.suppress(IndexError):
+            refs.pop(index)
+        self._sync()
+        return item
+
+    def clear(self) -> None:
+        super().clear()
+        self._refs_list().clear()
+        self._sync()
+
+    def sort(self, **kwargs: Any) -> None:
+        # order becomes unknowable for unresolved slots, so drop their refs
+        # rather than pair them with the wrong element
+        super().sort(**kwargs)
+        self._refs = [None] * len(self)
+        self._sync()
+
+    def reverse(self) -> None:
+        super().reverse()
+        self._refs_list().reverse()
+        self._sync()
+
+    def __setitem__(self, index: Any, value: Any) -> None:
+        super().__setitem__(index, value)
+        refs = self._refs_list()
+        if isinstance(index, slice):
+            refs[index] = [None] * len(self[index])
+        elif index < len(refs):
+            refs[index] = None
+        self._sync()
+
+    def __delitem__(self, index: Any) -> None:
+        super().__delitem__(index)
+        refs = self._refs_list()
+        with contextlib.suppress(IndexError):
+            del refs[index]
+        self._sync()
+
+    def __iadd__(self, other: Any) -> LinkResultList:
+        items = list(other)
+        super().__iadd__(items)
+        self._refs_list().extend([None] * len(items))
+        self._sync()
+        return self
+
     @overload
     def __getitem__(self, index: Condition | bool) -> LinkResultList[T]: ...
 
@@ -530,11 +610,21 @@ def _batch_resolve(refs: list[Ref | None], target: Any) -> list[Any]:
         # format (a JSON-LD store hands back expanded JSON-LD, which cannot be
         # fed to the model directly) and dispatches on the document's type IRI,
         # so a stored subclass resolves to the subclass.
+        #
+        # A union target (LinkList["Person | Org"]) is not a class, so it cannot
+        # be a model_cls. Hand over the root model instead and let the same type
+        # dispatch pick the arm - passing the union made ResolveParam validation
+        # fail, which used to drop into the fallback below and construct the raw
+        # document, i.e. every union link was broken on every JSON-LD backend.
+        model_cls = target if isinstance(target, type) else LinkedBaseModel
         try:
-            nodes = resolver.resolve(ResolveParam(iris=iris, model_cls=target)).nodes
-        except Exception:
-            # a backend that cannot answer for this model falls back to the
-            # raw documents, constructed against the declared target
+            nodes = resolver.resolve(ResolveParam(iris=iris, model_cls=model_cls)).nodes
+        except NotImplementedError:
+            # A backend that does not implement resolve() at all: fall back to
+            # the raw documents. Deliberately narrow - catching everything here
+            # turned a malformed document, or any error inside from_jsonld, into
+            # a second request whose result was then built against the declared
+            # target, losing the original error and silently mis-constructing.
             fetched = resolver.resolve_iris(iris)
             nodes = {
                 iri: (_construct(_resolve_cls(d, target), d) if d is not None else None) for iri, d in fetched.items()
@@ -663,7 +753,7 @@ class _AutoLink:
                 # the declaration promised every element resolves
                 missing = [r.iri for r, item in zip(stored, items, strict=False) if item is None]
                 raise LinkNotResolved(self._message(obj, missing))
-            result = LinkResultList(items)._bind(obj, self.name)
+            result = LinkResultList(items)._bind(obj, self.name, stored)
         elif stored is None:
             if not self.optional:
                 # Raised on access, not at construction. The annotation says what

@@ -36,15 +36,16 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_serializer
+from pydantic import BaseModel, Field, model_serializer
 
 from oold.model._descriptor import (
     _TYPE_REGISTRY,
     Link,
-    LinkedQueryMeta,
+    LinkedBaseModel,
     LinkList,
     OoldExtra,
     _AutoLink,
+    _extract_target,
     _LinkAnnotation,
 )
 
@@ -194,18 +195,22 @@ def _emit(stored: Any, boxed: bool) -> Any:
     return _emit_one(stored, boxed)
 
 
-class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
-    """Model base supporting the proposed link notations."""
+class OoldModel(LinkedBaseModel):
+    """Model base supporting the proposed link notations.
 
-    model_config = ConfigDict(ignored_types=(_AutoLink,))
+    Subclasses the binding rather than re-implementing it: it was a bare
+    ``BaseModel``, so it was not a ``GenericLinkedBaseModel`` and could not be
+    passed as a ``model_cls``. Resolution therefore always failed validation and
+    only worked through ``_batch_resolve``'s fallback - which is to say, through
+    the error path - and ``oold_query`` was a stub returning a tuple. It also
+    carried byte-identical copies of ``__eq__``, ``__hash__``, ``get_iri`` and
+    ``link_iris``.
 
-    _links: dict[str, Any] = PrivateAttr(default_factory=dict)
-    __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
+    What stays here is the part that genuinely differs: union arms, where a bare
+    string is a literal rather than a reference.
+    """
+
     __link_literals__: ClassVar[dict[str, list[Any]]] = {}
-
-    @classmethod
-    def oold_query(cls, item: Any) -> Any:
-        return ("query", cls.__name__, item)
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -225,7 +230,16 @@ class OoldModel(BaseModel, metaclass=LinkedQueryMeta):
                 continue
             if explicit_range and not isinstance(target, type):
                 target = explicit_range
-            descr = _AutoLink(name, target, many)
+            # carry the same promises the binding computes, so Link[T] is
+            # mandatory here too and x-oold-required-iri is enforced
+            _, _, optional = _extract_target(field.annotation)
+            descr = _AutoLink(
+                name,
+                target,
+                many=many,
+                optional=optional,
+                required_iri=bool(extra.get("x-oold-required-iri")),
+            )
             setattr(cls, name, descr)
             links[name] = descr
             if lits:

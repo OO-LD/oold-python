@@ -16,7 +16,7 @@ from pydantic import Field
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import Field as FieldV1
 
-from oold.model._descriptor import LinkedBaseModel
+from oold.model._descriptor import LinkedBaseModel, OoldField
 from oold.model.v1._descriptor import LinkedBaseModel as LinkedBaseModelV1
 
 
@@ -137,3 +137,40 @@ def test_unset_links_honour_the_exclude_flags():
     assert "links" not in m.model_dump(exclude_none=True)
     assert "links" not in m.model_dump(exclude={"links"})
     assert m.model_dump()["links"] is None  # still there when nothing is excluded
+
+
+def test_deepcopy_keeps_links_as_references():
+    """Ref.__getattr__ delegated dunders to resolve(), so copy.deepcopy asked
+    for __deepcopy__ and got the target back - replacing every Ref with a copy
+    of the object it pointed at."""
+    import copy
+
+    class M(LinkedBaseModel):
+        id: str
+        ref: Target | None = Field(None, json_schema_extra={"range": "Target"})
+
+    m = M(id="ex:m", ref="ex:1")
+    copied = copy.deepcopy(m)
+    assert copied.link_iris("ref") == "ex:1"
+    assert copied.to_json()["ref"] == "ex:1"
+
+
+def test_optional_wrapping_a_link_is_optional():
+    """Optional[Link[T]] and Link[T | None] mean the same thing; the union was
+    only honoured when it came *after* the Link."""
+    from typing import Optional
+
+    from oold.model import Link, LinkNotResolved
+
+    class M(LinkedBaseModel):
+        id: str
+        outer: Optional[Link[Target]] = OoldField()  # noqa: UP045 - the spelling under test
+        inner: Link["Target | None"] = OoldField()
+        mandatory: Link[Target] = OoldField()
+
+    M.model_rebuild()
+    m = M(id="ex:m")
+    assert m.outer is None
+    assert m.inner is None
+    with pytest.raises(LinkNotResolved):
+        _ = m.mandatory

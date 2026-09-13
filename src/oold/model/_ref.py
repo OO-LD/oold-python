@@ -170,6 +170,14 @@ class Ref(Generic[T]):
     def __getattr__(self, name: str) -> Any:
         # Only called for names not found normally (Ref uses __slots__), so it
         # never shadows iri/_obj/resolve. Transparent, explicit delegation.
+        if name.startswith("__") and name.endswith("__"):
+            # Never resolve for a dunder probe. copy.deepcopy asks for
+            # __deepcopy__, pickle for __reduce_ex__, and answering those by
+            # resolving hands back the *target*, so a deep copy replaces every
+            # Ref with a copy of the object it points at - after which the
+            # stored references are gone and link_iris/to_json raise. The same
+            # applies to any hasattr() probe, which would otherwise perform I/O.
+            raise AttributeError(name)
         obj = self.resolve()
         return getattr(obj, name)
 

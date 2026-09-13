@@ -149,7 +149,7 @@ class _AutoLinkV1:
         stored = obj._links.get(self.name)
         if self.many:
             result = (LinkResultList(_batch_resolve(stored, self.target)) if stored else LinkResultList())._bind(
-                obj, self.name
+                obj, self.name, stored
             )
         elif stored is None:
             result = None

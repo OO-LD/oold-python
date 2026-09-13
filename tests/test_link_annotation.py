@@ -195,3 +195,107 @@ def test_backend_errors_are_not_mistaken_for_absence(store):
     e = Employee(id="annot:e", employer="annot:acme")
     with pytest.raises(ConnectionError):
         _ = e.employer
+
+
+def test_union_target_resolves_on_a_jsonld_backend():
+    """The case the broad fallback hid.
+
+    A union target is not a class, so it cannot be a ``model_cls``. Passing it
+    made ``ResolveParam`` validation fail, which dropped into ``_batch_resolve``'s
+    ``except Exception`` and rebuilt the *raw* document - fine for a JSON store,
+    broken for every JSON-LD one, which is where this runs.
+    """
+    from pydantic import ConfigDict
+    from rdflib import Graph
+
+    from oold.backend.sparql import LocalSparqlBackend
+
+    UN = "https://union.example/"
+    context = {
+        "@context": {"id": "@id", "type": "@type", "name": UN + "name"},
+        "iri": UN + "Base",
+    }
+
+    class UBase(LinkedBaseModel):
+        model_config = ConfigDict(json_schema_extra=context)
+        id: str
+        name: str | None = None
+
+        def get_iri(self):
+            return self.id
+
+    class UPerson(UBase):
+        model_config = ConfigDict(json_schema_extra={**context, "iri": UN + "Person"})
+        type: str | None = UN + "Person"
+
+    class UOrg(UBase):
+        model_config = ConfigDict(json_schema_extra={**context, "iri": UN + "Org"})
+        type: str | None = UN + "Org"
+
+    class UHolder(UBase):
+        model_config = ConfigDict(json_schema_extra={**context, "iri": UN + "Holder"})
+        type: str | None = UN + "Holder"
+        mixed: LinkList["UPerson | UOrg | None"] = OoldField()
+
+    UHolder.model_rebuild()
+
+    saved = dict(interface._resolvers)
+    try:
+        store = LocalSparqlBackend(graph=Graph())
+        store.store_jsonld_dicts({
+            UN + "bob": UPerson(id=UN + "bob", name="Bob").to_jsonld(),
+            UN + "acme": UOrg(id=UN + "acme", name="ACME").to_jsonld(),
+        })
+        set_resolver(SetResolverParam(iri="https", resolver=store))
+        h = UHolder(id=UN + "h", mixed=[UN + "bob", UN + "acme"])
+        assert [type(v).__name__ for v in h.mixed] == ["UPerson", "UOrg"]
+        assert [v.name for v in h.mixed] == ["Bob", "ACME"]
+    finally:
+        interface._resolvers.clear()
+        interface._resolvers.update(saved)
+
+
+def test_a_malformed_document_reports_its_own_error(store):
+    """The fallback used to swallow it and mis-construct against the target."""
+
+    class Broken(type(store)):
+        def resolve_iris(self, iris):
+            return {i: {"id": i, "type": "annot:Person", "name": {"not": "a string"}} for i in iris}
+
+    set_resolver(SetResolverParam(iri="annot", resolver=Broken()))
+    p = Person(id="annot:a", knows=["annot:x"])
+    with pytest.raises(Exception) as excinfo:
+        _ = p.knows
+    # the model's own validation error, not a downstream TypeError from
+    # re-constructing an expanded document against the declared target
+    assert "name" in str(excinfo.value)
+
+
+def test_mutating_a_link_list_never_discards_an_unresolved_reference(store):
+    """_sync rebuilt storage from the resolved values, so a slot that could not
+    be resolved was deleted - the list shrank and the IRI was lost."""
+    p = Person(id="annot:a", knows=["annot:bob", "annot:nobody"])
+    assert p.knows[1] is None
+    p.knows.append(Person(id="annot:c"))
+    assert p.link_iris("knows") == ["annot:bob", "annot:nobody", "annot:c"]
+
+
+@pytest.mark.parametrize(
+    "mutate,expected",
+    [
+        (lambda lst: lst.__setitem__(0, Person(id="annot:z")), ["annot:z", "annot:bob"]),
+        (lambda lst: lst.pop(), ["annot:acme"]),
+        (lambda lst: lst.insert(0, Person(id="annot:z")), ["annot:z", "annot:acme", "annot:bob"]),
+        (lambda lst: lst.clear(), []),
+        (lambda lst: lst.reverse(), ["annot:bob", "annot:acme"]),
+        (lambda lst: lst.__delitem__(0), ["annot:bob"]),
+        (lambda lst: lst.__iadd__([Person(id="annot:z")]), ["annot:acme", "annot:bob", "annot:z"]),
+    ],
+)
+def test_every_list_mutation_reaches_storage(store, mutate, expected):
+    """Only append/remove/extend synced; the rest changed the visible list while
+    storage kept the old references."""
+    p = Person(id="annot:a", mixed=["annot:acme", "annot:bob"])
+    values = p.mixed
+    mutate(values)
+    assert p.link_iris("mixed") == expected

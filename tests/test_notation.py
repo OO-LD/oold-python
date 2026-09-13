@@ -124,10 +124,19 @@ def test_mutation(store):
     assert p.knows[0].name == "Bob"
 
 
-def test_query_dsl_still_available():
-    cond = Person.name == "John"
+def test_query_dsl_still_available(store):
+    """Runs the real query, not a stub.
+
+    ``OoldModel.oold_query`` used to return ``("query", cls.__name__, item)``
+    unconditionally, so asserting ``is not None`` here could never fail and no
+    backend was ever consulted.
+    """
+    cond = Person.name == "Bob"
     assert cond.field == "name"
-    assert Person[cond] is not None
+    found = Person[cond]
+    assert found is not None
+    assert [p.id for p in found] == ["ex:p2"]
+    assert Person[Person.name == "nobody-by-that-name"] is None
 
 
 def test_union_round_trip_preserves_every_arm(store):

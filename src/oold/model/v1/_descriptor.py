@@ -30,9 +30,8 @@ from oold.model._descriptor import (
     FieldProxy,
     LinkResultList,
     _batch_resolve,
-    _resolve_cls,
+    _to_ref,
 )
-from oold.model._ref import Ref, _construct
 from oold.static import GenericLinkedBaseModel
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
@@ -109,23 +108,6 @@ def _neutralise_field(field: Any) -> None:
         info.default_factory = None
 
 
-def _to_ref_v1(value: Any, target: Any) -> Ref | None:
-    if value is None:
-        return None
-    if isinstance(value, Ref):
-        if value._target is None:
-            value._target = target
-        return value
-    if isinstance(value, str):
-        return Ref(iri=value, target=target)
-    if isinstance(value, dict):
-        cls = _resolve_cls(value, target)
-        if cls is None:
-            raise ValueError(f"Cannot construct link from {value!r}: unknown target")
-        return Ref(obj=_construct(cls, value), target=target)
-    return Ref(obj=value, target=target)
-
-
 class _AutoLinkV1:
     """Non-data descriptor backing a v1 link field."""
 
@@ -163,9 +145,9 @@ class _AutoLinkV1:
     def set_value(self, obj: Any, value: Any) -> None:
         obj.__dict__.pop(self.name, None)  # invalidate the cached read
         if self.many:
-            obj._links[self.name] = [] if value is None else [_to_ref_v1(v, self.target) for v in value]
+            obj._links[self.name] = [] if value is None else [_to_ref(v, self.target) for v in value]
         else:
-            obj._links[self.name] = _to_ref_v1(value, self.target)
+            obj._links[self.name] = _to_ref(value, self.target)
 
     def iris(self, obj: Any) -> Any:
         stored = obj._links.get(self.name)
@@ -476,6 +458,3 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
 
     def cast_none_to_default(self, cls: type, **kwargs: Any) -> Any:
         return self.cast(cls, none_to_default=True, **kwargs)
-
-
-LinkedQueryMetaV1 = LinkedBaseModelMetaClass

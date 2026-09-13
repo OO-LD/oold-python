@@ -12,9 +12,7 @@ from typing import (
     Any,
     Generic,
     TypeVar,
-    Union,
     get_args,
-    get_origin,
 )
 
 from pydantic import BaseModel, GetCoreSchemaHandler
@@ -67,15 +65,6 @@ def _construct(target: type | None, d: Any) -> Any:
     if hasattr(target, "from_dict"):
         return target.from_dict(d)
     return target(**d)
-
-
-def _strip_optional(tp: Any) -> Any:
-    """Return the non-None arm of Optional[X] / Union[X, None], else tp."""
-    if get_origin(tp) is Union:
-        args = [a for a in get_args(tp) if a is not type(None)]
-        if len(args) == 1:
-            return args[0]
-    return tp
 
 
 def _ref_core_schema(target: type | None) -> core_schema.CoreSchema:

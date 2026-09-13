@@ -36,13 +36,13 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, model_serializer
 
 from oold.model._descriptor import (
     Link,
     LinkedBaseModel,
     LinkList,
-    OoldExtra,
+    OoldField,
     _AutoLink,
     _extract_target,
     _LinkAnnotation,
@@ -54,7 +54,6 @@ from oold.model._descriptor import (
 __all__ = [
     "Link",
     "LinkList",
-    "LinkMarker",
     "OoldField",
     "OoldModel",
 ]
@@ -62,44 +61,6 @@ __all__ = [
 T = TypeVar("T")
 
 _LITERAL_TYPES = (str, int, float, bool, bytes)
-
-
-class LinkMarker:
-    """``Annotated`` metadata marking a property as an IRI-valued link."""
-
-    __slots__ = ("required_iri",)
-
-    def __init__(self, required_iri: bool = False):
-        self.required_iri = required_iri
-
-    def __repr__(self) -> str:
-        return f"LinkMarker(required_iri={self.required_iri})"
-
-
-def OoldField(
-    *,
-    link: bool | None = None,
-    range: str | None = None,
-    required_iri: bool | None = None,
-    **kwargs: Any,
-) -> Any:
-    """``Field`` wrapper marking a property as a link.
-
-    ``range`` is optional: when omitted the target is taken from the
-    annotation. ``OoldField()`` therefore suffices in the common case.
-    """
-    extra: dict[str, Any] = {}
-    if range is not None:
-        extra = dict(OoldExtra(range=range, required_iri=required_iri))
-    else:
-        extra["x-oold-link"] = True if link is None else bool(link)
-        if required_iri is not None:
-            extra["x-oold-required-iri"] = required_iri
-    # Link values are routed out of the payload before pydantic validates, so a
-    # link field must not be required at the pydantic level. This also makes the
-    # bare OoldField() form work with no arguments at all.
-    kwargs.setdefault("default", None)
-    return Field(**kwargs, json_schema_extra=extra)
 
 
 _UNION_ORIGINS = {Union}
@@ -123,10 +84,7 @@ def _unwrap(annotation: Any) -> tuple[Any, bool, bool, list[Any]]:
         while True:
             origin = get_origin(tp)
             if origin is Annotated:
-                args = get_args(tp)
-                if any(isinstance(m, LinkMarker) for m in args[1:]):
-                    marked = True
-                tp = args[0]
+                tp = get_args(tp)[0]
                 continue
             # Link[X] / LinkList[X]: the annotation itself declares the link,
             # and LinkList carries the to-many-ness instead of a list wrapper
@@ -223,9 +181,6 @@ class OoldModel(LinkedBaseModel):
             explicit_range = extra.get("x-oold-range") or extra.get("range")
             flagged = bool(extra.get("x-oold-link"))
             target, many, marked, lits = _unwrap(field.annotation)
-            # a top-level Annotated marker is moved into field.metadata by pydantic
-            if any(isinstance(m, LinkMarker) for m in getattr(field, "metadata", [])):
-                marked = True
             if not (explicit_range or flagged or marked):
                 continue
             if explicit_range and not isinstance(target, type):
@@ -285,29 +240,6 @@ class OoldModel(LinkedBaseModel):
             return [one(v) for v in value]
         return one(value)
 
-    def __eq__(self, other: Any) -> bool:
-        """Compare by data, not by what happens to be cached.
-
-        Resolving a link stores the resolved object in ``__dict__`` (that is
-        what makes warm reads native-speed), and pydantic's ``__eq__`` compares
-        ``__dict__`` - so reading a link would otherwise change the result of a
-        comparison. Links are compared by their stored references instead, and
-        the remaining fields the normal way.
-        """
-        if other.__class__ is not self.__class__:
-            return NotImplemented
-        links = type(self).__link_fields__
-        if links:
-            mine = {k: v for k, v in self.__dict__.items() if k not in links}
-            theirs = {k: v for k, v in other.__dict__.items() if k not in links}
-            if mine != theirs:
-                return False
-            return all(links[name].iris(self) == links[name].iris(other) for name in links)
-        return self.__dict__ == other.__dict__
-
-    def __hash__(self) -> int:
-        return id(self)
-
     def __setattr__(self, name: str, value: Any) -> None:
         descr = type(self).__link_fields__.get(name)
         if descr is not None:
@@ -319,12 +251,6 @@ class OoldModel(LinkedBaseModel):
             descr.set_value(self, self._coerce(value))
         else:
             super().__setattr__(name, value)
-
-    def get_iri(self) -> str | None:
-        return getattr(self, "id", None)
-
-    def link_iris(self, name: str) -> Any:
-        return type(self).__link_fields__[name].iris(self)
 
     @model_serializer(mode="wrap")
     def _serialize_links(self, handler: Any) -> dict[str, Any]:

@@ -13,7 +13,6 @@ runtime half. Two things to hold down:
 import pytest
 from pydantic import Field
 
-from oold.backend import interface
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.model._descriptor import (
@@ -61,18 +60,13 @@ Plain.model_rebuild()
 
 @pytest.fixture
 def store():
-    # the resolver registry is process-wide, and an unregistered prefix falls
-    # back to whatever else is in it - so leaking one breaks unrelated modules
-    saved = dict(interface._resolvers)
     store = SimpleDictDocumentStore()
     store.store_json_dicts({
         "annot:bob": {"id": "annot:bob", "name": "Bob", "type": "annot:Person"},
         "annot:acme": {"id": "annot:acme", "name": "ACME", "type": "annot:Organization"},
     })
     set_resolver(SetResolverParam(iri="annot", resolver=store))
-    yield store
-    interface._resolvers.clear()
-    interface._resolvers.update(saved)
+    return store
 
 
 def test_annotation_alone_declares_the_link():
@@ -239,20 +233,15 @@ def test_union_target_resolves_on_a_jsonld_backend():
 
     UHolder.model_rebuild()
 
-    saved = dict(interface._resolvers)
-    try:
-        store = LocalSparqlBackend(graph=Graph())
-        store.store_jsonld_dicts({
-            UN + "bob": UPerson(id=UN + "bob", name="Bob").to_jsonld(),
-            UN + "acme": UOrg(id=UN + "acme", name="ACME").to_jsonld(),
-        })
-        set_resolver(SetResolverParam(iri="https", resolver=store))
-        h = UHolder(id=UN + "h", mixed=[UN + "bob", UN + "acme"])
-        assert [type(v).__name__ for v in h.mixed] == ["UPerson", "UOrg"]
-        assert [v.name for v in h.mixed] == ["Bob", "ACME"]
-    finally:
-        interface._resolvers.clear()
-        interface._resolvers.update(saved)
+    store = LocalSparqlBackend(graph=Graph())
+    store.store_jsonld_dicts({
+        UN + "bob": UPerson(id=UN + "bob", name="Bob").to_jsonld(),
+        UN + "acme": UOrg(id=UN + "acme", name="ACME").to_jsonld(),
+    })
+    set_resolver(SetResolverParam(iri="https", resolver=store))
+    h = UHolder(id=UN + "h", mixed=[UN + "bob", UN + "acme"])
+    assert [type(v).__name__ for v in h.mixed] == ["UPerson", "UOrg"]
+    assert [v.name for v in h.mixed] == ["Bob", "ACME"]
 
 
 def test_a_malformed_document_reports_its_own_error(store):

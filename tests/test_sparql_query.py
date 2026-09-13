@@ -14,7 +14,6 @@ import pytest
 from pydantic import ConfigDict
 from rdflib import Graph
 
-from oold.backend import interface
 from oold.backend.interface import (
     ComparisonOperator,
     Condition,
@@ -64,13 +63,10 @@ PEOPLE = [
 
 @pytest.fixture
 def backend():
-    saved = dict(interface._resolvers)
     store = LocalSparqlBackend(graph=Graph())
     store.store_jsonld_dicts({p.get_iri(): p.to_jsonld() for p in PEOPLE})
     set_resolver(SetResolverParam(iri="https", resolver=store))
-    yield store
-    interface._resolvers.clear()
-    interface._resolvers.update(saved)
+    return store
 
 
 def _in_memory(condition) -> set[str]:

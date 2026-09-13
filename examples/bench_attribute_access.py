@@ -106,17 +106,6 @@ def build_shipped_v1():
     return M(id="x", literal="v")
 
 
-def build_descriptor():
-    from oold.experimental.descriptor_binding import LinkedModel, LinkList
-
-    class M(LinkedModel):
-        id: str
-        literal: str | None = None
-        links = LinkList["M"]("M")
-
-    return M(id="x", literal="v")
-
-
 def build_auto_descriptor():
     """Auto-installed descriptors: unchanged declaration syntax."""
 
@@ -140,7 +129,6 @@ VARIANTS = {
     "gated_real": ("gated __getattribute__ (realistic)", build_gated_real),
     "shipped_v1": ("shipped LinkedBaseModel v1", build_shipped_v1),
     "shipped_v2": ("shipped LinkedBaseModel v2", build_shipped_v2),
-    "descriptor": ("descriptor binding (v2)", build_descriptor),
     "auto_descriptor": ("auto-descriptor, syntax unchanged", build_auto_descriptor),
 }
 

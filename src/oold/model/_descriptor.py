@@ -1006,7 +1006,6 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     # references assigned through __iris__ for names that are not link fields;
     # the shipped side-dict kept them, so reading them back has to work
     _extra_iris: dict[str, Any] = PrivateAttr(default_factory=dict)
-    _link_cache: dict[str, Any] = PrivateAttr(default_factory=dict)
     __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
     __link_aliases__: ClassVar[dict[str, str]] = {}
     __required_links__: ClassVar[tuple[str, ...]] = ()

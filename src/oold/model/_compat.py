@@ -61,6 +61,25 @@ def _raw_of(stored: Any) -> Any:
     return one(stored)
 
 
+def _is_model(value: Any) -> bool:
+    return hasattr(value, "_dump") or hasattr(value, "model_dump") or hasattr(value, "dict")
+
+
+def _plain_dump(value: Any) -> Any:
+    """Serialise a nested model, whichever kind it is.
+
+    Testing for the ``_dump`` hook alone misses **plain** pydantic models - the
+    hook only exists on LinkedApiMixin - so a nested BaseModel came back as the
+    object rather than a dict, and cast() then handed it to the target
+    constructor.
+    """
+    for attr in ("_dump", "model_dump", "dict"):
+        fn = getattr(value, attr, None)
+        if callable(fn):
+            return fn()
+    return value
+
+
 def _drop_iri(stored: Any) -> None:
     """Forget the IRI of a stored reference, keeping any object it holds."""
     refs = stored if isinstance(stored, list) else [stored]
@@ -70,7 +89,22 @@ def _drop_iri(stored: Any) -> None:
 
 
 class LinkedApiMixin(GenericLinkedBaseModel):
-    """Re-implements the shipped ``LinkedBaseModel`` API over ``_links``."""
+    """Re-implements the shipped ``LinkedBaseModel`` API over ``_links``.
+
+    Shared by both pydantic versions. Everything version-specific goes through
+    the three hooks below, so the members that differ only in ``model_fields``
+    vs ``__fields__`` - which was nine of them, at 0.97 to 1.00 similarity -
+    live here once rather than being forked per version.
+    """
+
+    @classmethod
+    def _fields(cls) -> dict:
+        """The declared fields: ``model_fields`` in v2, ``__fields__`` in v1."""
+        return cls.model_fields
+
+    def _dump(self, **kwargs: Any) -> dict:
+        """A plain dict of the model: ``model_dump`` in v2, ``dict`` in v1."""
+        return self.model_dump(**kwargs)
 
     # -- reference inspection, no resolution --------------------------------
 
@@ -133,7 +167,7 @@ class LinkedApiMixin(GenericLinkedBaseModel):
             if key in schema:
                 out.append(schema[key])
                 break
-        type_field = cls.model_fields.get(cls.get_type_field())
+        type_field = cls._fields().get(cls.get_type_field())
         if type_field is not None:
             # A list default is a type *array*: the class answers to every IRI
             # in it, so flatten. Appending the list as one element left a
@@ -147,6 +181,14 @@ class LinkedApiMixin(GenericLinkedBaseModel):
         if not out:
             return None
         return out[0] if len(out) == 1 else out
+
+    def get_iri(self) -> str | None:
+        """The instance IRI. Overridden by models that derive it differently."""
+        return getattr(self, "id", None)
+
+    def link_iris(self, name: str) -> Any:
+        """The stored reference(s) for one link, without resolving."""
+        return type(self).__link_fields__[name].iris(self)
 
     def get_iri_ref(self, field_name: str) -> Any:
         """IRI reference(s) for a field, or ``None``, without resolving."""
@@ -182,7 +224,7 @@ class LinkedApiMixin(GenericLinkedBaseModel):
         """
         links = type(self).__link_fields__
         d: dict[str, Any] = {}
-        for name in type(self).model_fields:
+        for name in type(self)._fields():
             if name in links:
                 iri = self.get_iri_ref(name)
                 if iri is None:
@@ -194,14 +236,11 @@ class LinkedApiMixin(GenericLinkedBaseModel):
                 continue
             value = self.__dict__.get(name)
             if isinstance(value, list):
-                d[name] = [
-                    v._raw_dict() if hasattr(v, "_raw_dict") else (v.model_dump() if hasattr(v, "model_dump") else v)
-                    for v in value
-                ]
+                d[name] = [v._raw_dict() if hasattr(v, "_raw_dict") else _plain_dump(v) for v in value]
             elif hasattr(value, "_raw_dict"):
                 d[name] = value._raw_dict()
-            elif hasattr(value, "model_dump"):
-                d[name] = value.model_dump()
+            elif _is_model(value):
+                d[name] = _plain_dump(value)
             else:
                 d[name] = value
         return d
@@ -262,7 +301,7 @@ class LinkedApiMixin(GenericLinkedBaseModel):
                 if v is not None and not (isinstance(v, list) and not [x for x in v if x is not None])
             }
         if remove_extra:
-            target = set(getattr(cls, "model_fields", {}))
+            target = set(cls._fields() if hasattr(cls, "_fields") else getattr(cls, "model_fields", {}))
             if target:
                 data = {k: v for k, v in data.items() if k in target}
         data.pop("type", None)

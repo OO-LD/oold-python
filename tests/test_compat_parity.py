@@ -279,3 +279,23 @@ def test_iris_assignment_keeps_inline_objects_and_foreign_keys():
         foreign.append((b.title, normalised(b.get_iri_ref("title"), tag)))
     assert inline[0] == inline[1] == "inline"
     assert foreign[0] == foreign[1], foreign
+
+
+def test_nested_plain_models_still_serialise():
+    """_raw_dict tested for a hook that only oold models have, so a nested
+    plain BaseModel came back as the object - and cast() is built on this."""
+    from pydantic import BaseModel
+
+    class Nested(BaseModel):
+        n: int
+
+    seen = []
+    for base, tag in ((LegacyLinkedBaseModel, "SN"), (LinkedBaseModel, "AN")):
+
+        class M(base):
+            id: str
+            type: str | None = f"ex:{tag}"
+            nested: Nested | None = None
+
+        seen.append(M(id=f"ex:{tag}", nested={"n": 5})._raw_dict()["nested"])
+    assert seen[0] == seen[1] == {"n": 5}

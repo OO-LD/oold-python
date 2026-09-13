@@ -1173,12 +1173,6 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         else:
             super().__setattr__(name, value)
 
-    def get_iri(self) -> str | None:
-        return getattr(self, "id", None)
-
-    def link_iris(self, name: str) -> Any:
-        return type(self).__link_fields__[name].iris(self)
-
     @model_serializer(mode="wrap")
     def _serialize_links(self, handler: Any, info: SerializationInfo) -> dict[str, Any]:
         d = handler(self)

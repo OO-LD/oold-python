@@ -32,7 +32,6 @@ from oold.model._descriptor import (
     _batch_resolve,
     _to_ref,
 )
-from oold.static import GenericLinkedBaseModel
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
 
@@ -225,7 +224,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         return cls.oold_query(item)
 
 
-class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass):
+class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaClass):
     """pydantic v1 base with the descriptor binding and the downstream API."""
 
     _links: dict = PrivateAttr(default_factory=dict)
@@ -311,6 +310,13 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
         return out
 
     @classmethod
+    def _fields(cls) -> dict:
+        return cls.__fields__
+
+    def _dump(self, **kwargs: Any) -> dict:
+        return self.dict(**kwargs)
+
+    @classmethod
     def get_type_field(cls) -> str:
         return "type"
 
@@ -334,49 +340,6 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
         if not out:
             return None
         return out[0] if len(out) == 1 else out
-
-    def get_iri_ref(self, field_name: str) -> Any:
-        iris = self.__iris__.get(field_name)
-        if iris is None:
-            return None
-        if isinstance(iris, list):
-            return iris if iris else None
-        return iris
-
-    def get_raw(self, field_name: str) -> Any:
-        descr = type(self).__link_fields__.get(field_name)
-        if descr is None:
-            return self.__dict__.get(field_name)
-        stored = self._links.get(field_name)
-        if isinstance(stored, list):
-            return [r._obj for r in stored if r is not None] or None
-        return stored._obj if stored is not None else None
-
-    def get_iri(self) -> str | None:
-        return getattr(self, "id", None)
-
-    def link_iris(self, name: str) -> Any:
-        return type(self).__link_fields__[name].iris(self)
-
-    def _raw_dict(self) -> dict[str, Any]:
-        links = type(self).__link_fields__
-        d: dict[str, Any] = {}
-        for name in type(self).__fields__:
-            if name in links:
-                d[name] = self.get_iri_ref(name)
-                continue
-            value = self.__dict__.get(name)
-            if isinstance(value, list):
-                d[name] = [
-                    v._raw_dict() if hasattr(v, "_raw_dict") else (v.dict() if hasattr(v, "dict") else v) for v in value
-                ]
-            elif hasattr(value, "_raw_dict"):
-                d[name] = value._raw_dict()
-            elif hasattr(value, "dict"):
-                d[name] = value.dict()
-            else:
-                d[name] = value
-        return d
 
     def dict(self, **kwargs: Any) -> dict[str, Any]:
         """v1 serialisation; link fields collapse to their IRIs."""
@@ -427,34 +390,3 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
         from oold.static import import_jsonld
 
         return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _TYPE_REGISTRY)
-
-    def store_jsonld(self) -> None:
-        from oold.backend.interface import GetBackendParam, StoreParam, get_backend
-
-        backend = get_backend(GetBackendParam(iri=self.get_iri())).backend
-        backend.store(StoreParam(nodes={self.get_iri(): self}))
-
-    def cast(
-        self,
-        cls: type,
-        none_to_default: bool = False,
-        remove_extra: bool = False,
-        silent: bool = True,
-        **kwargs: Any,
-    ) -> Any:
-        data = {**self._raw_dict(), **kwargs}
-        if none_to_default:
-            data = {
-                k: v
-                for k, v in data.items()
-                if v is not None and not (isinstance(v, list) and not [x for x in v if x is not None])
-            }
-        if remove_extra:
-            target = set(getattr(cls, "__fields__", {}))
-            if target:
-                data = {k: v for k, v in data.items() if k in target}
-        data.pop("type", None)
-        return cls(**data)
-
-    def cast_none_to_default(self, cls: type, **kwargs: Any) -> Any:
-        return self.cast(cls, none_to_default=True, **kwargs)

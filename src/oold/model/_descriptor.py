@@ -231,8 +231,10 @@ def OoldField(
             extra["x-oold-required-iri"] = required_iri
     # Link values are routed out of the payload before pydantic validates, so a
     # link field must not be required at the pydantic level. This also makes the
-    # bare OoldField() form work with no arguments at all.
-    kwargs.setdefault("default", None)
+    # bare OoldField() form work with no arguments at all - but only when the
+    # caller has not supplied a factory, since pydantic rejects both at once.
+    if "default_factory" not in kwargs:
+        kwargs.setdefault("default", None)
     return Field(**kwargs, json_schema_extra=extra)
 
 
@@ -944,6 +946,43 @@ def _excluded(info: Any, name: str) -> bool:
     return bool(exclude) and name in exclude
 
 
+def _alias_strings(alias: Any) -> list[str]:
+    """Every name an alias can be given under.
+
+    ``validation_alias`` is not always a string: ``AliasChoices`` holds several,
+    and each may itself be an ``AliasPath``. Accepting only ``str`` left those
+    payload keys for pydantic to validate against the *target* model.
+    """
+    if isinstance(alias, str):
+        return [alias]
+    choices = getattr(alias, "choices", None)
+    if choices is not None:
+        out = []
+        for choice in choices:
+            out.extend(_alias_strings(choice))
+        return out
+    path = getattr(alias, "path", None)
+    if path and isinstance(path[0], str):
+        return [path[0]]
+    return []
+
+
+def _link_aliases(cls: type) -> dict[str, str]:
+    """alias -> field name, for link fields that declare one.
+
+    Computed once per class in ``__pydantic_init_subclass__`` - it was rebuilt
+    on every construction, which cost about a quarter of the time to build an
+    object.
+    """
+    out: dict[str, str] = {}
+    for name in getattr(cls, "__link_fields__", {}):
+        field = cls.model_fields.get(name)
+        for alias in (getattr(field, "validation_alias", None), getattr(field, "alias", None)):
+            for text in _alias_strings(alias):
+                out[text] = name
+    return out
+
+
 def _emit_inline(stored: Any) -> Any:
     """Serialise references that have no IRI, so they are not silently lost."""
 
@@ -969,6 +1008,8 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     _extra_iris: dict[str, Any] = PrivateAttr(default_factory=dict)
     _link_cache: dict[str, Any] = PrivateAttr(default_factory=dict)
     __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
+    __link_aliases__: ClassVar[dict[str, str]] = {}
+    __required_links__: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def oold_query(cls, item: Any) -> Any:
@@ -1033,6 +1074,9 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             setattr(cls, name, descr)
             links[name] = descr
         cls.__link_fields__ = links
+        # per-class constants, so construction does not recompute them
+        cls.__link_aliases__ = _link_aliases(cls)
+        cls.__required_links__ = tuple(n for n, d in links.items() if d.required_iri)
         _register_class(cls)
 
     def __init__(self, *args: Any, **data: Any) -> None:
@@ -1046,7 +1090,15 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         elif args:
             raise TypeError(f"{type(self).__name__}() takes no positional arguments other than a source model")
         link_fields = type(self).__link_fields__
-        link_data = {k: data.pop(k) for k in list(data) if k in link_fields}
+        # Route link values out of the payload before pydantic validates - by
+        # field name and by alias, since a payload built with by_alias=True uses
+        # the alias and would otherwise be validated against the target model.
+        aliases = type(self).__link_aliases__
+        link_data = {}
+        for key in list(data):
+            name = key if key in link_fields else aliases.get(key)
+            if name is not None:
+                link_data[name] = data.pop(key)
         super().__init__(**data)
         # Pydantic writes each field's default into __dict__, and an entry there
         # shadows a non-data descriptor - so an unset link would keep returning
@@ -1058,7 +1110,7 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             self.__dict__.pop(_name, None)
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
-        missing = [name for name, d in link_fields.items() if d.required_iri and not self._links.get(name)]
+        missing = [name for name in type(self).__required_links__ if not self._links.get(name)]
         if missing:
             # x-oold-required-iri, enforced as the legacy binding did. It raised
             # on the mere presence of the keyword; this raises on a true value,
@@ -1131,10 +1183,23 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     @model_serializer(mode="wrap")
     def _serialize_links(self, handler: Any, info: SerializationInfo) -> dict[str, Any]:
         d = handler(self)
+        fields = type(self).model_fields
+        by_alias = bool(getattr(info, "by_alias", False))
         for name, descr in type(self).__link_fields__.items():
+            # honour by_alias: every other key does, so writing the link under
+            # its field name produced a payload mixing both spellings. The key
+            # is never in `d` to compare against - link values are routed out of
+            # __dict__ - so the decision comes from the serialisation context.
+            name_out = name
+            if by_alias:
+                field = fields.get(name)
+                alias = getattr(field, "serialization_alias", None) or getattr(field, "alias", None)
+                if isinstance(alias, str):
+                    name_out = alias
             iris = descr.iris(self)
             if iris:
-                d[name] = iris
+                d.pop(name, None)
+                d[name_out] = iris
                 continue
             stored = self._links.get(name)
             if stored is None and name not in self._links:
@@ -1144,14 +1209,16 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
                 # handler() has applied the exclusions, which would leak an
                 # explicit null past exclude_none, exclude_unset,
                 # exclude_defaults and exclude={...} into every stored document.
+                d.pop(name, None)
                 if not _excluded(info, name):
-                    d[name] = None
+                    d[name_out] = None
                 continue
             # Set, but nothing to reference: either an explicit empty list - a
             # different statement from "unset" and one that must round-trip - or
             # an inline object with no IRI, which has to serialise nested rather
             # than vanish, since cast() is built on this.
-            d[name] = _emit_inline(stored)
+            d.pop(name, None)
+            d[name_out] = _emit_inline(stored)
         return d
 
 

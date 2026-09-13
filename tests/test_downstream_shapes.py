@@ -177,6 +177,7 @@ def test_optional_wrapping_a_link_is_optional():
     with pytest.raises(LinkNotResolved):
         _ = m.mandatory
 
+
 def test_a_shared_field_info_is_not_mutated():
     """Field() objects get reused across models; neutralising in place stripped
     the default process-wide, including from plain BaseModels."""
@@ -258,3 +259,26 @@ def test_v1_dict_does_not_depend_on_whether_a_link_was_read():
     with contextlib.suppress(Exception):
         _ = m.links  # caches whatever resolution produced
     assert m.dict() == before, "reading a link changed the serialised output"
+
+
+def test_link_fields_honour_aliases_in_both_directions():
+    """Every other key honours by_alias, so a link under its field name made a
+    payload that mixed both spellings - and a by_alias payload could not be read
+    back, because the alias was left for pydantic to validate against the target."""
+
+    class M(LinkedBaseModel):
+        id: str
+        one: Target | None = Field(None, alias="oneAlias", json_schema_extra={"range": "Target"})
+
+    m = M(**{"id": "ex:m", "oneAlias": "ex:1"})
+    assert m.link_iris("one") == "ex:1"
+    assert m.model_dump(by_alias=True, exclude_none=True)["oneAlias"] == "ex:1"
+    assert m.model_dump(exclude_none=True)["one"] == "ex:1"
+
+
+def test_oold_field_accepts_a_default_factory():
+    class M(LinkedBaseModel):
+        id: str
+        links: list[Target] = OoldField(default_factory=list, range="Target")
+
+    assert M(id="ex:m").link_iris("links") == []

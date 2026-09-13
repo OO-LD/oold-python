@@ -39,7 +39,6 @@ from typing import (
 from pydantic import BaseModel, Field, model_serializer
 
 from oold.model._descriptor import (
-    _TYPE_REGISTRY,
     Link,
     LinkedBaseModel,
     LinkList,
@@ -47,6 +46,7 @@ from oold.model._descriptor import (
     _AutoLink,
     _extract_target,
     _LinkAnnotation,
+    _register_class,
 )
 
 # Link and LinkList are re-exported: the notation module is the documented entry
@@ -246,9 +246,10 @@ class OoldModel(LinkedBaseModel):
                 literals[name] = lits
         cls.__link_fields__ = links
         cls.__link_literals__ = literals
-        type_field = cls.model_fields.get("type")
-        if type_field is not None and isinstance(type_field.default, str):
-            _TYPE_REGISTRY[type_field.default] = cls
+        # Register the way the binding does - including the inherited-IRI
+        # guard - rather than writing the type default straight in, which let a
+        # subclass that only narrows a field replace its parent in the registry.
+        _register_class(cls)
 
     def __init__(self, **data: Any) -> None:
         lf = type(self).__link_fields__

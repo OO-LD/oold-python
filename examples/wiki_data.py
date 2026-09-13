@@ -17,13 +17,6 @@ Two details are specific to Wikidata:
   aliases ``type`` to ``@type`` rather than mapping it to P31.
 """
 
-import os
-
-# Link[T] is part of the descriptor binding, which is opt-in until it reproduces
-# the legacy behaviour a review found missing (see graph-object-binding.md).
-# Set before importing oold.model: the binding is selected at import time.
-os.environ.setdefault("OOLD_DESCRIPTOR_BINDING", "1")
-
 from pydantic import ConfigDict
 
 from oold.backend.interface import SetResolverParam, set_resolver

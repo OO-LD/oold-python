@@ -875,7 +875,7 @@ from oold.model import BaseController  # noqa: E402, F401
 _LinkedBaseModelLegacy = LinkedBaseModel
 """The per-attribute-interception binding, before the swap below."""
 
-if os.environ.get("OOLD_DESCRIPTOR_BINDING") == "1":  # pragma: no cover
+if os.environ.get("OOLD_DESCRIPTOR_BINDING", "1") != "0":
     from oold.model.v1 import _descriptor as _descriptor_module
 
     _descriptor_module.use_type_registry(_types, _controller_types)

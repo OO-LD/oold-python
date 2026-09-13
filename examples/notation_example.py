@@ -21,13 +21,6 @@ top of it. Which notation supports what is tabulated in
 ``docs/design/graph-object-binding.md`` section 3.3.
 """
 
-import os
-
-# Link[T] / LinkList[T] are part of the descriptor binding, which is opt-in
-# until it reproduces the legacy behaviour a review found missing. Set before
-# importing oold.model: the binding is selected at import time.
-os.environ.setdefault("OOLD_DESCRIPTOR_BINDING", "1")
-
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
 from oold.model import Link, LinkList, OoldField

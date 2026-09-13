@@ -13,19 +13,21 @@ the package proper:
 | `src/oold/model/_notation.py` | the reviewed notations on top of it: `OoldField()`, union arms |
 | `src/oold/experimental/codegen_spike.py` | IR-based code generation without text post-processing (still a spike) |
 
-It is **opt-in**, behind `OOLD_DESCRIPTOR_BINDING=1`;
-`oold.model.LINK_NOTATIONS_ACTIVE` reports which binding is in force.
+It **is** `oold.model.LinkedBaseModel`; the legacy per-attribute-interception
+binding is reachable with `OOLD_DESCRIPTOR_BINDING=0`, and
+`oold.model.LINK_NOTATIONS_ACTIVE` reports which is in force.
 
-It was briefly the default. A review then found behaviour it does not yet
-reproduce - `BaseController.to_json()` stripping every data field, `FieldProxy`
-losing truthiness and default forwarding, `x-oold-required-iri` enforced
-nowhere, `__iris__` assignment merging instead of replacing, `get_raw` answering
-`[None]`, and an inline linked object without an IRI being dropped. The parity
-claim that justified the swap therefore did not hold, and the default was
-withdrawn until it does. The three downstream suites that passed did not reach
-any of these paths, so passing them is necessary and not sufficient;
-`tests/test_compat_parity*.py` needs cases for the controller path, `__iris__`
-replacement semantics and `get_raw` before a second flip means anything.
+It took two attempts. The first flip rested on three downstream suites passing,
+which was necessary and not sufficient: a review then found seven behaviours the
+binding did not reproduce - `BaseController.to_json()` stripping every data
+field, `FieldProxy` losing truthiness and default forwarding,
+`x-oold-required-iri` enforced nowhere, `__iris__` assignment merging instead of
+replacing, `get_raw` answering `[None]`, an inline linked object without an IRI
+being dropped, and unset links vanishing from `model_dump()`. None of those
+paths were reached by any suite. The default was withdrawn, each was fixed with
+a test in `tests/test_compat_parity.py` that fails without its fix, and the
+binding was made the default again on that basis rather than on suite results
+alone.
 
 Verification scripts under `examples/`: `check_binding_features.py` (requirement
 matrix), `bench_binding_variants.py` (per-operation benchmarks),

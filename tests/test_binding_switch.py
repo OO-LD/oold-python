@@ -66,12 +66,12 @@ def run(enabled: bool) -> dict:
     return dict(line.split(" ", 1) for line in proc.stdout.strip().splitlines() if " " in line)
 
 
-def test_default_keeps_the_legacy_binding():
-    assert run(enabled=False)["BASE"] == "oold.model"
-
-
-def test_switch_selects_the_descriptor_binding():
+def test_default_selects_the_descriptor_binding():
     assert run(enabled=True)["BASE"] == "oold.model._descriptor"
+
+
+def test_opting_out_restores_the_legacy_binding():
+    assert run(enabled=False)["BASE"] == "oold.model"
 
 
 def test_downstream_metaclass_subclassing_survives_the_switch():

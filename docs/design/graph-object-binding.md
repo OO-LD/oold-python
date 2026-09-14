@@ -237,20 +237,32 @@ therefore points ty at the interpreter running the tests, not at `./.venv`.
 
 ### 3.3 Declaration notations
 
-**Recommended: `Link[T]` / `LinkList[T]` as the whole annotation, with
-`OoldField(range=...)`.** It is the only notation that types both directions,
-the only one where optionality is declared rather than assumed, and it keeps the
-range in the emitted schema. Every other notation below is supported and keeps
-working - including the legacy `Field(None, json_schema_extra={"range": ...})`
-that code generation still emits - but each gives something up, and the table
-after the example says what.
+**Recommended: `Link[T]` / `LinkList[T]` as the whole annotation, with a bare
+`OoldField()`.**
 
 ```python
 class Person(LinkedBaseModel):
     id: str
-    employer: Link["Organization | None"] = OoldField(range="Organization.json")
-    knows: LinkList["Person"] = OoldField(range="Person.json")
+    employer: Link["Organization | None"] = OoldField()
+    knows: LinkList["Person"] = OoldField()
 ```
+
+The annotation is the single source of truth: it names the target, says the
+field is a link, and declares optionality. So `range=` is not passed - it would
+state the target twice and let the two disagree - and `link=True` is redundant.
+`x-oold-range` is derived from the annotation when the schema is generated,
+which is what keeps the emitted schema a link schema.
+
+Deriving rather than repeating had to wait for the right moment to do it. A
+forward reference is not resolvable when the descriptor is installed, and a
+`Field()` object is shared between models, so its `json_schema_extra` must not
+be mutated in place. `__get_pydantic_json_schema__` has neither problem.
+
+Every other notation is supported and keeps working - including the legacy
+`Field(None, json_schema_extra={"range": ...})` that code generation still
+emits - but each gives something up, and the table after the example says what.
+`Link[T]` / `LinkList[T]` are pydantic v2 only; `oold.model.v1` keeps the
+`range=` form.
 
 Four notations are supported; all share one descriptor implementation, and they
 can be mixed in a single class.
@@ -292,18 +304,47 @@ JSON Schema. Measured, not asserted: read types from `ty`, schema keys from
 | notation | codegen emits it | target inferred | range keyword in schema | read type | IRI write typed | optionality declarable |
 |---|---|---|---|---|---|---|
 | `Optional[List[T]] = Field(None, json_schema_extra={"range": ...})` | yes | no | `range` (legacy) | `list[T] \| None` | no | no |
-| `= OoldField(range="...")` | no | no | `x-oold-range` | as annotated | no | no |
-| `= OoldField()` | no | **yes** | **none** | as annotated | no | no |
-| `Link[T]` / `LinkList[T]` | not yet | **yes** | `x-oold-range` if `range=` given | **exact** (`T`, `LinkResultList[T]`) | **yes** | **yes** |
+| `= OoldField(range="...")` | no | no | `x-oold-range` as given | as annotated | no | no |
+| `= OoldField()` | no | **yes** | **`x-oold-range`, derived** | as annotated | no | no |
+| `Link[T]` / `LinkList[T]` with `OoldField()` | not yet | **yes** | **`x-oold-range`, derived** | **exact** (`T`, `LinkResultList[T]`) | **yes** | **yes** |
 | `= Link(T)` / `= LinkList(T)` | no | yes (from the argument) | **field absent from schema** | exact | n/a - not a field | no |
-| `str \| Location \| None = OoldField(link=True)` | no | yes | none | union as declared | no | via the `None` arm |
+| `str \| Location \| None = OoldField(link=True)` | no | yes | **derived** | union as declared | no | via the `None` arm |
 
-Two entries deserve their qualifier. `OoldField()` infers the target from the
-annotation - the convenience the notation was proposed for - but then **nothing
-writes `x-oold-range` into the emitted schema**, so the schema no longer declares
-its own range. Pair it with `range=` where the schema is the artifact. And the
-unannotated descriptor form is not a pydantic field at all, so it neither appears
-in the schema nor gets an `__init__` parameter, though its read type is exact.
+The derived range is the target's `get_cls_iri()`, taken at schema-generation
+time; an explicit `range=` is never overwritten, and a target that cannot name
+itself contributes nothing, leaving the `x-oold-link` marker in place. The
+unannotated descriptor form is not a pydantic field at all, so it neither
+appears in the schema nor gets an `__init__` parameter, though its read type is
+exact.
+
+#### Two kinds of "required"
+
+Optionality and `x-oold-required-iri` are separate constraints, checked at
+different moments:
+
+| declaration | stored as | enforced | on violation |
+|---|---|---|---|
+| `Link[T]` - no `None` arm | `_AutoLink.optional = False` | on read | `LinkNotResolved` |
+| `x-oold-required-iri: true` | `_AutoLink.required_iri`, precomputed into `cls.__required_links__` | in `__init__` | `ValueError: ... is required but not set` |
+
+The legacy binding had only the second, because every generated link field was
+`Optional[...]` at the pydantic level - link values are routed out of the
+payload before pydantic validates, so a link field cannot be required *as a
+pydantic field*. The annotation now carries the read-side promise, which is what
+makes a guard-free chain truthful, while `x-oold-required-iri` keeps meaning
+what it meant: a document lacking the property is rejected before the object
+exists.
+
+They are deliberately not unified. `Link[T]` on `wiki_data.Person.father`
+declares that reading a father yields a `Person`, and the ancestry walk ends on
+`LinkNotResolved` - a `Person` whose father is unrecorded is still a valid
+`Person` to construct. Emitting `x-oold-required-iri` for every mandatory
+`Link[T]` would turn that into a construction failure.
+
+**Open:** nothing emits the read-side promise into the schema, so a
+model -> schema -> model round trip loses the distinction between `Link[T]` and
+`Link[T | None]`. Expressing it needs a keyword that is not
+`x-oold-required-iri`, since the two mean different things.
 
 #### Notations considered and dropped
 

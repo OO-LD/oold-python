@@ -4,7 +4,8 @@ oold-python's core feature is *IRI-transparent references*: a link field can hol
 
 ## Recommended declaration
 
-Declare a link with `Link[T]` or `LinkList[T]` and `OoldField(range=...)`:
+Declare a link with `Link[T]` or `LinkList[T]`, and `OoldField()` with no
+arguments:
 
 ```python
 from oold.model import Link, LinkedBaseModel, LinkList, OoldField
@@ -12,21 +13,37 @@ from oold.model import Link, LinkedBaseModel, LinkList, OoldField
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization | None"] = OoldField(range="Organization.json")
-    knows: LinkList["Person"] = OoldField(range="Person.json")
+    employer: Link["Organization | None"] = OoldField()
+    knows: LinkList["Person"] = OoldField()
 ```
 
-This is the only form that gives a type checker **both** of a link's types - the
-resolved object you read and the object, IRI or JSON object you may write - and
-the only one where optionality is stated rather than assumed. `range=` keeps the
-schema self-describing. [Typed link declarations](#typed-link-declarations)
-explains why; the other notations, and what each one gives up, are tabulated in
-[the design doc](../design/graph-object-binding.md#which-notation-supports-what).
+The annotation is the single source of truth. It names the target, so
+`x-oold-range` is derived from it and written into the emitted schema - passing
+`range=` would state the same thing twice and let the two disagree. It says the
+field is a link, so `link=True` is redundant. And it declares optionality:
+`Link[T]` reads as `T`, `Link[T | None]` as `T | None`.
 
-Older declarations keep working unchanged, including the legacy
-`Optional[List[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})`
-that code generation still emits. Nothing below needs rewriting; the
-recommendation applies to code you write now.
+This is also the only form a type checker reads correctly in **both**
+directions - the resolved object you get back, and the object, IRI or JSON
+object you may assign.
+
+Where the annotation cannot say it - a union arm such as
+`str | Location | None` - mark the field with `OoldField(link=True)`.
+
+Still supported, not recommended for new code:
+
+| form | why not |
+|---|---|
+| `Optional[Bar] = Field(None, json_schema_extra={"range": "Bar.json"})` | the legacy notation, and what code generation still emits. Untyped in both directions |
+| `Optional[Bar] = OoldField(range="Bar.json")` | repeats what the annotation already says |
+
+Nothing existing needs rewriting; the recommendation applies to code you write
+now. `Link[T]` / `LinkList[T]` require pydantic v2 - under `oold.model.v1` use
+the `range=` form.
+
+[Typed link declarations](#typed-link-declarations) explains the typing; the
+full comparison is in
+[the design doc](../design/graph-object-binding.md#which-notation-supports-what).
 
 ---
 
@@ -251,10 +268,26 @@ OoldField(range=None, link=None, required_iri=None, **field_kwargs)
 
 | argument | effect |
 |---|---|
-| `range` | target schema IRI, emitted as `x-oold-range`. Omitted, the target is inferred from the annotation and the schema declares no range |
-| `link` | force link treatment where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
-| `required_iri` | emitted as `x-oold-required-iri`: the reference must carry an IRI, so an inline object without one is rejected. Not the same as optionality, which the annotation declares |
+| `range` | target schema IRI, emitted as `x-oold-range`. **Do not pass it**: omitted, it is derived from the annotation, which already names the target |
+| `link` | marks the field a link where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
+| `required_iri` | emitted as `x-oold-required-iri`, and enforced at **construction**: building the model without the link raises `ValueError`. Not the same as `Link[T]`, which is a promise about reading - see below |
 | `**field_kwargs` | passed to `pydantic.Field` (`alias`, `description`, `default_factory`, ...). `default=None` is supplied unless you pass a `default_factory` |
+
+### Two kinds of "required"
+
+They are enforced at different moments, and a field can have either or both:
+
+| declaration | enforced | on violation |
+|---|---|---|
+| `Link[T]` - no `None` arm | on **read** | `LinkNotResolved` |
+| `x-oold-required-iri: true` | on **construction** | `ValueError: ... is required but not set` |
+
+`Link[T]` says "treat this as always present, and tell me loudly if it is not",
+which is what lets `person.father.father.father` be written without a guard per
+hop. `x-oold-required-iri` says "a document without this is invalid", so it is
+rejected before the object exists. A schema that requires the property maps to
+the latter; code generation emits it, and the binding stores it on the field and
+enforces it.
 
 !!! note "Write the whole annotation"
     Spell the union inside: `Link[T | None]`, not `Optional[Link[T]]`, and

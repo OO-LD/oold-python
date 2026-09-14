@@ -198,3 +198,34 @@ def test_unset_to_many_reads_as_empty_list(store):
     p = Person(id="ex:u")
     assert p.knows == []
     assert p.employer is None  # to-one keeps None, and keeps "| None"
+
+
+def _properties(model_cls) -> dict:
+    schema = model_cls.model_json_schema()
+    if "properties" in schema:
+        return schema["properties"]
+    return schema["$defs"][model_cls.__name__]["properties"]
+
+
+def test_range_is_derived_from_the_annotation():
+    """Presence of ``x-oold-range`` is what makes a property a link, so the
+    annotation has to put it there - otherwise the recommended declaration
+    emits a schema that does not round-trip through code generation, and the
+    only way to get one is to repeat the target in ``OoldField(range=...)``."""
+    props = _properties(Person)
+    assert props["knows"]["x-oold-range"] == Person.get_cls_iri()
+    assert props["friends"]["x-oold-range"] == Person.get_cls_iri()
+    assert props["employer"]["x-oold-range"] == Org.get_cls_iri()
+    assert props["location"]["x-oold-range"] == Location.get_cls_iri()
+    # the marker was a stand-in for the range; it goes once the range is there
+    assert "x-oold-link" not in props["knows"]
+
+
+def test_an_explicit_range_is_not_overwritten():
+    class Explicit(OoldModel):
+        id: str
+        type: str | None = "ex:NExplicit"
+        target: Link[Org] = OoldField(range="Legacy.json")
+
+    Explicit.model_rebuild()
+    assert _properties(Explicit)["target"]["x-oold-range"] == "Legacy.json"

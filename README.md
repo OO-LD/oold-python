@@ -128,8 +128,8 @@ from oold.model import Link, LinkedBaseModel, LinkList, OoldField
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization | None"] = OoldField(range="Organization.json")
-    knows: LinkList["Person"] = OoldField(range="Person.json")
+    employer: Link["Organization | None"] = OoldField()
+    knows: LinkList["Person"] = OoldField()
 
 alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
 alice.knows[0].name    # a Person, resolved on access

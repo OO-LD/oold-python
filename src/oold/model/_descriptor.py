@@ -827,6 +827,23 @@ class _AutoLink:
             self.__dict__["_resolved_target"] = target
         return target
 
+    def range_iri(self, owner: Any = None) -> Any:
+        """The target's schema IRI, for deriving ``x-oold-range``.
+
+        ``Link[T]`` already names the target, so repeating it in
+        ``OoldField(range=...)`` states the same thing twice and lets the two
+        disagree. The schema is derived from the annotation instead.
+        """
+        target = self._target_cls(owner)
+        get_iri = getattr(target, "get_cls_iri", None)
+        if get_iri is None:
+            return None
+        try:
+            return get_iri() or None
+        except Exception:
+            # a target that cannot name itself simply contributes no range
+            return None
+
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         if obj is None:
             if _Constructing.is_active():
@@ -1105,6 +1122,43 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         if isinstance(item, str):
             return node_list[0] if node_list else None
         return LinkResultList(node_list) if node_list else None
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema_: Any, handler: Any) -> Any:
+        """Write ``x-oold-range`` for links that only stated it in the annotation.
+
+        Presence of ``x-oold-range`` is what makes a property a link, so a
+        schema carrying only ``x-oold-link`` does not round-trip through code
+        generation. ``Link[T]`` names the target already, so the keyword is
+        derived from it rather than repeated in ``OoldField(range=...)``.
+
+        Done here, not when the descriptor is installed: a forward reference is
+        not resolvable at class-creation time, and a ``Field()`` object shared
+        between models must not be mutated in place.
+        """
+        schema = handler(core_schema_)
+        try:
+            schema = handler.resolve_ref_schema(schema)
+        except Exception:
+            return schema
+        properties = schema.get("properties") if isinstance(schema, dict) else None
+        if not properties:
+            return schema
+        link_fields = cls.__link_fields__
+        aliases = cls.__link_aliases__
+        for key, prop in properties.items():
+            name = key if key in link_fields else aliases.get(key)
+            descr = link_fields.get(name) if name else None
+            if descr is None or not isinstance(prop, dict):
+                continue
+            if prop.get("x-oold-range") or prop.get("range"):
+                continue
+            iri = descr.range_iri(cls)
+            if iri:
+                prop["x-oold-range"] = iri
+                # the range says "link" on its own; the marker was a stand-in
+                prop.pop("x-oold-link", None)
+        return schema
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:

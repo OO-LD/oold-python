@@ -14,7 +14,7 @@ argument type is not.
 
 from typing_extensions import assert_type
 
-from oold.model._descriptor import LinkedBaseModel, LinkResultList
+from oold.model import LinkedBaseModel, LinkResultList
 
 
 class Entity(LinkedBaseModel):

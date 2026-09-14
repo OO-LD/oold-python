@@ -140,12 +140,14 @@ extra-paths = ["src"]
 #  - src/oold/drafts: draft/experimental code (also excluded from ruff)
 #  - src/oold/ui: optional UI integrations that import optional, un-installed
 #    packages (panel, anywidget, nicegui, traitlets, ...)
-#  - examples: illustrative scripts, not part of the distributed package
+#
+# `examples` is checked: they are the documented way to declare a link, and
+# excluding them let a broken import and the wrong static type for
+# `Model[Model.field == x]` sit there unnoticed.
 exclude = [
     "tests/data",
     "src/oold/drafts",
     "src/oold/ui",
-    "examples",
 ]
 
 [tool.ty.rules]

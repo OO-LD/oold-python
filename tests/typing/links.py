@@ -19,7 +19,7 @@ chain of mandatory links be written without a guard at every hop.
 
 from typing_extensions import assert_type
 
-from oold.model._descriptor import Link, LinkedBaseModel, LinkList, LinkResultList, OoldField
+from oold.model import Link, LinkedBaseModel, LinkList, LinkResultList, OoldField
 
 
 class Org(LinkedBaseModel):

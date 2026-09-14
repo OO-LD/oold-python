@@ -1,6 +1,32 @@
 # Object Graph Mapping
 
-oold-python's core feature is *IRI-transparent references*: a field annotated with `range` can hold either a Python object or an IRI string. The library resolves IRIs on first access via the registered backend.
+oold-python's core feature is *IRI-transparent references*: a link field can hold either a Python object or an IRI string. The library resolves IRIs on first access via the registered backend.
+
+## Recommended declaration
+
+Declare a link with `Link[T]` or `LinkList[T]` and `OoldField(range=...)`:
+
+```python
+from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+
+class Person(LinkedBaseModel):
+    id: str
+    name: str | None = None
+    employer: Link["Organization | None"] = OoldField(range="Organization.json")
+    knows: LinkList["Person"] = OoldField(range="Person.json")
+```
+
+This is the only form that gives a type checker **both** of a link's types - the
+resolved object you read and the object, IRI or JSON object you may write - and
+the only one where optionality is stated rather than assumed. `range=` keeps the
+schema self-describing. [Typed link declarations](#typed-link-declarations)
+explains why; the other notations, and what each one gives up, are tabulated in
+[the design doc](../design/graph-object-binding.md#which-notation-supports-what).
+
+Older declarations keep working unchanged, including the legacy
+`Optional[List[Bar]] = Field(None, json_schema_extra={"range": "Bar.json"})`
+that code generation still emits. Nothing below needs rewriting; the
+recommendation applies to code you write now.
 
 ---
 
@@ -215,13 +241,24 @@ except LinkNotResolved:
 A **transport failure is not absence** - a connection error propagates unchanged
 rather than being reported as a missing link.
 
-!!! note "Write the whole annotation"
-    `Link[T]` has to be the entire annotation. Nested - `list[Link[T]]` or
-    `Optional[Link[T]]` - a checker does not apply descriptor rules and the read
-    type comes back wrong, while the runtime keeps working. Use `LinkList[T]`
-    and `Link[T | None]`.
+### `OoldField` arguments
 
-!!! note "Keep the range in the schema"
-    `OoldField()` infers the target from the annotation, but then nothing writes
-    `x-oold-range` into the emitted schema. Pass `range=` where the schema is the
-    artifact you publish.
+All keyword-only, all optional:
+
+```python
+OoldField(range=None, link=None, required_iri=None, **field_kwargs)
+```
+
+| argument | effect |
+|---|---|
+| `range` | target schema IRI, emitted as `x-oold-range`. Omitted, the target is inferred from the annotation and the schema declares no range |
+| `link` | force link treatment where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
+| `required_iri` | emitted as `x-oold-required-iri`: the reference must carry an IRI, so an inline object without one is rejected. Not the same as optionality, which the annotation declares |
+| `**field_kwargs` | passed to `pydantic.Field` (`alias`, `description`, `default_factory`, ...). `default=None` is supplied unless you pass a `default_factory` |
+
+!!! note "Write the whole annotation"
+    Spell the union inside: `Link[T | None]`, not `Optional[Link[T]]`, and
+    `LinkList[T]`, not `list[Link[T]]`. Nested in another annotation a checker
+    stops applying descriptor rules - `list[Link[T]]` reads as a list of
+    descriptors, and `Optional[Link[T]]` narrows on read but rejects an IRI on
+    write. Both keep working at runtime, which is what makes them easy to miss.

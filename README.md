@@ -120,7 +120,24 @@ f = model.Foo(
 
 Thanks to the resolver mechanism, these IRIs turn into fully-fledged objects as soon as you need them.
 
-More details see [example code](./tests/test_oold.py)
+Writing a model by hand, declare links with `Link[T]` / `LinkList[T]`. This is the recommended notation: it is the only one a type checker reads correctly in both directions - the resolved object you get back, and the object, IRI or JSON object you may assign:
+
+```python
+from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+
+class Person(LinkedBaseModel):
+    id: str
+    name: str | None = None
+    employer: Link["Organization | None"] = OoldField(range="Organization.json")
+    knows: LinkList["Person"] = OoldField(range="Person.json")
+
+alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
+alice.knows[0].name    # a Person, resolved on access
+```
+
+Existing declarations keep working unchanged, including the `range` form code generation emits.
+
+More details see [example code](./tests/test_oold.py) and [Object Graph Mapping](./docs/how-to/object-graph-mapping.md).
 
 ### RDF-Export
 

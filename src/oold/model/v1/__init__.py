@@ -112,13 +112,13 @@ _types: dict[str, pydantic.v1.main.ModelMetaclass] = {}
 _controller_types: dict[str, list] = {}
 
 
-M = TypeVar("M", bound="LinkedBaseModel")
+M = TypeVar("M", bound="_LinkedBaseModelLegacy")
 
 _logger = logging.getLogger(__name__)
 
 
 # pydantic v1
-class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
+class _LinkedBaseModelMetaClassLegacy(pydantic.v1.main.ModelMetaclass):
     _constructing: bool = False
     """Guards against __getattribute__ intercepting field access during class
     construction. Pydantic checks ``getattr(base, field_name, None)`` in its
@@ -127,11 +127,11 @@ class LinkedBaseModelMetaClass(pydantic.v1.main.ModelMetaclass):
     of the default None, causing false-positive field-name collision errors."""
 
     def __new__(mcs, name, bases, namespace):
-        LinkedBaseModelMetaClass._constructing = True
+        _LinkedBaseModelMetaClassLegacy._constructing = True
         try:
             cls = super().__new__(mcs, name, bases, namespace)
         finally:
-            LinkedBaseModelMetaClass._constructing = False
+            _LinkedBaseModelMetaClassLegacy._constructing = False
 
         # Register type IRI mapping. Controllers go to _controller_types.
         _is_ctrl = any(b.__module__ == "oold.model" and b.__name__ == "BaseController" for b in cls.__mro__)
@@ -294,12 +294,18 @@ if TYPE_CHECKING:
 
 else:
 
-    class _LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass):
+    class _LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=_LinkedBaseModelMetaClassLegacy):
         pass
 
 
-class LinkedBaseModel(_LinkedBaseModel):
-    """LinkedBaseModel for pydantic v1"""
+class _LinkedBaseModelLegacy(_LinkedBaseModel):
+    """The per-attribute-interception binding for pydantic v1.
+
+    Exported as ``LinkedBaseModel`` unless ``OOLD_DESCRIPTOR_BINDING=0`` selects
+    it, which is decided at the bottom of this module. It carries its own name
+    so that the exported one has a single declaration a type checker can
+    resolve - pyright keeps the first of two and would ignore the swap.
+    """
 
     __iris__: dict[str, str | list[str]] | None = PrivateAttr()
 
@@ -337,7 +343,7 @@ class LinkedBaseModel(_LinkedBaseModel):
         return self.id
 
     @classmethod
-    def parse_obj(cls, obj: Any) -> "LinkedBaseModel":
+    def parse_obj(cls, obj: Any) -> "_LinkedBaseModelLegacy":
         """Parse the object and return a LinkedBaseModel instance.
         This method is called by pydantic when creating
         a new (default) instance of the model."""
@@ -594,7 +600,7 @@ class LinkedBaseModel(_LinkedBaseModel):
     @staticmethod
     def _resolve(iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
-        node_dict = resolver.resolve(ResolveParam(iris=iris, model_cls=LinkedBaseModel)).nodes
+        node_dict = resolver.resolve(ResolveParam(iris=iris, model_cls=_LinkedBaseModelLegacy)).nodes
         return node_dict
 
     def _store(self):
@@ -661,10 +667,10 @@ class LinkedBaseModel(_LinkedBaseModel):
                 for item, model_item in zip(value, model_value, strict=False):
                     if isinstance(item, dict) and hasattr(model_item, "__iris__"):
                         model_item._object_to_iri(item)
-                        LinkedBaseModel._recursive_object_to_iri(item, model_item)
+                        _LinkedBaseModelLegacy._recursive_object_to_iri(item, model_item)
             elif isinstance(value, dict) and hasattr(model_value, "__iris__"):
                 model_value._object_to_iri(value)
-                LinkedBaseModel._recursive_object_to_iri(value, model_value)
+                _LinkedBaseModelLegacy._recursive_object_to_iri(value, model_value)
 
     def _raw_dict(self):
         """Serialize to dict without _object_to_iri at any level.
@@ -829,9 +835,9 @@ class LinkedBaseModel(_LinkedBaseModel):
         return export_jsonld(self, BaseModel)
 
     @classmethod
-    def from_jsonld(cls, jsonld: builtins.dict) -> "LinkedBaseModel":
+    def from_jsonld(cls, jsonld: builtins.dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON-LD representation."""
-        return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _types)
+        return import_jsonld(BaseModel, _LinkedBaseModelLegacy, cls, jsonld, _types)
 
     def to_json(self, exclude_defaults: bool = False) -> builtins.dict:
         """Return the JSON representation of the object as dict.
@@ -861,9 +867,9 @@ class LinkedBaseModel(_LinkedBaseModel):
         return result
 
     @classmethod
-    def from_json(cls, json_dict: builtins.dict) -> "LinkedBaseModel":
+    def from_json(cls, json_dict: builtins.dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON representation."""
-        return import_json(BaseModel, LinkedBaseModel, cls, json_dict, _types)
+        return import_json(BaseModel, _LinkedBaseModelLegacy, cls, json_dict, _types)
 
 
 # Re-export BaseController from v2 module (it's a plain class, no Pydantic dep)
@@ -872,12 +878,21 @@ from oold.model import BaseController  # noqa: E402, F401
 # Opt-in descriptor binding, mirroring oold.model. The generated packages emit
 # a v1 variant and the production entity models are v1, so the switch has to
 # cover this module too or it never exercises the path that matters.
-_LinkedBaseModelLegacy = LinkedBaseModel
-"""The per-attribute-interception binding, before the swap below."""
-
-if os.environ.get("OOLD_DESCRIPTOR_BINDING", "1") != "0":
+# The branch is taken at import time, which a type checker cannot follow: left
+# to infer, it keeps the legacy types for every consumer of this module. Stating
+# the default under TYPE_CHECKING is what carries the typed subscript and the
+# link annotations over - the same reason as in `oold.model`.
+if TYPE_CHECKING:
+    from oold.model.v1._descriptor import LinkedBaseModel as LinkedBaseModel
+    from oold.model.v1._descriptor import (
+        LinkedBaseModelMetaClass as LinkedBaseModelMetaClass,
+    )
+elif os.environ.get("OOLD_DESCRIPTOR_BINDING", "1") != "0":
     from oold.model.v1 import _descriptor as _descriptor_module
 
     _descriptor_module.use_type_registry(_types, _controller_types)
     LinkedBaseModel = _descriptor_module.LinkedBaseModel
     LinkedBaseModelMetaClass = _descriptor_module.LinkedBaseModelMetaClass
+else:
+    LinkedBaseModel = _LinkedBaseModelLegacy
+    LinkedBaseModelMetaClass = _LinkedBaseModelMetaClassLegacy

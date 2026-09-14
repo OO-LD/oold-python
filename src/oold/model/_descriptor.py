@@ -251,8 +251,35 @@ def OoldField(
 ) -> Any:
     """``Field`` wrapper marking a property as a link.
 
-    ``range`` is optional: when omitted the link target is taken from the
-    annotation, so ``OoldField()`` on its own is enough for the common case.
+    Keyword-only, and every argument is optional::
+
+        OoldField(range=None, link=None, required_iri=None, **field_kwargs)
+
+    ``range``
+        Target schema IRI, written to the schema as ``x-oold-range``. Omit it
+        and the target is inferred from the annotation - but then nothing
+        declares the range in the emitted schema, so pass it where the schema is
+        the artifact you publish.
+    ``link``
+        Force link treatment. Only needed when the annotation does not say so on
+        its own, as in a union arm: ``str | Location | None = OoldField(link=True)``.
+        With ``Link[T]`` / ``LinkList[T]`` it is redundant.
+    ``required_iri``
+        Written as ``x-oold-required-iri``; the reference must carry an IRI, so
+        an inline object without one is rejected. Distinct from optionality,
+        which the annotation declares.
+    ``**field_kwargs``
+        Passed to ``pydantic.Field`` (``alias``, ``description``,
+        ``default_factory`` ...). ``default=None`` is supplied unless a
+        ``default_factory`` is given: link values are routed out of the payload
+        before pydantic validates, so a link field must not be required at the
+        pydantic level.
+
+    The recommended declaration pairs it with :class:`Link` / :class:`LinkList`,
+    which are what give a type checker both the read and the write type::
+
+        employer: Link["Organization | None"] = OoldField(range="Organization.json")
+        knows: LinkList["Person"] = OoldField(range="Person.json")
     """
     if range is not None:
         extra: dict[str, Any] = dict(OoldExtra(range=range, required_iri=required_iri))
@@ -904,15 +931,18 @@ class _LinkAnnotation:
 
 
 class Link(_AutoLink, _LinkAnnotation, Generic[T]):
-    """A to-one link.
+    """A to-one link. The recommended way to declare one.
 
-    Two equivalent spellings::
+    Two spellings, not equivalent to a type checker::
 
-        employer = Link(Organization)        # explicit descriptor
-        employer: Link[Organization] = ...   # annotation, and statically typed
+        employer: Link[Organization] = OoldField()   # recommended
+        employer = Link(Organization)                # not a pydantic field
 
-    The annotation form is the one that types both directions: it reads as
-    ``T | None`` and accepts a ``T``, an IRI or a JSON object on assignment.
+    The annotation form types both directions: it reads as ``T`` and accepts a
+    ``T``, an IRI or a JSON object on assignment. ``Link[T]`` promises a ``T``,
+    so a chain needs no guard per hop; write ``Link[T | None]`` where absence is
+    part of the model. Nested - ``Optional[Link[T]]`` - the read type still
+    narrows but the write type does not, so spell the union inside.
     """
 
     _many: ClassVar[bool] = False
@@ -939,16 +969,17 @@ class Link(_AutoLink, _LinkAnnotation, Generic[T]):
 
 
 class LinkList(_AutoLink, _LinkAnnotation, Generic[T]):
-    """A to-many link.
+    """A to-many link. The recommended way to declare one.
 
-    Two equivalent spellings::
+    Two spellings, not equivalent to a type checker::
 
-        knows = LinkList("Person")        # explicit descriptor
-        knows: LinkList["Person"] = ...   # annotation, and statically typed
+        knows: LinkList["Person"] = OoldField()   # recommended
+        knows = LinkList("Person")                # not a pydantic field
 
-    The annotation form reads as ``LinkResultList[T | None]`` - never ``None``
-    itself, an unset link is an empty list - and accepts objects, IRIs or JSON
-    objects on assignment.
+    The annotation form reads as ``LinkResultList[T]`` - never ``None`` itself,
+    an unset link is an empty list - and accepts objects, IRIs or JSON objects
+    on assignment. Prefer it to ``list[Link[T]]``, which a checker reads as a
+    list of descriptors.
     """
 
     _many: ClassVar[bool] = True

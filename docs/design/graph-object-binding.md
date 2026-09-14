@@ -237,6 +237,21 @@ therefore points ty at the interpreter running the tests, not at `./.venv`.
 
 ### 3.3 Declaration notations
 
+**Recommended: `Link[T]` / `LinkList[T]` as the whole annotation, with
+`OoldField(range=...)`.** It is the only notation that types both directions,
+the only one where optionality is declared rather than assumed, and it keeps the
+range in the emitted schema. Every other notation below is supported and keeps
+working - including the legacy `Field(None, json_schema_extra={"range": ...})`
+that code generation still emits - but each gives something up, and the table
+after the example says what.
+
+```python
+class Person(LinkedBaseModel):
+    id: str
+    employer: Link["Organization | None"] = OoldField(range="Organization.json")
+    knows: LinkList["Person"] = OoldField(range="Person.json")
+```
+
 Four notations are supported; all share one descriptor implementation, and they
 can be mixed in a single class.
 
@@ -294,7 +309,8 @@ in the schema nor gets an `__init__` parameter, though its read type is exact.
 
 | notation | why it is not used |
 |---|---|
-| `list[Link[T]]`, `Optional[Link[T]]` - `Link` nested inside another annotation | Silently degrades. A descriptor nested in a `list` or union is not treated as one, so the read type comes back as `list[Link[T]]` - not merely untyped but **wrong**. Superseded by `LinkList[T]`, which carries the to-many-ness itself. Still works at runtime, which is what makes it dangerous. |
+| `list[Link[T]]` - `Link` nested inside a container | Silently degrades. A descriptor nested in a `list` is not treated as one, so the read type comes back as `list[Link[T]]` - not merely untyped but **wrong**. Superseded by `LinkList[T]`, which carries the to-many-ness itself. Still works at runtime, which is what makes it dangerous. |
+| `Optional[Link[T]]` - `Link` nested inside a union | Half-degrades: the read type narrows to `T \| None` correctly, but the descriptor's `__set__` is not seen through the wrapper, so assigning an IRI is rejected (`Expected Link[T] \| None`). `Link[T \| None]` states the same thing and types both directions. |
 | `Annotated[Person, OoldRange(...)]` wrapping a `Ref` value | The static type is not backed by the runtime value: a checker reads `Person`, `isinstance` says `Ref`. Rejected in 3(c). |
 | `Ref[T]` as the field type | Honest, but `p.knows[0]` is a `Ref`, not a `Person` - `isinstance` fails and the list operations, polymorphic dispatch and query DSL go with it (3.6). Kept only as an opt-in handle for visible or async resolution. |
 | `~Person.name == "x"` for match filters | `~` binds tighter than `==`, so this parses and would work - but pandas established `~` as NOT, and colliding with that is worse than a method. |

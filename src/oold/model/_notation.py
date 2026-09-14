@@ -206,28 +206,15 @@ class OoldModel(LinkedBaseModel):
         # subclass that only narrows a field replace its parent in the registry.
         _register_class(cls)
 
-    def __init__(self, **data: Any) -> None:
-        lf = type(self).__link_fields__
-        lits = type(self).__link_literals__
-        link_data = {k: data.pop(k) for k in list(data) if k in lf}
-        super().__init__(**data)
-        # Pydantic writes each field's default into __dict__, and an entry there
-        # shadows a non-data descriptor - so an unset link would keep returning
-        # that default (None) and never reach __get__. Dropping the entries hands
-        # unset links back to the descriptor, which answers [] for to-many and
-        # None for to-one. A union field keeps its literal value, set below.
-        for _name in lf:
-            if _name not in link_data or not lits.get(_name):
-                self.__dict__.pop(_name, None)
-        for key, value in link_data.items():
-            # union arms: a bare string stays a literal when the field also
-            # declares a literal arm; a reference then arrives as {"@id": ...}
-            arms = lits.get(key)
-            if arms and isinstance(value, str):
-                object.__setattr__(self, key, value)
-                self._links.pop(key, None)
-                continue
-            lf[key].set_value(self, self._coerce(value))
+    def _set_link(self, name: str, value: Any) -> None:
+        # union arms: a bare string stays a literal when the field also
+        # declares a literal arm; a reference then arrives as {"@id": ...}
+        arms = type(self).__link_literals__.get(name)
+        if arms and isinstance(value, str):
+            object.__setattr__(self, name, value)
+            self._links.pop(name, None)
+            return
+        type(self).__link_fields__[name].set_value(self, self._coerce(value))
 
     @staticmethod
     def _coerce(value: Any) -> Any:

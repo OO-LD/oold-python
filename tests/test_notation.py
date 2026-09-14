@@ -15,6 +15,7 @@ from pydantic import Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
+from oold.model import LinkNotResolved
 from oold.model._notation import Link, OoldField, OoldModel
 
 
@@ -200,6 +201,13 @@ def test_unset_to_many_reads_as_empty_list(store):
     assert p.employer is None  # to-one keeps None, and keeps "| None"
 
 
+def _required(model_cls) -> list:
+    schema = model_cls.model_json_schema()
+    if "properties" in schema:
+        return schema.get("required", [])
+    return schema["$defs"][model_cls.__name__].get("required", [])
+
+
 def _properties(model_cls) -> dict:
     schema = model_cls.model_json_schema()
     if "properties" in schema:
@@ -229,3 +237,60 @@ def test_an_explicit_range_is_not_overwritten():
 
     Explicit.model_rebuild()
     assert _properties(Explicit)["target"]["x-oold-range"] == "Legacy.json"
+
+
+def test_required_is_a_field_argument_not_the_annotation():
+    """Requiredness and the read type are separate questions. A self-link needs
+    them to differ: father reads as a Person so a walk needs no guard per hop,
+    while no real dataset can require every person to name one."""
+
+    class Chain(OoldModel):
+        id: str
+        type: str | None = "ex:NChain"
+        father: Link["Chain"] = OoldField()
+        manager: Link["Org"] = OoldField(required=True)
+
+    Chain.model_rebuild()
+
+    with pytest.raises(ValueError, match="manager is required"):
+        Chain(id="ex:c")
+    c = Chain(id="ex:c", manager="ex:acme")
+    with pytest.raises(LinkNotResolved):
+        _ = c.father  # optional to supply, still mandatory to read
+
+    props = _properties(Chain)
+    assert props["manager"]["x-oold-required-iri"] is True
+    # a plain JSON Schema validator only sees the standard array
+    assert "manager" in _required(Chain)
+    assert "father" not in _required(Chain)
+
+
+def test_required_iri_is_still_accepted():
+    """Generated packages pass the old spelling."""
+
+    class Old(OoldModel):
+        id: str
+        type: str | None = "ex:NOld"
+        manager: Link["Org"] = OoldField(required_iri=True)
+
+    Old.model_rebuild()
+    with pytest.raises(ValueError, match="manager is required"):
+        Old(id="ex:o")
+    assert _properties(Old)["manager"]["x-oold-required-iri"] is True
+
+
+def test_a_link_annotation_without_a_default_is_required():
+    """No default means required, as it does anywhere else in Python. A link is
+    never required at the pydantic level - its value is routed out before
+    validation - so this used to fail with a misleading "Field required" about
+    a value that had in fact been supplied."""
+
+    class Bare(OoldModel):
+        id: str
+        type: str | None = "ex:NBare"
+        manager: Link["Org"]
+
+    Bare.model_rebuild()
+    assert Bare(id="ex:b", manager="ex:acme").link_iris("manager") == "ex:acme"
+    with pytest.raises(ValueError, match="manager is required"):
+        Bare(id="ex:b")

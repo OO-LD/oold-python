@@ -317,34 +317,50 @@ unannotated descriptor form is not a pydantic field at all, so it neither
 appears in the schema nor gets an `__init__` parameter, though its read type is
 exact.
 
-#### Two kinds of "required"
+#### Requiredness is a field argument, not the annotation
 
-Optionality and `x-oold-required-iri` are separate constraints, checked at
-different moments:
+Two different questions - "must the caller supply it?" and "what do I get when I
+read it?" - so two carriers:
 
 | declaration | stored as | enforced | on violation |
 |---|---|---|---|
 | `Link[T]` - no `None` arm | `_AutoLink.optional = False` | on read | `LinkNotResolved` |
-| `x-oold-required-iri: true` | `_AutoLink.required_iri`, precomputed into `cls.__required_links__` | in `__init__` | `ValueError: ... is required but not set` |
+| `OoldField(required=True)` | `_AutoLink.required_iri`, precomputed into `cls.__required_links__`; emitted as `x-oold-required-iri` and into the standard `required` array | in `__init__` | `ValueError: ... is required but not set` |
 
-The legacy binding had only the second, because every generated link field was
-`Optional[...]` at the pydantic level - link values are routed out of the
-payload before pydantic validates, so a link field cannot be required *as a
-pydantic field*. The annotation now carries the read-side promise, which is what
-makes a guard-free chain truthful, while `x-oold-required-iri` keeps meaning
-what it meant: a document lacking the property is rejected before the object
-exists.
+A link is never required at the *pydantic* level, because its value is routed
+out of the payload before validation - which is why the legacy binding declared
+every generated link field `Optional[...]` and carried requiredness in the
+keyword. A bare `Link[T]` annotation with no default is read as required, which
+is what Python means by "no default" everywhere else.
 
-They are deliberately not unified. `Link[T]` on `wiki_data.Person.father`
-declares that reading a father yields a `Person`, and the ancestry walk ends on
-`LinkNotResolved` - a `Person` whose father is unrecorded is still a valid
-`Person` to construct. Emitting `x-oold-required-iri` for every mandatory
-`Link[T]` would turn that into a construction failure.
+**Why not put requiredness in the annotation.** `required` -> `Link[T]`,
+absence -> `Link[T | None]` reads well and was the first proposal. It fails on a
+self-referential link. `father: Link["Person"]` required means every person in
+the dataset carries a father IRI, which is only true of a graph with no root -
+and resolution constructs target objects, so the failure surfaces one hop from
+its cause: reading `alice.father` raises `ValueError: father is required but not
+set` about *Bob's* document, which you never asked for. So `father` would have
+to be `Link["Person | None"]`, which needs a guard per hop - the thing the
+annotation exists to avoid.
 
-**Open:** nothing emits the read-side promise into the schema, so a
-model -> schema -> model round trip loses the distinction between `Link[T]` and
-`Link[T | None]`. Expressing it needs a keyword that is not
-`x-oold-required-iri`, since the two mean different things.
+The alternative was to strip the `| None` under `TYPE_CHECKING`, which both
+pyright and ty do resolve (a self-type overload on `Link[X | None]` yields `X`).
+It was rejected because the runtime would then have to raise instead of
+returning `None`, which silently breaks `entity.link is None`, `if entity.link:`
+and `getattr(entity, f, None)` - and the last does *not* save the caller, since
+`LinkNotResolved` is a `LookupError`, not an `AttributeError`. Pattern A in
+`downstream-migration.md` is exactly that shape.
+
+Suppressing the diagnostic instead is only half-available: pyright separates
+`reportOptionalMemberAccess` from `reportAttributeAccessIssue`, so it can be
+turned off without losing typo detection, but ty reports both under
+`unresolved-attribute` (checked on 0.0.49 and 0.0.80). Either way it is a
+setting every downstream consumer would have to make.
+
+**Open:** nothing emits the read-side promise, so a model -> schema -> model
+round trip loses the distinction between `Link[T]` and `Link[T | None]`. Code
+generation can default to `Link[T]` for required properties and
+`Link[T | None]` otherwise; expressing it exactly needs a keyword of its own.
 
 #### Notations considered and dropped
 

@@ -175,6 +175,14 @@ def _neutralise_link_defaults(namespace: dict) -> None:
         if _is_link_field_info(info):
             namespace[field_name] = _neutralised(info)
             continue
+        if field_name not in namespace and _is_link_annotation(annotation):
+            # `manager: Link[Org]` with nothing assigned. Read as Python reads
+            # it - no default means required - but a link cannot be required as
+            # a pydantic field, because its value never reaches validation.
+            # Left alone, every construction failed with a misleading
+            # "Field required" about a value that had in fact been supplied.
+            namespace[field_name] = OoldField(required=True)
+            continue
         # A Field() living in Annotated metadata rather than as the assigned
         # value was never seen here, so its default survived and was evaluated
         # on every construction - the very failure this function exists to stop.
@@ -246,6 +254,7 @@ def OoldField(
     *,
     range: str | None = None,
     link: bool | None = None,
+    required: bool | None = None,
     required_iri: bool | None = None,
     **kwargs: Any,
 ) -> Any:
@@ -253,40 +262,54 @@ def OoldField(
 
     Keyword-only, and every argument is optional::
 
-        OoldField(range=None, link=None, required_iri=None, **field_kwargs)
+        OoldField(range=None, link=None, required=None, **field_kwargs)
 
+    ``required``
+        The link must be supplied when the model is constructed; omitting it
+        raises ``ValueError``. Written to the schema as ``x-oold-required-iri``
+        and into the standard ``required`` array.
+
+        This is the knob for requiredness, **not** the annotation. The two are
+        different questions - "must the caller supply it?" and "what do I get
+        when I read it?" - and a self-referential link needs them to differ:
+        ``father: Link["Person"]`` reads as a ``Person`` so an ancestry walk
+        needs no guard per hop, while no real dataset can require every person
+        to name a father.
     ``range``
-        Target schema IRI, written to the schema as ``x-oold-range``. Omit it
-        and the target is inferred from the annotation - but then nothing
-        declares the range in the emitted schema, so pass it where the schema is
-        the artifact you publish.
+        Target schema IRI, written as ``x-oold-range``. **Do not pass it**: it
+        is derived from the annotation, which already names the target, and
+        stating it twice lets the two disagree.
     ``link``
-        Force link treatment. Only needed when the annotation does not say so on
-        its own, as in a union arm: ``str | Location | None = OoldField(link=True)``.
-        With ``Link[T]`` / ``LinkList[T]`` it is redundant.
+        Marks the property a link where the annotation cannot, as in a union
+        arm: ``str | Location | None = OoldField(link=True)``. Redundant with
+        ``Link[T]`` / ``LinkList[T]``.
     ``required_iri``
-        Written as ``x-oold-required-iri``; the reference must carry an IRI, so
-        an inline object without one is rejected. Distinct from optionality,
-        which the annotation declares.
+        Deprecated spelling of ``required``, kept because generated packages
+        pass it. The emitted keyword is unchanged.
     ``**field_kwargs``
         Passed to ``pydantic.Field`` (``alias``, ``description``,
         ``default_factory`` ...). ``default=None`` is supplied unless a
         ``default_factory`` is given: link values are routed out of the payload
-        before pydantic validates, so a link field must not be required at the
-        pydantic level.
+        before pydantic validates, so a link field cannot be required *as a
+        pydantic field* - which is what ``required`` exists to express.
 
     The recommended declaration pairs it with :class:`Link` / :class:`LinkList`,
     which are what give a type checker both the read and the write type::
 
-        employer: Link["Organization | None"] = OoldField(range="Organization.json")
-        knows: LinkList["Person"] = OoldField(range="Person.json")
+        father: Link["Person"] = OoldField()               # chains guard-free
+        manager: Link[Organization] = OoldField(required=True)
+        advisor: Link["Organization | None"] = OoldField()  # may read as None
     """
+    if required is None:
+        required = required_iri
+    elif required_iri is not None and bool(required_iri) != bool(required):
+        raise ValueError("OoldField: required and required_iri disagree; pass only required=")
     if range is not None:
-        extra: dict[str, Any] = dict(OoldExtra(range=range, required_iri=required_iri))
+        extra: dict[str, Any] = dict(OoldExtra(range=range, required_iri=required))
     else:
         extra = {"x-oold-link": True if link is None else bool(link)}
-        if required_iri is not None:
-            extra["x-oold-required-iri"] = required_iri
+        if required is not None:
+            extra["x-oold-required-iri"] = required
     # Link values are routed out of the payload before pydantic validates, so a
     # link field must not be required at the pydantic level. This also makes the
     # bare OoldField() form work with no arguments at all - but only when the
@@ -1146,11 +1169,22 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             return schema
         link_fields = cls.__link_fields__
         aliases = cls.__link_aliases__
+        required = schema.get("required")
         for key, prop in properties.items():
             name = key if key in link_fields else aliases.get(key)
             descr = link_fields.get(name) if name else None
             if descr is None or not isinstance(prop, dict):
                 continue
+            if descr.required_iri:
+                # A link is never required at the pydantic level - its value is
+                # routed out of the payload before validation - so pydantic
+                # leaves it out of `required`. Stating it only in
+                # x-oold-required-iri would hide the constraint from every
+                # plain JSON Schema validator.
+                if required is None:
+                    required = schema["required"] = []
+                if key not in required:
+                    required.append(key)
             if prop.get("x-oold-range") or prop.get("range"):
                 continue
             iri = descr.range_iri(cls)
@@ -1227,13 +1261,24 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         for _name in link_fields:
             self.__dict__.pop(_name, None)
         for key, value in link_data.items():
-            link_fields[key].set_value(self, value)
+            self._set_link(key, value)
         missing = [name for name in type(self).__required_links__ if not self._links.get(name)]
         if missing:
             # x-oold-required-iri, enforced as the legacy binding did. It raised
             # on the mere presence of the keyword; this raises on a true value,
             # so required_iri=False no longer means "required".
             raise ValueError(f"{', '.join(sorted(missing))} is required but not set")
+
+    def _set_link(self, name: str, value: Any) -> None:
+        """Store one supplied link value.
+
+        The hook a notation overrides to interpret the value - a union arm has
+        to decide literal from reference. Doing it here rather than after
+        ``__init__`` returns is what lets the required-link check see the links
+        a subclass sets: it ran before them, and reported every required link of
+        a notation model as missing.
+        """
+        type(self).__link_fields__[name].set_value(self, value)
 
     def __eq__(self, other: Any) -> bool:
         """Compare by data, not by what happens to be cached.

@@ -217,8 +217,8 @@ from oold.model import Link, LinkedBaseModel, LinkList, OoldField
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization | None"] = OoldField(range="Organization.json")
-    knows: LinkList["Person | None"] = OoldField(range="Person.json")
+    employer: Link["Organization | None"] = OoldField()
+    knows: LinkList["Person"] = OoldField()
 
 # accepted: an object, an IRI, or a JSON object
 alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
@@ -263,31 +263,53 @@ rather than being reported as a missing link.
 All keyword-only, all optional:
 
 ```python
-OoldField(range=None, link=None, required_iri=None, **field_kwargs)
+OoldField(required=None, range=None, link=None, **field_kwargs)
 ```
 
 | argument | effect |
 |---|---|
+| `required` | the link must be supplied at construction; omitting it raises `ValueError`. Emitted as `x-oold-required-iri` **and** into the standard `required` array |
 | `range` | target schema IRI, emitted as `x-oold-range`. **Do not pass it**: omitted, it is derived from the annotation, which already names the target |
 | `link` | marks the field a link where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
-| `required_iri` | emitted as `x-oold-required-iri`, and enforced at **construction**: building the model without the link raises `ValueError`. Not the same as `Link[T]`, which is a promise about reading - see below |
+| `required_iri` | deprecated spelling of `required`, kept because generated packages pass it. Same emitted keyword |
 | `**field_kwargs` | passed to `pydantic.Field` (`alias`, `description`, `default_factory`, ...). `default=None` is supplied unless you pass a `default_factory` |
 
-### Two kinds of "required"
+A link annotation with **no default at all** means required, as it does anywhere
+else in Python:
 
-They are enforced at different moments, and a field can have either or both:
+```python
+manager: Link[Organization]                          # required
+manager: Link[Organization] = OoldField()            # optional
+manager: Link[Organization] = OoldField(required=True)   # required, explicit
+```
 
-| declaration | enforced | on violation |
+### Requiredness is a field argument, not the annotation
+
+"Must the caller supply it?" and "what do I get when I read it?" are different
+questions, and they need separate carriers - a self-referential link needs them
+to differ. All four combinations are available:
+
+| | `OoldField()` | `OoldField(required=True)` |
 |---|---|---|
-| `Link[T]` - no `None` arm | on **read** | `LinkNotResolved` |
-| `x-oold-required-iri: true` | on **construction** | `ValueError: ... is required but not set` |
+| `Link[T]` | may omit; reading raises `LinkNotResolved` if absent | must supply; reading raises if absent |
+| `Link[T \| None]` | may omit; reading yields `None` | must supply; reading may still yield `None` |
 
-`Link[T]` says "treat this as always present, and tell me loudly if it is not",
-which is what lets `person.father.father.father` be written without a guard per
-hop. `x-oold-required-iri` says "a document without this is invalid", so it is
-rejected before the object exists. A schema that requires the property maps to
-the latter; code generation emits it, and the binding stores it on the field and
-enforces it.
+```python
+class Person(LinkedBaseModel):
+    father: Link["Person"] = OoldField()                  # chain it, no guards
+    employer: Link["Organization"] = OoldField(required=True)
+    advisor: Link["Person | None"] = OoldField()          # guard it
+```
+
+`father` is the case that forces the split. Reading it must yield a `Person` so
+that `person.father.father.father` needs no guard per hop - but no real dataset
+can require *every* person to name a father, so it cannot be required at
+construction. Requiredness in the annotation would tie those together.
+
+A link is never required at the *pydantic* level, because its value is routed
+out of the payload before validation. That is what `required` exists to express,
+and why it is also written into the schema's `required` array - otherwise the
+constraint would be invisible to any plain JSON Schema validator.
 
 !!! note "Write the whole annotation"
     Spell the union inside: `Link[T | None]`, not `Optional[Link[T]]`, and

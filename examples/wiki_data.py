@@ -80,7 +80,7 @@ class Person(WikiDataEntity):
     # Link[T] rather than "Person | None": the annotation says what *reading*
     # the link yields, so a chain can be written plainly and guarded once.
     # Ancestry does run out - that is what the try/except in main() is for.
-    father: Link["Person"] = OoldField(range=WD_ENTITY + "Q5")
+    father: Link["Person"] = OoldField()
 
 
 Person.model_rebuild()

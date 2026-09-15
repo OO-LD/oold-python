@@ -9,6 +9,10 @@ Run it:
 
     python examples/wiki_data.py
 
+Three commented blocks marked "Extension, step N of 3" add a to-many link
+(``children``, wdt:P40) on top: a term in the context, a ``LinkList`` field, and
+a read. Uncomment all three to see a list resolve in a single backend call.
+
 Two details are specific to Wikidata:
 
 * the class IRI is the **expanded** entity IRI, because that is what arrives in
@@ -69,6 +73,14 @@ class Person(WikiDataEntity):
                         "@id": "wdt:P22",
                         "@type": "@id",
                     },
+                    # Extension, step 1 of 3: a to-many link. P40 is "child",
+                    # and "@type": "@id" is what makes the values references
+                    # rather than literals - the same declaration as P22, the
+                    # only difference being how many values it carries.
+                    # "children": {
+                    #     "@id": "wdt:P40",
+                    #     "@type": "@id",
+                    # },
                 },
             ],
             # The class IRI has to be the expanded form: it is compared with the
@@ -81,6 +93,12 @@ class Person(WikiDataEntity):
     # the link yields, so a chain can be written plainly and guarded once.
     # Ancestry does run out - that is what the try/except in main() is for.
     father: Link["Person"] = OoldField()
+
+    # Extension, step 2 of 3: LinkList[T] is the to-many form. It reads as a
+    # list of Person - never None, an unset link is an empty list - so the
+    # elements need no guard either. Add LinkList to the oold.model import
+    # above when uncommenting.
+    # children: LinkList["Person"] = OoldField()
 
 
 Person.model_rebuild()
@@ -109,6 +127,14 @@ def main() -> None:
     father = person.father
     assert isinstance(father, Person), type(father)
     print("  resolved:  ", father.id, "-", father.name)
+
+    # Extension, step 3 of 3: the whole list resolves in one backend call, not
+    # one per element. Q80 records no children of his own; his father records
+    # two, so this is the side of the link that carries them.
+    # print("\nchildren are fetched as one batch")
+    # print("  stored IRIs:", father.get_iri_ref("children"))
+    # for child in father.children:
+    #     print("  resolved:  ", child.id, "-", child.name)
 
     print("\nplain chaining - no guard, no narrowing, no cast")
     ggf = person.father.father.father

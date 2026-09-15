@@ -120,6 +120,33 @@ The backend serializes each entity to JSON-LD before inserting it into the RDF g
 
 ---
 
+## Querying a SPARQL backend
+
+`SparqlResolver`, `LocalSparqlResolver` and `WikiDataSparqlResolver` translate
+the query DSL into SPARQL, so `Model[Model.field == value]` reaches the store:
+
+```python
+from oold.backend.sparql import WikiDataSparqlResolver
+from oold.backend.interface import SetResolverParam, set_resolver
+
+set_resolver(SetResolverParam(iri="Item", resolver=WikiDataSparqlResolver()))
+Person[Person.name == "Tim Berners-Lee"]
+```
+
+`eq`, `ne`, `lt`, `le`, `gt`, `ge` and `&` are supported. Anything else raises
+rather than returning the wrong rows. The predicate and the literal are taken
+from the model's own JSON-LD context, so a term scoped to a language produces a
+language-tagged literal and one with an `@type` produces a typed one.
+
+`WikiDataSparqlResolver` additionally constrains matches to the model's class -
+a label matches more than one kind of thing.
+
+!!! note "Public endpoints want a user agent"
+    Wikidata answers the SPARQLWrapper default with
+    `429 Aggressively rate-limiting to 1 req / min`, which looks like an outage
+    rather than a policy. The resolvers send a descriptive `user_agent` by
+    default; override it with your own tool name and contact URL.
+
 ## Multiple backends
 
 Register different backends for different IRI prefixes:

@@ -81,7 +81,6 @@ class SimpleDictDocumentStore(Backend):
         context: dict | None = None,
         data: dict[str, dict] | None = None,
     ) -> set[str]:
-        print("QUERY", query)
         if data is None:
             data = self._store
         if isinstance(query, Condition):

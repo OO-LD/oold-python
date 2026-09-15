@@ -1,0 +1,9 @@
+{
+  "include": [
+    "."
+  ],
+  "extraPaths": [
+    "../../src"
+  ],
+  "typeCheckingMode": "basic"
+}

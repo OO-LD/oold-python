@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import sys
 import types
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
@@ -229,21 +230,35 @@ def _namespace_annotations(namespace: dict) -> dict:
     generated ``T.model_validate("<iri>")`` default was evaluated on every
     construction, exactly what stripping it exists to prevent.
 
+    The dict is still there when the model's module uses ``from __future__
+    import annotations``, so it wins when non-empty. Otherwise the annotate
+    function is reached through ``annotationlib``, whose accessor hides the
+    namespace key - which was spelled ``__annotate__`` early in 3.14 and
+    ``__annotate_func__`` later, so reading it directly works on one and not the
+    other.
+
     FORWARDREF format, because a link annotation names its target by string more
     often than not and VALUE would raise on the unresolved name.
     """
     annotations = namespace.get("__annotations__")
-    if annotations is not None:
+    if annotations:
         return annotations
-    annotate = namespace.get("__annotate__")
+    if sys.version_info < (3, 14):  # before PEP 649 the dict is the only source
+        return annotations or {}
+    import annotationlib
+
+    getter = getattr(annotationlib, "get_annotate_from_class_namespace", None) or getattr(
+        annotationlib, "get_annotate_function", None
+    )
+    annotate = getter(namespace) if getter is not None else None
     if annotate is None:
-        return {}
-    for fmt in (2, 1):  # annotationlib.Format.FORWARDREF, then VALUE
-        try:
-            return annotate(fmt) or {}
-        except Exception:  # noqa: S112 - an unsupported format, try the next
-            continue
-    return {}
+        annotate = namespace.get("__annotate_func__") or namespace.get("__annotate__")
+    if annotate is None:
+        return annotations or {}
+    try:
+        return annotationlib.call_annotate_function(annotate, format=annotationlib.Format.FORWARDREF) or {}
+    except Exception:
+        return annotations or {}
 
 
 def _default_iris(info: Any) -> Any:

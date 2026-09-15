@@ -7,6 +7,177 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v1.0.0 (2026-09-15)
+
+### Bug Fixes
+
+- Aliases, default_factory and registration in the notation module
+  ([`4eda165`](https://github.com/OO-LD/oold-python/commit/4eda16566213170fc15324dc80326607cbff17bb))
+
+- Equality no longer depends on whether a link was resolved
+  ([`baea692`](https://github.com/OO-LD/oold-python/commit/baea692cee047d9909eb83ab7056ab84d78dc114))
+
+- Link annotations no longer force a None arm on every dereference
+  ([`09d1c18`](https://github.com/OO-LD/oold-python/commit/09d1c188f0bf011701140b57b21e032f94cde3c8))
+
+- Preserve declared default IRIs and repair link serialisation
+  ([`fac1ef7`](https://github.com/OO-LD/oold-python/commit/fac1ef71a3d553059dcb0a6ae99d59b5db6faca6))
+
+- Reach the annotate function through annotationlib
+  ([`3f36c92`](https://github.com/OO-LD/oold-python/commit/3f36c92855671f02524e7d865a764ec1f080b3ae))
+
+- Read class annotations under PEP 649 deferred evaluation
+  ([`cbc1c98`](https://github.com/OO-LD/oold-python/commit/cbc1c985528e061e7b0bbe959fe1c134daefc2ca))
+
+- Restore legacy behaviour the descriptor binding did not reproduce
+  ([`6fb1076`](https://github.com/OO-LD/oold-python/commit/6fb10768d2258600f32d07a86bbf4df3fe94ee33))
+
+- Shared Field reuse, Annotated defaults, equality and type arrays
+  ([`38d81b0`](https://github.com/OO-LD/oold-python/commit/38d81b05744c96a40cf954afdfdcacc744285f1a))
+
+- Stop resolution failures being hidden, and link mutations being lost
+  ([`91e136f`](https://github.com/OO-LD/oold-python/commit/91e136f57597fa496227435c673ccc77ae4f7b8b))
+
+- Support generated-package declaration shapes in the descriptor binding
+  ([`d8dbac9`](https://github.com/OO-LD/oold-python/commit/d8dbac9ca0a5b14c26ba58c23fba040d83e7e93f))
+
+- **examples**: Benchmark the legacy binding, not the new one twice
+  ([`1e5721c`](https://github.com/OO-LD/oold-python/commit/1e5721ceb64aef5a12cb32829bd6a22f8948e009))
+
+- **examples**: Make wiki_data.py run against the live endpoint
+  ([`8a668a4`](https://github.com/OO-LD/oold-python/commit/8a668a4cd07ba99b73c63b2f07828454c4651cb8))
+
+- **examples**: Read name from rdfs:label, not the Commons category
+  ([`14a8fd5`](https://github.com/OO-LD/oold-python/commit/14a8fd59e5d94b8549966ae6d957598bb01604db))
+
+- **experimental**: Lossless de-serialisation of union link arms
+  ([`ce8eb21`](https://github.com/OO-LD/oold-python/commit/ce8eb217d4f82db57420b770523b57917cbcfc2c))
+
+- **typing**: Make the binding swap visible to a type checker
+  ([`80e8e99`](https://github.com/OO-LD/oold-python/commit/80e8e99c4246ec7f94566e2b1bf3ccb6ffb5adaf))
+
+- **v1**: Encode non-JSON types in to_json
+  ([`d96476c`](https://github.com/OO-LD/oold-python/commit/d96476cbf6139a38c2e44cb301da2a2f83cf3413))
+
+- **v1**: Register full class IRI set and share the type registry
+  ([`9cb6f5f`](https://github.com/OO-LD/oold-python/commit/9cb6f5f9672fda0c85385bf5e3d9460c99895e50))
+
+### Chores
+
+- Ignore .vscode, node_modules and .claude
+  ([`221d88d`](https://github.com/OO-LD/oold-python/commit/221d88d3bfdcf8af746acfd128be171a7e5f9d71))
+
+- Tell deptry annotationlib is stdlib from 3.14
+  ([`2458473`](https://github.com/OO-LD/oold-python/commit/24584736e3b56ea3c14435ad608f4f5c8be0c335))
+
+### Documentation
+
+- Correct stale claims and tabulate notation support
+  ([`0abd4c4`](https://github.com/OO-LD/oold-python/commit/0abd4c43ea4f14039fd098e3aaff338cd8bf8047))
+
+- Name the recommended link notation, and mirror the v1 binding swap
+  ([`df13e87`](https://github.com/OO-LD/oold-python/commit/df13e87c44cc978ba4486160df2c640b09faaa90))
+
+- Record the downstream verification results
+  ([`100f694`](https://github.com/OO-LD/oold-python/commit/100f6949898d7c7fb09815835475e0f45a4ca90c))
+
+- Record the metaclass identity requirement for the replacement
+  ([`c7af84c`](https://github.com/OO-LD/oold-python/commit/c7af84c6d289f507d320d5858577f41d437b50d4))
+
+- **validation**: Correct how pyld actually fails on each count
+  ([#150](https://github.com/OO-LD/oold-python/pull/150),
+  [`4556612`](https://github.com/OO-LD/oold-python/commit/455661251a7ca5681608a0c2391dd77ae0e33775))
+
+- **validation**: Document the fault status in the how-to
+  ([#152](https://github.com/OO-LD/oold-python/pull/152),
+  [`6b31fd3`](https://github.com/OO-LD/oold-python/commit/6b31fd37af1c9c97b9a4aecb5d3583f9aa30ccf6))
+
+- **validation**: Give the context walker a true justification
+  ([#150](https://github.com/OO-LD/oold-python/pull/150),
+  [`4556612`](https://github.com/OO-LD/oold-python/commit/455661251a7ca5681608a0c2391dd77ae0e33775))
+
+- **validation**: State what --offline pins and what nothing pins
+  ([#149](https://github.com/OO-LD/oold-python/pull/149),
+  [`abcad76`](https://github.com/OO-LD/oold-python/commit/abcad7665a235169eab7465e16f36b4aefda92e4))
+
+### Features
+
+- Carry the typed query subscription into the descriptor binding
+  ([`5774fcd`](https://github.com/OO-LD/oold-python/commit/5774fcd49964302fee5b36c8aa7dbfe0a09a6c37))
+
+- Declare link optionality in the type parameter
+  ([`cc8470d`](https://github.com/OO-LD/oold-python/commit/cc8470d6aabfd1ce5baa871a2b35b00c8088df98))
+
+- Derive x-oold-range from the link annotation
+  ([`d66f037`](https://github.com/OO-LD/oold-python/commit/d66f037eb6dc20763935486d5399e02f3ab40de2))
+
+- Extend the binding switch to pydantic v1
+  ([`15ab140`](https://github.com/OO-LD/oold-python/commit/15ab140855404d0931f1a500799841ca2b8c0388))
+
+- Make the descriptor binding the default
+  ([`3a4a98a`](https://github.com/OO-LD/oold-python/commit/3a4a98a2bfa25a1df7776ed96e03777292190d5f))
+
+- Make the descriptor binding the default and drop AutoLinkedModel
+  ([`57389a3`](https://github.com/OO-LD/oold-python/commit/57389a33fdf97df924273eb34677c6813cc2b4a0))
+
+- OOLD_LINKS=0 runs models as plain pydantic
+  ([`042d9a2`](https://github.com/OO-LD/oold-python/commit/042d9a2cb9f5c1fac953866e2fe05bb52021fd10))
+
+- OoldField(required=True) carries link requiredness
+  ([`b20175a`](https://github.com/OO-LD/oold-python/commit/b20175a03a0e1136da9ecd7d5a168c7e337ae58a))
+
+- Opt-in descriptor binding via OOLD_DESCRIPTOR_BINDING
+  ([`67ac41b`](https://github.com/OO-LD/oold-python/commit/67ac41b63e00618330436324005b2ad6700f85cf))
+
+- Public type registry API
+  ([`5f97f94`](https://github.com/OO-LD/oold-python/commit/5f97f94a6bb5e37f431559e01a0fff6856d1e877))
+
+- Raise mandatory-link failures on access, and translate the DSL to SPARQL
+  ([`b126971`](https://github.com/OO-LD/oold-python/commit/b126971e0ceb732d7259712f67631ab57f55b28a))
+
+- Type link fields in both directions via Link[T] / LinkList[T]
+  ([`b33b5a7`](https://github.com/OO-LD/oold-python/commit/b33b5a79633b603b3ecc396e007632c6e21e698c))
+
+- **experimental**: Downstream API parity layer for the descriptor binding
+  ([`a96a91b`](https://github.com/OO-LD/oold-python/commit/a96a91bfd2c2811ecbadbe385782a62b45f3c159))
+
+- **experimental**: Graph-object binding prototypes and benchmarks
+  ([`e55c64f`](https://github.com/OO-LD/oold-python/commit/e55c64fbb1b46765e3ca3e28eb1e7777b59d7f31))
+
+- **experimental**: OoldField() without arguments infers the link target
+  ([`b2c62e5`](https://github.com/OO-LD/oold-python/commit/b2c62e5996de18f1568fbebd853d6841303f2b51))
+
+- **experimental**: Pydantic v1 descriptor binding
+  ([`c41ee9c`](https://github.com/OO-LD/oold-python/commit/c41ee9cca2aaf34f878374f548e38a919877f8e9))
+
+- **experimental**: Share the type registry with oold.model._types
+  ([`d5a5d64`](https://github.com/OO-LD/oold-python/commit/d5a5d64a19859d6082b2691ac64acea12c4181b7))
+
+### Refactoring
+
+- One link descriptor and one construction guard for both versions
+  ([`16ffdb2`](https://github.com/OO-LD/oold-python/commit/16ffdb22c47b5b8ebe889124c914a651adc34a4a))
+
+- Promote the descriptor binding out of experimental
+  ([`562419a`](https://github.com/OO-LD/oold-python/commit/562419aa179b6b24f92f346f3e50a368a43f4587))
+
+- Remove dead code and the duplication behind it
+  ([`93f18a1`](https://github.com/OO-LD/oold-python/commit/93f18a14e4554636fd617d298705bca2f6f96d46))
+
+- Share the downstream API surface between v1 and v2
+  ([`66b3292`](https://github.com/OO-LD/oold-python/commit/66b329290a2e6b63bbdde9ecf22c78626baad8b4))
+
+### Testing
+
+- **validation**: Check context equality over every schema, not thirteen
+  ([#153](https://github.com/OO-LD/oold-python/pull/153),
+  [`d47f39e`](https://github.com/OO-LD/oold-python/commit/d47f39e95a748531f15eca4b3bbf1de9159bff7d))
+
+- **validation**: Pin the pyld equivalence the docstring argues from
+  ([#150](https://github.com/OO-LD/oold-python/pull/150),
+  [`4556612`](https://github.com/OO-LD/oold-python/commit/455661251a7ca5681608a0c2391dd77ae0e33775))
+
+
 ## v0.20.0 (2026-09-11)
 
 ### Features

@@ -180,7 +180,8 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
             info._attributes_set = attributes_set
         return info
 
-    for field_name, annotation in namespace.get("__annotations__", {}).items():
+    annotations = _namespace_annotations(namespace)
+    for field_name, annotation in annotations.items():
         info = namespace.get(field_name)
         if _is_link_field_info(info):
             _record_default(field_name, info)
@@ -205,6 +206,11 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
                 _record_default(field_name, meta)
         rebuilt = [_neutralised(m) if _is_link_field_info(m) else m for m in args[1:]]
         if rebuilt != list(args[1:]):
+            # materialise the dict before writing: under PEP 649 the namespace
+            # has only __annotate__, and an explicit __annotations__ takes
+            # precedence over it
+            if "__annotations__" not in namespace:
+                namespace["__annotations__"] = dict(annotations)
             namespace["__annotations__"][field_name] = Annotated[(args[0], *rebuilt)]
             if field_name not in namespace:
                 # Annotated-only declarations are required at the pydantic
@@ -212,6 +218,32 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
                 # same absent default the assigned form gets.
                 namespace[field_name] = None
     return defaults
+
+
+def _namespace_annotations(namespace: dict) -> dict:
+    """The annotations of a class body being built, on any Python version.
+
+    Python 3.14 defers them (PEP 649): the namespace carries an ``__annotate__``
+    function instead of an ``__annotations__`` dict, so reading the dict found
+    nothing and every link default was left in place - which on 3.14 meant the
+    generated ``T.model_validate("<iri>")`` default was evaluated on every
+    construction, exactly what stripping it exists to prevent.
+
+    FORWARDREF format, because a link annotation names its target by string more
+    often than not and VALUE would raise on the unresolved name.
+    """
+    annotations = namespace.get("__annotations__")
+    if annotations is not None:
+        return annotations
+    annotate = namespace.get("__annotate__")
+    if annotate is None:
+        return {}
+    for fmt in (2, 1):  # annotationlib.Format.FORWARDREF, then VALUE
+        try:
+            return annotate(fmt) or {}
+        except Exception:  # noqa: S112 - an unsupported format, try the next
+            continue
+    return {}
 
 
 def _default_iris(info: Any) -> Any:

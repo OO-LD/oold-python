@@ -197,6 +197,9 @@ traitlets = "traitlets"
 nicegui = "nicegui"
 
 [tool.deptry.per_rule_ignores]
+# stdlib from 3.14 (PEP 649); deptry resolves against the running interpreter,
+# which is older, so it reads the version-gated import as a missing dependency.
+DEP001 = ["annotationlib"]
 # Declared in UI extras and required at runtime by the panel/jupyter
 # integrations, but not imported directly from `src`.
 DEP002 = ["jupyter_bokeh", "ipykernel"]

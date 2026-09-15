@@ -6,6 +6,8 @@ modules using the same ``type`` default shadow each other). Both have broken a
 run already, which is why the fixtures below always restore.
 """
 
+import importlib.util
+
 import pytest
 
 from oold.backend import interface
@@ -58,3 +60,27 @@ def _restore_global_registries():
     for registry, snapshot in zip(registries, saved, strict=True):
         registry.clear()
         registry.update(snapshot)
+
+
+def pytest_configure(config):
+    """Register the ``benchmark`` mark so it is not an unknown-mark warning."""
+    config.addinivalue_line("markers", "benchmark(**kwargs): pytest-benchmark group settings")
+
+
+if not importlib.util.find_spec("pytest_benchmark"):
+
+    @pytest.fixture
+    def benchmark():
+        """Run the function once when pytest-benchmark is not installed.
+
+        Without it every test taking this fixture *errors out* rather than
+        failing, and an error is easy to read as environmental. Two real
+        regressions sat behind those errors until CI - which does have the
+        plugin - ran them. Locally the timing is worthless, but the assertions
+        around it are the point.
+        """
+
+        def _run(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        return _run

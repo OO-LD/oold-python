@@ -129,16 +129,19 @@ def links_enabled() -> bool:
     return os.environ.get("OOLD_LINKS", "1") != "0"
 
 
-def _neutralise_link_defaults(namespace: dict) -> None:
+def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
     """Make link fields optional and defaultless at the pydantic level.
 
     Link values are routed around pydantic - the descriptor holds them - so the
-    field is always absent from the payload pydantic validates. Whatever default
-    the declaration carries would therefore be evaluated on every construction,
-    and generated models spell that default as ``T.model_validate("<iri>")``,
-    which raises: a model cannot be parsed from an IRI string. The descriptor is
-    the only source of truth for the value, so the pydantic-level default is
-    dead weight and is dropped.
+    field is always absent from the payload pydantic validates, and a default
+    left in place would be evaluated on every construction. Generated models
+    spell a default IRI as ``T.model_validate("<iri>")``, which resolves through
+    the backend, so leaving it would also turn every construction into a
+    synchronous fetch.
+
+    The IRI itself is not dead weight, though - dropping it outright lost the
+    declared default. It is recorded in ``__link_defaults__`` and handed to the
+    descriptor on construction, so the link resolves lazily, like any other.
 
     This runs on the class namespace rather than on ``model_fields``, because by
     the time ``__pydantic_init_subclass__`` sees the fields the core schema -
@@ -146,11 +149,18 @@ def _neutralise_link_defaults(namespace: dict) -> None:
     """
     import copy as _copy
 
+    defaults: dict[str, Any] = {}
+
     def _is_link_field_info(info: Any) -> bool:
         extra = getattr(info, "json_schema_extra", None)
         if not isinstance(extra, dict):
             return False
         return bool(extra.get("x-oold-range") or extra.get("range") or extra.get("x-oold-link"))
+
+    def _record_default(field_name: str, info: Any) -> None:
+        iris = _default_iris(info)
+        if iris is not None:
+            defaults[field_name] = iris
 
     def _neutralised(info: Any) -> Any:
         # Copy first: a FieldInfo can be shared between models (a module-level
@@ -173,6 +183,7 @@ def _neutralise_link_defaults(namespace: dict) -> None:
     for field_name, annotation in namespace.get("__annotations__", {}).items():
         info = namespace.get(field_name)
         if _is_link_field_info(info):
+            _record_default(field_name, info)
             namespace[field_name] = _neutralised(info)
             continue
         if field_name not in namespace and _is_link_annotation(annotation):
@@ -189,6 +200,9 @@ def _neutralise_link_defaults(namespace: dict) -> None:
         if get_origin(annotation) is not Annotated:
             continue
         args = get_args(annotation)
+        for meta in args[1:]:
+            if _is_link_field_info(meta):
+                _record_default(field_name, meta)
         rebuilt = [_neutralised(m) if _is_link_field_info(m) else m for m in args[1:]]
         if rebuilt != list(args[1:]):
             namespace["__annotations__"][field_name] = Annotated[(args[0], *rebuilt)]
@@ -197,6 +211,32 @@ def _neutralise_link_defaults(namespace: dict) -> None:
                 # level; the value is routed to the descriptor, so give it the
                 # same absent default the assigned form gets.
                 namespace[field_name] = None
+    return defaults
+
+
+def _default_iris(info: Any) -> Any:
+    """The IRI(s) a link field declares as its default, or ``None``.
+
+    Two shapes reach here. A plain ``default="ex:b"`` is the IRI already.
+    Generated code instead emits
+    ``default_factory=lambda: Bar.model_validate("ex:b")``, where the IRI is a
+    constant in the lambda body - calling it would resolve through the backend,
+    which is exactly the eager fetch the binding exists to avoid, so the
+    constant is read instead. Anything else contributes no default.
+    """
+    default = getattr(info, "default", None)
+    if isinstance(default, str) and default:
+        return default
+    if isinstance(default, list) and default and all(isinstance(v, str) and v for v in default):
+        return list(default)
+    factory = getattr(info, "default_factory", None)
+    code = getattr(factory, "__code__", None)
+    if code is None or code.co_argcount:
+        return None
+    iris = [c for c in code.co_consts if isinstance(c, str) and c]
+    if not iris:
+        return None
+    return iris[0] if len(iris) == 1 else iris
 
 
 class OoldExtraModel(BaseModel):
@@ -394,13 +434,18 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
     """
 
     def __new__(mcs, name, bases, namespace, **kwargs):
+        defaults: dict[str, Any] = {}
         if links_enabled():
-            _neutralise_link_defaults(namespace)
+            defaults = _neutralise_link_defaults(namespace)
         _Constructing.enter()
         try:
-            return super().__new__(mcs, name, bases, namespace, **kwargs)
+            cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
             _Constructing.leave()
+        if defaults:
+            # a subclass may add defaults without restating the inherited ones
+            cls.__link_defaults__ = {**getattr(cls, "__link_defaults__", {}), **defaults}
+        return cls
 
     def __getattr__(cls, name: str) -> Any:
         # Never call getattr(cls, ...) here: cls.model_fields is a property
@@ -1114,6 +1159,7 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     __link_fields__: ClassVar[dict[str, _AutoLink]] = {}
     __link_aliases__: ClassVar[dict[str, str]] = {}
     __required_links__: ClassVar[tuple[str, ...]] = ()
+    __link_defaults__: ClassVar[dict[str, Any]] = {}
 
     @classmethod
     def oold_query(cls, item: Any) -> Any:
@@ -1260,6 +1306,12 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         # truthful rather than a lie about a value that is really None.
         for _name in link_fields:
             self.__dict__.pop(_name, None)
+        # A link field's pydantic default is stripped, so seed the declared IRI
+        # here - the link then resolves lazily like any other, instead of the
+        # default being lost or fetched on every construction.
+        for _name, _iris in type(self).__link_defaults__.items():
+            if _name in link_fields and _name not in link_data:
+                link_data[_name] = _iris
         for key, value in link_data.items():
             self._set_link(key, value)
         missing = [name for name in type(self).__required_links__ if not self._links.get(name)]
@@ -1339,7 +1391,21 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
 
     @model_serializer(mode="wrap")
     def _serialize_links(self, handler: Any, info: SerializationInfo) -> dict[str, Any]:
-        d = handler(self)
+        # Reading a link caches the resolved object in __dict__, where pydantic's
+        # own serializer then finds it and serialises it as the declared type.
+        # For a to-many link that could not be fully resolved the cache holds a
+        # None among the objects, and `list[Bar]` has no way to render it:
+        # serialising after such a read died with "type object 'NoneType' has no
+        # attribute 'model_fields'". The link keys are replaced below in any
+        # case, so the cache is hidden from the handler rather than repaired.
+        cached = {}
+        for _name in type(self).__link_fields__:
+            if _name in self.__dict__:
+                cached[_name] = self.__dict__.pop(_name)
+        try:
+            d = handler(self)
+        finally:
+            self.__dict__.update(cached)
         fields = type(self).model_fields
         by_alias = bool(getattr(info, "by_alias", False))
         for name, descr in type(self).__link_fields__.items():
@@ -1359,13 +1425,18 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
                 d[name_out] = iris
                 continue
             stored = self._links.get(name)
-            if stored is None and name not in self._links:
-                # Never set: emit the key holding None, as the legacy binding
-                # does - but only when the caller has not asked for exactly this
-                # to be left out. Writing it unconditionally runs *after*
-                # handler() has applied the exclusions, which would leak an
-                # explicit null past exclude_none, exclude_unset,
-                # exclude_defaults and exclude={...} into every stored document.
+            if stored is None:
+                # No value: never set, or explicitly cleared with `= None`.
+                # Those are the same statement, and the legacy binding emits
+                # neither - so distinguishing them left an explicit null behind
+                # after a caller had cleared the link.
+                #
+                # The key holds None, as the legacy binding does, but only when
+                # the caller has not asked for exactly this to be left out.
+                # Writing it unconditionally runs *after* handler() has applied
+                # the exclusions, which would leak an explicit null past
+                # exclude_none, exclude_unset, exclude_defaults and
+                # exclude={...} into every stored document.
                 d.pop(name, None)
                 if not _excluded(info, name):
                     d[name_out] = None

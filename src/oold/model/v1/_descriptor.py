@@ -31,6 +31,7 @@ from oold.model._descriptor import (
     LinkResultList,
     _AutoLink,
     _Constructing,
+    _default_iris,
 )
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
@@ -86,17 +87,20 @@ def _register_class_v1(cls: type) -> None:
             _TYPE_REGISTRY[value] = cls
 
 
-def _neutralise_field(field: Any) -> None:
+def _neutralise_field(field: Any) -> Any:
     """Make a link field optional and defaultless at the pydantic level.
 
     Link values are routed around pydantic - the descriptor holds them - so the
-    field is always absent from the payload pydantic validates. Whatever default
-    the declaration carries would therefore be evaluated on every construction,
-    and generated models spell that default as ``T.parse_obj("<iri>")``, which
-    raises: a model cannot be parsed from an IRI string. The descriptor is the
-    only source of truth for the value, so the pydantic-level default is dead
-    weight and is dropped.
+    field is always absent from the payload pydantic validates, and a default
+    left in place would be evaluated on every construction. Generated models
+    spell a default IRI as ``T.parse_obj("<iri>")``, which resolves through the
+    backend, so leaving it would also turn every construction into a
+    synchronous fetch.
+
+    Returns the declared default IRI(s) so the caller can hand them to the
+    descriptor: dropping them outright lost the declared default.
     """
+    iris = _default_iris(getattr(field, "field_info", None)) or _default_iris(field)
     field.required = False
     field.allow_none = True
     field.default = None
@@ -105,6 +109,7 @@ def _neutralise_field(field: Any) -> None:
     if info is not None:
         info.default = None
         info.default_factory = None
+    return iris
 
 
 class _AutoLinkV1(_AutoLink):
@@ -131,8 +136,10 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         finally:
             _Constructing.leave()
         links: dict[str, _AutoLinkV1] = {}
+        defaults: dict[str, Any] = {}
         for base in reversed(cls.__mro__):
             links.update(getattr(base, "__link_fields__", {}) or {})
+            defaults.update(getattr(base, "__link_defaults__", {}) or {})
         for fname, field in getattr(cls, "__fields__", {}).items():
             extra = getattr(field.field_info, "extra", None) or {}
             if not (extra.get("x-oold-range") or extra.get("range") or extra.get("x-oold-link")):
@@ -155,8 +162,11 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
             )
             setattr(cls, fname, descr)
             links[fname] = descr
-            _neutralise_field(field)
+            default_iris = _neutralise_field(field)
+            if default_iris is not None:
+                defaults[fname] = default_iris
         cls.__link_fields__ = links
+        cls.__link_defaults__ = defaults
         _register_class_v1(cls)
         return cls
 
@@ -189,6 +199,7 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
 
     _links: dict = PrivateAttr(default_factory=dict)
     __link_fields__: dict = {}
+    __link_defaults__: dict = {}
 
     class Config:
         arbitrary_types_allowed = True
@@ -234,6 +245,11 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         # None for to-one.
         for _name in link_fields:
             self.__dict__.pop(_name, None)
+        # seed the declared default IRI, which the neutralisation above took off
+        # the field: the link then resolves lazily, like any other
+        for _name, _iris in type(self).__link_defaults__.items():
+            if _name in link_fields and _name not in link_data:
+                link_data[_name] = _iris
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
         missing = [name for name, d in link_fields.items() if d.required_iri and not self._links.get(name)]

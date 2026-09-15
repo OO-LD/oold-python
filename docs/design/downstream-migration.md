@@ -155,10 +155,12 @@ class QuantityValue(OswBaseModel, metaclass=QuantityValueMetaclass): ...
 Downstream **imports and subclasses oold's metaclass**, aliased to a name that
 makes it look like pydantic's. Replacing only `LinkedBaseModel` leaves
 `LinkedBaseModelMetaClass` pointing at the old class, so `QuantityValue`'s
-metaclass is no longer a subclass of its base's and the import dies with::
+metaclass is no longer a subclass of its base's and the import dies with:
 
-    TypeError: metaclass conflict: the metaclass of a derived class must be a
-    (non-strict) subclass of the metaclasses of all its bases
+```text
+TypeError: metaclass conflict: the metaclass of a derived class must be a
+(non-strict) subclass of the metaclasses of all its bases
+```
 
 The whole package tree fails to import - not a subtle behavioural drift but a
 hard failure at collection time. So `LinkedBaseModelMetaClass` is **part of the
@@ -182,10 +184,12 @@ from `oold`:
 | `BaseController` | 1 |
 
 `_types` - the *private* registry - is imported more often than the base class
-itself, and it is **written to**::
+itself, and it is **written to**:
 
-    from oold.model import _types
-    _types[SomeClass.get_cls_iri()] = SomeClass
+```python
+from oold.model import _types
+_types[SomeClass.get_cls_iri()] = SomeClass
+```
 
 both in shipped package code and in examples. A replacement that keeps its own
 registry dict does not see those entries, so polymorphic resolution silently

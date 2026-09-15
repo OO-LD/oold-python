@@ -282,3 +282,60 @@ def test_oold_field_accepts_a_default_factory():
         links: list[Target] = OoldField(default_factory=list, range="Target")
 
     assert M(id="ex:m").link_iris("links") == []
+
+
+def test_a_declared_default_iri_survives(linked_store):
+    """The pydantic-level default has to be stripped - it is evaluated on every
+    construction and generated code spells it as a backend call - but the IRI it
+    names is the declaration, not dead weight. Dropping it outright lost the
+    default, and the field read back as None."""
+    linked_store("ex", {"ex:dflt": {"id": "ex:dflt", "label": "default target"}})
+
+    class M(LinkedBaseModel):
+        id: str
+        # exactly what datamodel-code-generator emits for `"default": "ex:dflt"`
+        ref: Target | None = Field(
+            default_factory=lambda: Target.model_validate("ex:dflt"),
+            json_schema_extra={"range": "Target"},
+        )
+
+    M.model_rebuild()
+    m = M(id="ex:m")
+    assert m.link_iris("ref") == "ex:dflt"  # recorded without resolving
+    assert m.ref is not None and m.ref.label == "default target"
+    assert m.to_json()["ref"] == "ex:dflt"
+    # an explicit value still wins over the default
+    assert M(id="ex:m", ref="ex:other").link_iris("ref") == "ex:other"
+
+
+def test_clearing_a_link_removes_it_from_the_payload():
+    """`m.one = None` and "never set" are the same statement. Treating them
+    differently left an explicit null behind after a caller had cleared it."""
+
+    class M(LinkedBaseModel):
+        id: str
+        one: Target | None = Field(None, json_schema_extra={"range": "Target"})
+
+    M.model_rebuild()
+    m = M(id="ex:m", one="ex:1")
+    m.one = None
+    assert m.one is None
+    assert "one" not in m.to_json()
+
+
+def test_serialising_after_a_partial_resolution(linked_store):
+    """Reading a to-many link caches the result in __dict__, where pydantic's
+    own serializer finds it. When one entry could not be resolved the cache
+    holds a None among the objects, and `list[Target]` cannot render it -
+    to_json() died with "type object 'NoneType' has no attribute
+    model_fields"."""
+    linked_store("ex", {"ex:ok": {"id": "ex:ok", "label": "resolvable"}})
+
+    class M(LinkedBaseModel):
+        id: str
+        refs: list[Target] | None = Field(None, json_schema_extra={"range": "Target"})
+
+    M.model_rebuild()
+    m = M(id="ex:m", refs=["ex:ok", "ex:missing"])
+    assert [r.label if r else None for r in m.refs] == ["resolvable", None]
+    assert m.to_json()["refs"] == ["ex:ok", "ex:missing"]

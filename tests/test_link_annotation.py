@@ -93,8 +93,9 @@ def test_schema_matches_the_plain_spelling():
     reference = {"type": "string", "format": "iri-reference"}
     assert annotated["type"] == plain["type"] == "array"
     assert annotated["items"] == plain["items"] == reference
-    # the annotated form derives the range; the legacy one keeps its own keyword
-    assert annotated["x-oold-range"] == "annot:Person"
+    # neither model declares a $id, so there is no location to derive a range
+    # from; the legacy declaration keeps the keyword it states itself
+    assert "x-oold-range" not in annotated
     assert plain["range"] == "Person"
     # a to-one link is a bare IRI
     assert props(Person)["employer"]["type"] == "string"

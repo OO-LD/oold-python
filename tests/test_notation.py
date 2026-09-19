@@ -11,7 +11,7 @@ inline object and a reference.
 """
 
 import pytest
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
@@ -219,14 +219,34 @@ def test_range_is_derived_from_the_annotation():
     """Presence of ``x-oold-range`` is what makes a property a link, so the
     annotation has to put it there - otherwise the recommended declaration
     emits a schema that does not round-trip through code generation, and the
-    only way to get one is to repeat the target in ``OoldField(range=...)``."""
-    props = _properties(Person)
-    assert props["knows"]["x-oold-range"] == Person.get_cls_iri()
-    assert props["friends"]["x-oold-range"] == Person.get_cls_iri()
-    assert props["employer"]["x-oold-range"] == Org.get_cls_iri()
-    assert props["location"]["x-oold-range"] == Location.get_cls_iri()
+    only way to get one is to repeat the target in ``OoldField(range=...)``.
+
+    It is the target's **location** - its ``$id`` - because a consumer
+    dereferences it: code generation fetches the schema, a form editor renders
+    the targets it allows.
+    """
+
+    class Located(OoldModel):
+        model_config = ConfigDict(json_schema_extra={"$id": "https://example.org/NLocated"})
+        id: str
+        type: str | None = "ex:NLocated"
+        peer: Link["Located"] = OoldField()
+
+    Located.model_rebuild()
+    props = _properties(Located)
+    assert props["peer"]["x-oold-range"] == "https://example.org/NLocated"
     # the marker was a stand-in for the range; it goes once the range is there
-    assert "x-oold-link" not in props["knows"]
+    assert "x-oold-link" not in props["peer"]
+
+
+def test_a_class_that_does_not_say_where_its_schema_lives_has_no_range():
+    """get_cls_iri() answers identity - it merges the $id with the type field's
+    defaults, which are the instances' rdf:type. Deriving a range from it
+    published identities with nothing to fetch at them. Without a $id there is
+    no location to publish; `format` still marks the property a reference."""
+    props = _properties(Person)  # declares a type default, no $id
+    assert "x-oold-range" not in props["knows"]
+    assert props["knows"]["items"]["format"] == "iri-reference"
 
 
 def test_an_explicit_range_is_not_overwritten():

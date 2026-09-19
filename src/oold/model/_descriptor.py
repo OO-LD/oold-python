@@ -1004,21 +1004,29 @@ class _AutoLink:
         return target
 
     def range_iri(self, owner: Any = None) -> Any:
-        """The target's schema IRI, for deriving ``x-oold-range``.
+        """Where the target's schema lives, for deriving ``x-oold-range``.
 
         ``Link[T]`` already names the target, so repeating it in
         ``OoldField(range=...)`` states the same thing twice and lets the two
         disagree. The schema is derived from the annotation instead.
+
+        A **location**, not an identity. A consumer dereferences this: code
+        generation fetches the target schema, and a form editor renders the
+        targets it allows. ``get_cls_iri()`` answers identity - it merges the
+        ``$id`` with the ``type`` field's default(s), which are the instances'
+        rdf:type - so deriving the range from it published identities with
+        nothing to fetch at them, such as a Wikidata class IRI. Where the two
+        coincide nothing changes; where they differ, only ``$id`` is right.
+
+        A class that does not say where its schema lives contributes no range.
+        The property is still marked a reference by its ``format`` - the second
+        signal in ``OOLD-EXT-68fa``.
         """
         target = self._target_cls(owner)
-        get_iri = getattr(target, "get_cls_iri", None)
-        if get_iri is None:
+        extra = getattr(target, "model_config", {}).get("json_schema_extra") if target is not None else None
+        if callable(extra) or not isinstance(extra, dict):
             return None
-        try:
-            return get_iri() or None
-        except Exception:
-            # a target that cannot name itself simply contributes no range
-            return None
+        return extra.get("$id") or None
 
     def __get__(self, obj: Any, objtype: Any = None) -> Any:
         if obj is None:

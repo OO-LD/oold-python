@@ -281,11 +281,15 @@ def test_required_iri_is_still_accepted():
     assert Old.__link_fields__["manager"].required_iri is True
 
 
-def test_a_link_annotation_without_a_default_is_required():
-    """No default means required, as it does anywhere else in Python. A link is
-    never required at the pydantic level - its value is routed out before
-    validation - so this used to fail with a misleading "Field required" about
-    a value that had in fact been supplied."""
+def test_a_link_annotation_without_a_default_is_optional():
+    """Links are declared far more often than they are required, so the terse
+    form is the common case.
+
+    Requiredness is explicit because it propagates into resolution: resolving a
+    link constructs the target, so a required link makes every stored document
+    lacking it unconstructible - and a self-referential link, `father`, could
+    then never be satisfied by a real dataset.
+    """
 
     class Bare(OoldModel):
         id: str
@@ -293,6 +297,6 @@ def test_a_link_annotation_without_a_default_is_required():
         manager: Link["Org"]
 
     Bare.model_rebuild()
+    assert Bare(id="ex:b").link_iris("manager") is None  # constructs unset
     assert Bare(id="ex:b", manager="ex:acme").link_iris("manager") == "ex:acme"
-    with pytest.raises(ValueError, match="manager is required"):
-        Bare(id="ex:b")
+    assert Bare.__link_fields__["manager"].required_iri is False

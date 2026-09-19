@@ -189,12 +189,20 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
             namespace[field_name] = _neutralised(info)
             continue
         if field_name not in namespace and _is_link_annotation(annotation):
-            # `manager: Link[Org]` with nothing assigned. Read as Python reads
-            # it - no default means required - but a link cannot be required as
-            # a pydantic field, because its value never reaches validation.
-            # Left alone, every construction failed with a misleading
-            # "Field required" about a value that had in fact been supplied.
-            namespace[field_name] = OoldField(required=True)
+            # `manager: Link[Org]` with nothing assigned. It still needs a field
+            # carrying default=None - a link cannot be required at the pydantic
+            # level, because its value never reaches validation, and left alone
+            # every construction failed with a misleading "Field required" about
+            # a value that had in fact been supplied.
+            #
+            # It is *not* required in the OO-LD sense: that is what
+            # OoldField(required=True) says. Requiredness propagates into
+            # resolution - resolving a link constructs the target - so a
+            # required link makes every stored document lacking it
+            # unconstructible, and a self-referential link could never be
+            # satisfied by a real dataset. Links are declared far more often
+            # than they are required, so the terse form is the common case.
+            namespace[field_name] = OoldField()
             continue
         # A Field() living in Annotated metadata rather than as the assigned
         # value was never seen here, so its default survived and was evaluated

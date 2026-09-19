@@ -938,13 +938,13 @@ def _prune_unreferenced_defs(schema: dict) -> None:
     if not isinstance(defs, dict):
         return
 
-    def referenced(node: Any, skip: str | None = None) -> set:
+    def referenced(node: Any) -> set:
         out: set = set()
         if isinstance(node, dict):
             for key, value in node.items():
                 if key == "$ref" and isinstance(value, str) and value.startswith("#/$defs/"):
                     out.add(value.split("/")[-1])
-                elif not (skip and key == "$defs"):
+                else:
                     out |= referenced(value)
         elif isinstance(node, list):
             for item in node:

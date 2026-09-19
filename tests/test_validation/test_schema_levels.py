@@ -123,3 +123,49 @@ def test_both_levels_validate(tmp_path):
         (tmp_path / f"{name}.json").write_text(json.dumps(schema, indent=2), encoding="utf-8")
     report = validate_schema(tmp_path / "Person.schema.json")
     assert report.passed, failure_reasons(report)
+
+
+def test_a_definition_reached_only_through_another_is_kept():
+    """Reachability is transitive: `$defs.Outer` is referenced from the body and
+    itself references `$defs.Inner`, so neither is dead. Pruning only what the
+    body points at directly would delete Inner and break the schema."""
+    from oold.static import _prune_unreferenced_defs
+
+    schema = {
+        "properties": {"a": {"$ref": "#/$defs/Outer"}},
+        "$defs": {
+            "Outer": {"properties": {"b": {"$ref": "#/$defs/Inner"}}},
+            "Inner": {"type": "string"},
+            "Orphan": {"type": "string"},
+        },
+    }
+    _prune_unreferenced_defs(schema)
+    assert sorted(schema["$defs"]) == ["Inner", "Outer"]
+
+
+def test_defs_disappears_when_nothing_survives():
+    from oold.static import _prune_unreferenced_defs
+
+    schema = {"properties": {}, "$defs": {"Orphan": {"type": "string"}}}
+    _prune_unreferenced_defs(schema)
+    assert "$defs" not in schema
+
+
+def test_the_v1_underscore_spelling_is_normalised_too():
+    """pydantic v1 cannot pass a hyphenated keyword to Field(), so downstream
+    spells it with underscores. Both reach `required` and neither survives."""
+    from oold.static import _state_requiredness_in_the_required_array
+
+    schema = {
+        "properties": {
+            "a": {"type": "string", "x_oold_required_iri": True, "default": None},
+            "b": {"type": "string", "x-oold-required-iri": True},
+            "c": {"type": "string", "default": None},
+        }
+    }
+    _state_requiredness_in_the_required_array(schema)
+    assert sorted(schema["required"]) == ["a", "b"]
+    assert "default" not in schema["properties"]["a"]
+    assert not any(k.startswith(("x-oold-required", "x_oold_required")) for k in schema["properties"]["a"])
+    # an optional property keeps its default and stays out of `required`
+    assert schema["properties"]["c"]["default"] is None

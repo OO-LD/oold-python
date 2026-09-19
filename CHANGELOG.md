@@ -7,6 +7,25 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v1.0.1 (2026-09-19)
+
+### Bug Fixes
+
+- **frame**: Keep reference-valued properties as IRIs
+  ([#161](https://github.com/OO-LD/oold-python/pull/161),
+  [`c8297dc`](https://github.com/OO-LD/oold-python/commit/c8297dcc0ac6bed17fcf60919057d33866d61759))
+
+### Chores
+
+- Classify as Beta
+  ([`c147a05`](https://github.com/OO-LD/oold-python/commit/c147a05f7665f1ede18f6b48c99a5c0540640d9a))
+
+### Documentation
+
+- **examples**: Optional children extension in wiki_data
+  ([`2f372c3`](https://github.com/OO-LD/oold-python/commit/2f372c3f060fa25770b6194642db4eeca905357c))
+
+
 ## v1.0.0 (2026-09-15)
 
 ### Bug Fixes

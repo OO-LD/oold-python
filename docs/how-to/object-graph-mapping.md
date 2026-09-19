@@ -228,6 +228,26 @@ alice.knows[0]        # a Person, not a str
 Nothing changes at runtime - same resolution, same JSON Schema. Only what the
 checker sees changes.
 
+### What a link looks like in the emitted schema
+
+A link serialises to an IRI, and the schema says so:
+
+```json
+"employer": {"type": "string", "x-oold-range": "https://example.org/Organization"},
+"friends":  {"type": "array", "items": {"type": "string"},
+             "x-oold-range": "https://example.org/Person"}
+```
+
+Not a `$ref` to the target. The `$ref` form is what code generation builds so
+that the generated field is `Optional[Organization]` rather than a string;
+published, it would describe a document this library never writes. A union arm
+keeps its union - `str | Location | None` really does accept all three.
+
+Give every link a `@context` term, and `"@type": "@id"` to make the value a
+reference. A strictly array-typed property also needs `"@container": "@set"`,
+or a single-element array compacts back to a bare value and no longer matches
+the schema.
+
 ### Optionality is declared
 
 `Link[T]` reads as `T`, so a chain needs no guard at every hop. `Link[T | None]`
@@ -268,20 +288,34 @@ OoldField(required=None, range=None, link=None, **field_kwargs)
 
 | argument | effect |
 |---|---|
-| `required` | the link must be supplied at construction; omitting it raises `ValueError`. Emitted as `x-oold-required-iri` **and** into the standard `required` array |
+| `required` | the link must be supplied at construction; omitting it raises `ValueError`. Reaches the schema as the standard `required` array, and nothing else |
 | `range` | target schema IRI, emitted as `x-oold-range`. **Do not pass it**: omitted, it is derived from the annotation, which already names the target |
 | `link` | marks the field a link where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
-| `required_iri` | deprecated spelling of `required`, kept because generated packages pass it. Same emitted keyword |
+| `required_iri` | deprecated spelling of `required`, kept because generated packages pass it |
 | `**field_kwargs` | passed to `pydantic.Field` (`alias`, `description`, `default_factory`, ...). `default=None` is supplied unless you pass a `default_factory` |
 
-A link annotation with **no default at all** means required, as it does anywhere
-else in Python:
+Requiredness is always explicit. A link annotation with no default is optional,
+like one with a bare `OoldField()`:
 
 ```python
-manager: Link[Organization]                          # required
-manager: Link[Organization] = OoldField()            # optional
-manager: Link[Organization] = OoldField(required=True)   # required, explicit
+father: Link["Person"]                            # optional
+father: Link["Person"] = OoldField()              # optional
+father: Link["Person"] = OoldField(required=True) # required, explicit
 ```
+
+"No default means required" reads well in plain Python, but requiredness
+propagates into resolution - reading a link constructs the target - so a
+required link makes every stored document lacking it unconstructible. A
+self-referential link like `father` could then never be satisfied by a real
+dataset, and links are declared far more often than they are required.
+
+!!! note "`x-oold-required-iri` is internal"
+    A schema states requiredness through `required` and nothing else.
+    `x-oold-required-iri` is an oold-python annotation on a *field*: it carries
+    the requirement across the point where code generation has to drop the
+    property from `required`, so the generated field is `Optional` - a link can
+    never be required at the pydantic level, because its value is routed out of
+    the payload before validation. It does not appear in a published schema.
 
 ### Requiredness is a field argument, not the annotation
 

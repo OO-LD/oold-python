@@ -12,6 +12,8 @@ from oold.validation.frame import (
     embedded_properties,
     instance_rdf_types,
     is_embed,
+    keyword_alias_keys,
+    reference_properties,
     schema_to_frame,
 )
 from oold.validation.loader import DocumentLoader, describe_jsonld_error
@@ -142,6 +144,118 @@ def test_embedded_properties_ignores_a_scoped_term_that_is_not_a_property_here()
     }
     assert embedded_properties(schema) == []
     assert "amount" not in schema_to_frame(schema, "https://oo-ld.test/x/C.schema.json")
+
+
+def test_reference_properties_detects_each_signal():
+    schema = {
+        "@context": {"works_for": {"@id": "schema:worksFor", "@type": "@id"}},
+        "properties": {
+            "ranged": {"type": "string", "x-oold-range": "Person.schema.json"},
+            "formatted": {"type": "string", "format": "iri-reference"},
+            "works_for": {"type": "string"},
+            "listed": {"type": "array", "items": {"type": "string", "format": "iri"}},
+            "literal": {"type": "string"},
+        },
+    }
+    assert sorted(reference_properties(schema)) == [
+        "formatted",
+        "listed",
+        "ranged",
+        "works_for",
+    ]
+
+
+def test_embedding_wins_where_a_property_carries_both_signals():
+    """A property shaped like an object is an embed whatever its term says."""
+    schema = {
+        "@context": {"address": {"@id": "schema:address", "@type": "@id"}},
+        "properties": {"address": {"type": "object", "properties": {"zip": {}}}},
+    }
+    assert embedded_properties(schema) == ["address"]
+    assert reference_properties(schema) == []
+
+
+def test_a_keyword_alias_never_gets_a_subframe():
+    """``id`` is the node's name, not a predicate.
+
+    Thing.schema.json declares ``id`` with an IRI format while its context aliases it to ``@id``,
+    so the reference signals match. A subframe there writes ``{"@id": {...}}``, which a processor
+    rejects. The alias is declared by the base schema, so it is found through ``allOf``.
+    """
+    schema = {
+        "@context": {"schema": "http://schema.org/"},
+        "allOf": [
+            {
+                "@context": {"id": "@id", "type": "@type"},
+                "properties": {"id": {"type": "string", "format": "iri"}},
+            }
+        ],
+        "properties": {"ref": {"type": "string", "format": "iri-reference"}},
+    }
+    assert keyword_alias_keys(schema) == {"id", "type"}
+    assert reference_properties(schema) == ["ref"]
+    assert "id" not in schema_to_frame(schema, "X.schema.json")
+
+
+def test_schema_to_frame_keeps_reference_valued_properties_as_iris():
+    """The worked example in the specification's #framing section.
+
+    Without the @never subframe a referenced node that carries triples in the same graph is
+    embedded, and the framed document stops validating against the schema it came from.
+    """
+    schema = {
+        "@context": {
+            "address": {"@id": "schema:address", "@context": "Address.schema.json"},
+            "employees": {"@reverse": "schema:worksFor", "@type": "@id"},
+        },
+        "x-oold-instance-rdf-type": ["schema:Organization"],
+        "properties": {
+            "address": {"type": "object", "properties": {"postalCode": {}}},
+            "employees": {
+                "type": "array",
+                "items": {"type": "string", "x-oold-range": "Person.schema.json"},
+            },
+        },
+    }
+    frame = schema_to_frame(schema, "Organization.schema.json")
+    assert frame["address"] == {}
+    assert frame["employees"] == {"@embed": "@never"}
+
+
+def test_framing_leaves_a_reference_whose_target_has_triples_as_an_iri():
+    """OO-LD/oold-schema#160."""
+    schema = {
+        "@context": {
+            "schema": "http://schema.org/",
+            "type": "@type",
+            "id": "@id",
+            "works_for": {"@id": "schema:worksFor", "@type": "@id"},
+            "name": "schema:name",
+        },
+        "x-oold-instance-rdf-type": ["schema:Person"],
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "works_for": {"type": "string", "format": "iri-reference"},
+        },
+    }
+    rdf_type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"
+    nq = "\n".join([
+        f"<https://example.org/jane> {rdf_type} <http://schema.org/Person> .",
+        "<https://example.org/jane> <http://schema.org/worksFor> <https://example.org/acme> .",
+        f"<https://example.org/joe> {rdf_type} <http://schema.org/Person> .",
+        "<https://example.org/joe> <http://schema.org/worksFor> <https://example.org/acme> .",
+        f"<https://example.org/acme> {rdf_type} <http://schema.org/Organization> .",
+        '<https://example.org/acme> <http://schema.org/name> "ACME" .',
+        "",
+    ])
+    graph = jsonld.from_rdf(nq, {"format": "application/n-quads"})
+    framed = jsonld.frame(graph, schema_to_frame(schema), {"omitDefault": True})
+    people = framed.get("@graph", [framed])
+
+    assert people, "framing returned nothing"
+    for person in people:
+        assert isinstance(person["works_for"], str), f"{person['id']}: a reference must not absorb the target's triples"
 
 
 # ------------------------------------------------------------------ loader

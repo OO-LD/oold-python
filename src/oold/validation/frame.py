@@ -12,10 +12,13 @@ minimal one:
   as sibling graph nodes;
 * ``@context`` is the schema's own context, or a reference to it, so terms compact back to their
   property names;
-* an empty subframe ``{}`` is added per property that embeds an object.
+* an empty subframe ``{}`` is added per property that embeds an object;
+* ``{"@embed": "@never"}`` is added per reference-valued property, so its targets stay IRIs.
 
-Reference-valued and literal properties need no subframe: a referenced IRI with no local triples
-stays ``{"id": ...}`` and literals compact directly.
+Literal properties need no subframe, since literals compact directly. Reference-valued ones do:
+where the referenced node carries triples in the same graph, framing would otherwise pull them
+in as an object, and the framed document would stop validating against the schema the frame was
+derived from, which declares a string there.
 
 Use with ``jsonld.frame(rdf, frame, {"omitDefault": True})`` so a property absent from a given
 instance is omitted rather than emitted as null.
@@ -30,6 +33,9 @@ from .pattern_lint import context_terms
 #: Distinguishes "no context reference given" from an explicit ``None``, which is a meaningful
 #: JSON-LD context value.
 _UNSET = object()
+
+#: The IRI/URI-family formats ``OOLD-EXT-6ea3`` recommends for an IRI-valued property.
+IRI_FORMATS = frozenset({"iri", "iri-reference", "uri", "uri-reference"})
 
 
 def is_embed(node: Any) -> bool:
@@ -113,6 +119,80 @@ def instance_rdf_types(schema: Any) -> list[str] | None:
     return None
 
 
+def keyword_alias_keys(schema: dict[str, Any]) -> set[str]:
+    """Property names that alias a JSON-LD keyword, such as ``id`` for ``@id``.
+
+    These are not predicates: ``id`` names the node, it does not point at another one. Putting a
+    subframe under such a key writes ``{"@id": {...}}`` into the frame, which a processor rejects
+    outright ("@id value must be a string").
+
+    The alias is searched across the composed schema because a dereferenced subclass chain keeps
+    each superclass's own ``@context`` on its ``allOf`` member, and the convention is usually
+    declared by the base schema rather than repeated by every subclass.
+    """
+    found: set[str] = set()
+
+    def scan_context(context: Any) -> None:
+        if isinstance(context, list):
+            for entry in context:
+                scan_context(entry)
+        elif isinstance(context, dict):
+            for term, definition in context.items():
+                if term.startswith("@"):
+                    continue
+                target = definition.get("@id") if isinstance(definition, dict) else definition
+                if isinstance(target, str) and target.startswith("@"):
+                    found.add(term)
+
+    def walk(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        scan_context(node.get("@context"))
+        for sub in node.get("allOf") or []:
+            walk(sub)
+
+    walk(schema)
+    return found
+
+
+def reference_properties(schema: dict[str, Any]) -> list[str]:
+    """Properties whose value is a reference, so framing must leave it an IRI.
+
+    Three signals, per ``OOLD-EXT-68fa``: an ``x-oold-range`` on a string-typed value, an
+    IRI-family ``format`` (the family ``OOLD-EXT-6ea3`` recommends), or a context term mapped
+    ``"@type": "@id"``.
+
+    Embedding takes precedence where a property carries both: a property shaped like an object
+    is an embed whatever its term says.
+    """
+
+    def is_reference(node: Any) -> bool:
+        if not isinstance(node, dict):
+            return False
+        if node.get("items") is not None:
+            return is_reference(node["items"])
+        if "x-oold-range" in node:
+            return True
+        if node.get("format") in IRI_FORMATS:
+            return True
+        for keyword in ("anyOf", "oneOf", "allOf"):
+            branches = node.get(keyword)
+            if isinstance(branches, list) and any(is_reference(branch) for branch in branches):
+                return True
+        return False
+
+    properties = collect_composed_properties(schema)
+    terms = context_terms(schema.get("@context"))
+    aliases = keyword_alias_keys(schema)
+    return [
+        name
+        for name, prop in properties.items()
+        if name not in aliases
+        and not is_embed(prop)
+        and (is_reference(prop) or terms.get(name, {}).get("@type") == "@id")
+    ]
+
+
 def schema_to_frame(schema: dict[str, Any], context_ref: Any = _UNSET) -> dict[str, Any]:
     """Derive the minimal frame for reconstructing this schema's instances.
 
@@ -127,4 +207,6 @@ def schema_to_frame(schema: dict[str, Any], context_ref: Any = _UNSET) -> dict[s
         frame["@type"] = types[0] if len(types) == 1 else types
     for name in embedded_properties(schema):
         frame[name] = {}
+    for name in reference_properties(schema):
+        frame[name] = {"@embed": "@never"}
     return frame

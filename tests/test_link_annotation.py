@@ -90,13 +90,15 @@ def test_schema_matches_the_plain_spelling():
 
     annotated = props(Person)["knows"]
     plain = props(Plain)["knows"]
+    reference = {"type": "string", "format": "iri-reference"}
     assert annotated["type"] == plain["type"] == "array"
-    assert annotated["items"] == plain["items"] == {"type": "string"}
+    assert annotated["items"] == plain["items"] == reference
     # the annotated form derives the range; the legacy one keeps its own keyword
     assert annotated["x-oold-range"] == "annot:Person"
     assert plain["range"] == "Person"
     # a to-one link is a bare IRI
     assert props(Person)["employer"]["type"] == "string"
+    assert props(Person)["employer"]["format"] == "iri-reference"
 
 
 def test_construct_by_iri_object_and_json(store):

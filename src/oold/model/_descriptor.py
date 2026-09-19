@@ -264,11 +264,22 @@ def _as_reference(prop: dict, many: bool) -> None:
     kept = {k: v for k, v in prop.items() if k in keep or k.startswith("x-")}
     prop.clear()
     prop.update(kept)
+    # OOLD-EXT-6ea3 (SHOULD): an IRI-valued property constrains its lexical form
+    # with an IRI-family format, and OOLD-EXT-1f92 recommends iri-reference - it
+    # admits absolute IRIs, compact IRIs and context-relative references alike,
+    # which is what instances actually carry. It is also the second of the three
+    # reference signals a frame derivation looks for (OOLD-EXT-68fa, see
+    # `oold.validation.frame.reference_properties`). A format the declaration
+    # already states is left alone.
+    reference: dict[str, Any] = {"type": "string"}
+    if "format" not in kept:
+        reference["format"] = "iri-reference"
     if many:
+        prop.pop("format", None)
         prop["type"] = "array"
-        prop["items"] = {"type": "string"}
+        prop["items"] = reference
     else:
-        prop["type"] = "string"
+        prop.update(reference)
 
 
 def _namespace_annotations(namespace: dict) -> dict:

@@ -116,3 +116,35 @@ def test_export_schema_validates(tmp_path):
 def test_model_json_schema_validates(tmp_path):
     report = validate_schema(_emit(tmp_path, Person.model_json_schema()))
     assert report.passed, failure_reasons(report)
+
+
+def test_a_link_declares_an_iri_family_format():
+    """OOLD-EXT-6ea3 (SHOULD) wants an IRI-valued property to constrain its
+    lexical form; OOLD-EXT-1f92 recommends iri-reference, which admits absolute
+    IRIs, compact IRIs and context-relative references alike. It is also the
+    second reference signal a frame derivation looks for (OOLD-EXT-68fa)."""
+    props = Person.export_schema()["properties"]
+    assert props["employer"]["format"] == "iri-reference"
+    assert props["friends"]["items"]["format"] == "iri-reference"
+    assert "format" not in props["friends"]  # the array itself is not an IRI
+
+
+def test_a_declared_format_is_not_overwritten():
+    """OSW declares `format: autocomplete` on link properties for its UI."""
+    from pydantic import Field
+
+    class M(LinkedBaseModel):
+        model_config = ConfigDict(json_schema_extra={"$id": "https://example.org/M"})
+        id: str | None = None
+        ref: Org | None = Field(None, json_schema_extra={"range": "Org", "format": "autocomplete"})
+
+    M.model_rebuild()
+    assert M.export_schema()["properties"]["ref"]["format"] == "autocomplete"
+
+
+def test_the_frame_derivation_still_sees_our_links_as_references():
+    """The schema side and the framing side must agree: both say a link is an
+    IRI. reference_properties is the canonical predicate (OOLD-EXT-68fa)."""
+    from oold.validation.frame import reference_properties
+
+    assert reference_properties(Person.export_schema()) == ["employer", "mentor", "friends"]

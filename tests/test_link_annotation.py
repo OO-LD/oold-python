@@ -77,7 +77,12 @@ def test_annotation_alone_declares_the_link():
 
 
 def test_schema_matches_the_plain_spelling():
-    """Pydantic is handed the target's schema, so the output is unchanged."""
+    """Both spellings declare a link, so both emit the same shape.
+
+    A link serialises to an IRI, and the published schema says so: an array of
+    strings here, a string for a to-one link. The ``$ref`` form belongs to code
+    generation, not to the document.
+    """
 
     def props(model):
         schema = model.model_json_schema()
@@ -85,10 +90,13 @@ def test_schema_matches_the_plain_spelling():
 
     annotated = props(Person)["knows"]
     plain = props(Plain)["knows"]
-    assert annotated["type"] == "array"
-    assert plain["anyOf"][0]["items"] == {"$ref": "#/$defs/Person"}
-    # the annotated form carries the None arm it declares
-    assert {"$ref": "#/$defs/Person"} in annotated["items"]["anyOf"]
+    assert annotated["type"] == plain["type"] == "array"
+    assert annotated["items"] == plain["items"] == {"type": "string"}
+    # the annotated form derives the range; the legacy one keeps its own keyword
+    assert annotated["x-oold-range"] == "annot:Person"
+    assert plain["range"] == "Person"
+    # a to-one link is a bare IRI
+    assert props(Person)["employer"]["type"] == "string"
 
 
 def test_construct_by_iri_object_and_json(store):

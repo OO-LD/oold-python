@@ -221,6 +221,48 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
     return defaults
 
 
+def _permits_a_string(prop: dict) -> bool:
+    """Whether the property already allows a bare IRI."""
+    if prop.get("type") == "string":
+        return True
+    for arms in ("anyOf", "oneOf"):
+        for arm in prop.get(arms) or []:
+            if isinstance(arm, dict) and arm.get("type") == "string":
+                return True
+    return False
+
+
+def _as_reference(prop: dict, many: bool) -> None:
+    """Rewrite a link property to the shape its instances actually take.
+
+    A link serialises to an IRI - ``{"employer": "ex:acme"}`` - and a published
+    OO-LD schema says so: ``{"type": "string", "x-oold-range": …}``. The
+    ``$ref`` / ``allOf`` form is a *code generation* shape, produced by
+    ``generator.preprocess`` so that datamodel-code-generator emits
+    ``Optional[Bar]`` rather than a string field. Emitting it describes a
+    document the library never writes, and the JSON-LD round trip fails on it:
+    with ``"@type": "@id"`` on the term, an embedded object loses its
+    properties.
+
+    Union arms are left alone. ``str | Location | None`` genuinely accepts a
+    literal, a reference or an inline object, and its schema already says so.
+    """
+    if _permits_a_string(prop):
+        return
+    # "range" is the legacy spelling of x-oold-range and is still what generated
+    # packages declare; dropping it here would silently delete the only thing
+    # marking the property a link in those schemas.
+    keep = ("title", "description", "default", "range", "format")
+    kept = {k: v for k, v in prop.items() if k in keep or k.startswith("x-")}
+    prop.clear()
+    prop.update(kept)
+    if many:
+        prop["type"] = "array"
+        prop["items"] = {"type": "string"}
+    else:
+        prop["type"] = "string"
+
+
 def _namespace_annotations(namespace: dict) -> dict:
     """The annotations of a class body being built, on any Python version.
 
@@ -1252,14 +1294,22 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         not resolvable at class-creation time, and a ``Field()`` object shared
         between models must not be mutated in place.
         """
-        schema = handler(core_schema_)
+        document = handler(core_schema_)
         try:
-            schema = handler.resolve_ref_schema(schema)
+            schema = handler.resolve_ref_schema(document)
         except Exception:
-            return schema
+            return document
+        # A self-referential model comes back as {"$defs": …, "$ref": "#/$defs/X"},
+        # which leaves the *document* without the $id the OO-LD document tier
+        # requires - the $id sits on the definition instead. Carry it up, so the
+        # emitted document identifies itself either way.
+        if isinstance(document, dict) and isinstance(schema, dict) and document is not schema:
+            identifier = schema.get("$id")
+            if identifier and "$id" not in document:
+                document["$id"] = identifier
         properties = schema.get("properties") if isinstance(schema, dict) else None
         if not properties:
-            return schema
+            return document
         link_fields = cls.__link_fields__
         aliases = cls.__link_aliases__
         required = schema.get("required")
@@ -1269,23 +1319,32 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             if descr is None or not isinstance(prop, dict):
                 continue
             if descr.required_iri:
-                # A link is never required at the pydantic level - its value is
-                # routed out of the payload before validation - so pydantic
-                # leaves it out of `required`. Stating it only in
-                # x-oold-required-iri would hide the constraint from every
-                # plain JSON Schema validator.
+                # A schema states requiredness through the standard `required`
+                # array and nothing else. A link is never required at the
+                # pydantic level - its value is routed out of the payload before
+                # validation - so pydantic leaves it out and it is added here.
                 if required is None:
                     required = schema["required"] = []
                 if key not in required:
                     required.append(key)
-            if prop.get("x-oold-range") or prop.get("range"):
-                continue
-            iri = descr.range_iri(cls)
-            if iri:
-                prop["x-oold-range"] = iri
-                # the range says "link" on its own; the marker was a stand-in
-                prop.pop("x-oold-link", None)
-        return schema
+                # ... and a required property may not also declare a default:
+                # nothing satisfies both, and a consumer generating an instance
+                # from this schema produces one its own schema rejects.
+                prop.pop("default", None)
+            # x-oold-required-iri and x-oold-link are oold-python annotations on
+            # a *field*. The first carries requiredness across the point where
+            # the property has to leave `required` so the generated field is
+            # Optional (see generator.preprocess); the second marks a link whose
+            # target comes from the annotation. Neither is in the OO-LD keyword
+            # vocabulary, so neither belongs in a published document.
+            prop.pop("x-oold-required-iri", None)
+            if not (prop.get("x-oold-range") or prop.get("range")):
+                iri = descr.range_iri(cls)
+                if iri:
+                    prop["x-oold-range"] = iri
+            prop.pop("x-oold-link", None)
+            _as_reference(prop, descr.many)
+        return document
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:

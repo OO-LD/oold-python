@@ -258,11 +258,12 @@ def test_required_is_a_field_argument_not_the_annotation():
     with pytest.raises(LinkNotResolved):
         _ = c.father  # optional to supply, still mandatory to read
 
-    props = _properties(Chain)
-    assert props["manager"]["x-oold-required-iri"] is True
-    # a plain JSON Schema validator only sees the standard array
+    # the schema states requiredness through `required` and nothing else;
+    # x-oold-required-iri is an oold-python field annotation and stays internal
     assert "manager" in _required(Chain)
     assert "father" not in _required(Chain)
+    assert "x-oold-required-iri" not in _properties(Chain)["manager"]
+    assert Chain.__link_fields__["manager"].required_iri is True
 
 
 def test_required_iri_is_still_accepted():
@@ -276,7 +277,8 @@ def test_required_iri_is_still_accepted():
     Old.model_rebuild()
     with pytest.raises(ValueError, match="manager is required"):
         Old(id="ex:o")
-    assert _properties(Old)["manager"]["x-oold-required-iri"] is True
+    assert "manager" in _required(Old)
+    assert Old.__link_fields__["manager"].required_iri is True
 
 
 def test_a_link_annotation_without_a_default_is_required():

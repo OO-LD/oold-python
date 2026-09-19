@@ -866,4 +866,38 @@ def export_schema(
 
             del result_schema["$ref"]
     result_schema = _inverse_preprocess(result_schema)
+    _state_requiredness_in_the_required_array(result_schema)
     return result_schema
+
+
+def _state_requiredness_in_the_required_array(schema: dict) -> None:
+    """Move link requiredness into ``required``, and take the annotation out.
+
+    A schema states requiredness through the standard ``required`` array and
+    nothing else. ``x-oold-required-iri`` - spelled ``x_oold_required_iri`` by
+    pydantic v1, which cannot pass a hyphenated keyword to ``Field()`` - is an
+    oold-python annotation on a *field*: it carries the requirement across the
+    point where the property has to leave ``required`` so that the generated
+    field is ``Optional`` (see ``generator.preprocess``). It is not in the OO-LD
+    keyword vocabulary and does not belong in a published document.
+
+    The v2 path has already done this in ``__get_pydantic_json_schema__``, so
+    this is a no-op there; it is what fixes the v1 path, whose schema comes from
+    pydantic v1 and never passes through that hook.
+    """
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+    required = schema.get("required")
+    for name, prop in properties.items():
+        if not isinstance(prop, dict):
+            continue
+        is_required = bool(prop.pop("x-oold-required-iri", False)) | bool(prop.pop("x_oold_required_iri", False))
+        if not is_required:
+            continue
+        if required is None:
+            required = schema["required"] = []
+        if name not in required:
+            required.append(name)
+        # nothing satisfies both a requirement and a default
+        prop.pop("default", None)

@@ -95,6 +95,10 @@ def _run(pydantic_version="v1"):
             "MyRootSchema",
             {"my_property": "https://example.org/my_property"},
         ],
+        # the level composes onto its base, and @context mirrors that in the
+        # same order - a context entry without a matching $ref claims an
+        # inheritance the schema never declares (OOLD-CMP-b926, OOLD-CMP-e4a3)
+        "allOf": [{"$ref": "MyRootSchema"}],
         "$defs": {
             "SubObject": {
                 "title": "SubObject",

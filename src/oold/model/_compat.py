@@ -1,0 +1,311 @@
+"""Public-API parity layer for the descriptor binding.
+
+Downstream code (the generated ``opensemantic.*`` packages and the applications
+built on them) inherits its API from ``oold.model.LinkedBaseModel`` via
+``OswBaseModel``. Replacing the binding therefore has to keep that surface
+working. A scan of those code bases found these members in active use:
+
+===========================  =====  =================================
+member                       sites  note
+===========================  =====  =================================
+``get_iri_ref``                 24  hand-written application code
+``__iris__``                    15  read **and written** by callers
+``get_cls_iri``                 42  inherited, unchanged
+``to_json`` / ``from_json``      9  each
+``to_jsonld`` / ``from_jsonld``  4  / 1
+``cast`` / ``cast_none_to_default``  3 / 2
+``get_raw``                      2
+===========================  =====  =================================
+
+``LinkedBaseModelList`` and ``store_jsonld`` had no downstream hits.
+
+The mixin below re-implements that surface on top of the descriptor storage
+(``_links``), reusing :mod:`oold.static` for the RDF work so behaviour matches
+the shipped model rather than being re-derived.
+
+``__iris__`` is a read/write property: the shipped model exposes a plain dict
+and callers assign to it directly, e.g. in ``opensemantic.base``::
+
+    self.__iris__ = {"characteristic": characteristic_class.get_cls_iri()}
+
+so a read-only shim would silently drop such assignments.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from pydantic import BaseModel
+
+from oold.static import (
+    GenericLinkedBaseModel,
+    export_jsonld,
+    import_json,
+    import_jsonld,
+)
+
+
+def _raw_of(stored: Any) -> Any:
+    """The nested form of references that carry no IRI."""
+
+    def one(ref: Any) -> Any:
+        obj = getattr(ref, "_obj", None) if ref is not None else None
+        if obj is None:
+            return None
+        return obj._raw_dict() if hasattr(obj, "_raw_dict") else obj
+
+    if isinstance(stored, list):
+        out = [one(r) for r in stored]
+        return out or None
+    return one(stored)
+
+
+def _is_model(value: Any) -> bool:
+    return hasattr(value, "_dump") or hasattr(value, "model_dump") or hasattr(value, "dict")
+
+
+def _plain_dump(value: Any) -> Any:
+    """Serialise a nested model, whichever kind it is.
+
+    Testing for the ``_dump`` hook alone misses **plain** pydantic models - the
+    hook only exists on LinkedApiMixin - so a nested BaseModel came back as the
+    object rather than a dict, and cast() then handed it to the target
+    constructor.
+    """
+    for attr in ("_dump", "model_dump", "dict"):
+        fn = getattr(value, attr, None)
+        if callable(fn):
+            return fn()
+    return value
+
+
+def _drop_iri(stored: Any) -> None:
+    """Forget the IRI of a stored reference, keeping any object it holds."""
+    refs = stored if isinstance(stored, list) else [stored]
+    for ref in refs:
+        if ref is not None:
+            ref.iri = None
+
+
+class LinkedApiMixin(GenericLinkedBaseModel):
+    """Re-implements the shipped ``LinkedBaseModel`` API over ``_links``.
+
+    Shared by both pydantic versions. Everything version-specific goes through
+    the three hooks below, so the members that differ only in ``model_fields``
+    vs ``__fields__`` - which was nine of them, at 0.97 to 1.00 similarity -
+    live here once rather than being forked per version.
+    """
+
+    @classmethod
+    def _fields(cls) -> dict:
+        """The declared fields: ``model_fields`` in v2, ``__fields__`` in v1."""
+        return cls.model_fields
+
+    def _dump(self, **kwargs: Any) -> dict:
+        """A plain dict of the model: ``model_dump`` in v2, ``dict`` in v1."""
+        return self.model_dump(**kwargs)
+
+    # -- reference inspection, no resolution --------------------------------
+
+    @property
+    def __iris__(self) -> dict[str, Any]:
+        """The stored IRI reference(s) per link field.
+
+        Mirrors the shipped side-dict. Writable: assigning a mapping replaces
+        the stored references, which is what external code relies on.
+        """
+        out: dict[str, Any] = {}
+        for name, descr in type(self).__link_fields__.items():
+            iris = descr.iris(self)
+            if iris:
+                out[name] = iris
+        out.update(self._extra_iris)
+        return out
+
+    @__iris__.setter
+    def __iris__(self, value: dict[str, Any]) -> None:
+        """Replace the stored *references*, and only those.
+
+        The shipped side-dict is a plain attribute, so assigning to it drops
+        whatever was there - merging would silently keep links the caller meant
+        to clear, and ``= {}`` would do nothing at all.
+
+        Two things it must not do. Destroy a value: a ``Ref`` carries both an
+        IRI and the object once it has one, so clearing the slot outright would
+        lose a resolved or inline object the side-dict never held - only the IRI
+        goes. And overwrite a field: a key that is not a link field is remembered
+        as a reference rather than written over the model field of that name.
+        """
+        link_fields = type(self).__link_fields__
+        value = value or {}
+        for name in link_fields:
+            if name in value:
+                continue
+            _drop_iri(self._links.get(name))
+            self.__dict__.pop(name, None)
+        for name, iris in value.items():
+            descr = link_fields.get(name)
+            if descr is None:
+                self._extra_iris[name] = iris
+                continue
+            descr.set_value(self, iris)
+
+    @classmethod
+    def get_cls_iri(cls) -> Any:
+        """The class IRI(s), from the schema annotation and the type default.
+
+        ``GenericLinkedBaseModel`` only declares this abstract, so without an
+        implementation it silently returns ``None`` - which would break the
+        downstream callers and the type registry alike.
+        """
+        schema = getattr(cls, "model_config", {}).get("json_schema_extra") or {}
+        if callable(schema):
+            schema = {}
+        out: list[str] = []
+        for key in ("$id", "x-oold-iri", "iri"):
+            if key in schema:
+                out.append(schema[key])
+                break
+        type_field = cls._fields().get(cls.get_type_field())
+        if type_field is not None:
+            # A list default is a type *array*: the class answers to every IRI
+            # in it, so flatten. Appending the list as one element left a
+            # non-string in the result, which _register_class skips - so a class
+            # with a type array registered under its $id only and was
+            # unreachable by type. v1 already flattened, as does _iri_set.
+            default = type_field.default
+            for value in default if isinstance(default, list) else [default]:
+                if value is not None and value not in out:
+                    out.append(value)
+        if not out:
+            return None
+        return out[0] if len(out) == 1 else out
+
+    def get_iri(self) -> str | None:
+        """The instance IRI. Overridden by models that derive it differently."""
+        return getattr(self, "id", None)
+
+    def link_iris(self, name: str) -> Any:
+        """The stored reference(s) for one link, without resolving."""
+        return type(self).__link_fields__[name].iris(self)
+
+    def get_iri_ref(self, field_name: str) -> Any:
+        """IRI reference(s) for a field, or ``None``, without resolving."""
+        iris = self.__iris__.get(field_name)
+        if iris is None:
+            return None
+        if isinstance(iris, list):
+            return iris if iris else None
+        return iris
+
+    def get_raw(self, field_name: str) -> Any:
+        """The stored value without triggering resolution."""
+        descr = type(self).__link_fields__.get(field_name)
+        if descr is None:
+            return self.__dict__.get(field_name)
+        stored = self._links.get(field_name)
+        if isinstance(stored, list):
+            # filter on the resolved object, not on the Ref: an unresolved
+            # reference has a Ref but no object, and answering [None] would read
+            # as "there is one, and it is nothing"
+            objs = [r._obj for r in stored if r is not None and r._obj is not None]
+            return objs or None
+        return stored._obj if stored is not None else None
+
+    # -- serialisation ------------------------------------------------------
+
+    def _raw_dict(self) -> dict[str, Any]:
+        """Serialise without resolving; links become IRI strings.
+
+        Mirrors the shipped ``_raw_dict``: **every** declared field appears, with
+        ``None`` where unset. ``cast()`` is built on this, so omitting empty
+        fields would silently drop them from the target.
+        """
+        links = type(self).__link_fields__
+        d: dict[str, Any] = {}
+        for name in type(self)._fields():
+            if name in links:
+                iri = self.get_iri_ref(name)
+                if iri is None:
+                    # No IRI to reference. An inline object that has not been
+                    # given one still has to appear, or cast() drops it - the
+                    # shipped _raw_dict keeps it, nested.
+                    iri = _raw_of(self._links.get(name))
+                d[name] = iri
+                continue
+            value = self.__dict__.get(name)
+            if isinstance(value, list):
+                d[name] = [v._raw_dict() if hasattr(v, "_raw_dict") else _plain_dump(v) for v in value]
+            elif hasattr(value, "_raw_dict"):
+                d[name] = value._raw_dict()
+            elif _is_model(value):
+                d[name] = _plain_dump(value)
+            else:
+                d[name] = value
+        return d
+
+    def to_json(self, exclude_defaults: bool = False) -> dict[str, Any]:
+        result = json.loads(self.model_dump_json(exclude_none=True, exclude_defaults=exclude_defaults))
+        for name in type(self).__link_fields__:
+            iri = self.get_iri_ref(name)
+            if iri is not None and not result.get(name):
+                result[name] = iri
+        return result
+
+    @classmethod
+    def _root_cls(cls) -> type:
+        from oold.model._descriptor import LinkedBaseModel
+
+        return LinkedBaseModel
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> Any:
+        from oold.model._descriptor import _TYPE_REGISTRY
+
+        # root must be the binding base: import_json only falls back to the
+        # given class when the two differ, which is how a payload without a
+        # type IRI still constructs.
+        return import_json(BaseModel, cls._root_cls(), cls, data, _TYPE_REGISTRY)
+
+    def to_jsonld(self) -> dict[str, Any]:
+        return export_jsonld(self, BaseModel)
+
+    @classmethod
+    def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
+        from oold.model._descriptor import _TYPE_REGISTRY
+
+        return import_jsonld(BaseModel, cls._root_cls(), cls, jsonld, _TYPE_REGISTRY)
+
+    def store_jsonld(self) -> None:
+        from oold.backend.interface import GetBackendParam, StoreParam, get_backend
+
+        backend = get_backend(GetBackendParam(iri=self.get_iri())).backend
+        backend.store(StoreParam(nodes={self.get_iri(): self}))
+
+    # -- conversion ---------------------------------------------------------
+
+    def cast(
+        self,
+        cls: type,
+        none_to_default: bool = False,
+        remove_extra: bool = False,
+        silent: bool = True,
+        **kwargs: Any,
+    ) -> Any:
+        data = {**self._raw_dict(), **kwargs}
+        if none_to_default:
+            data = {
+                k: v
+                for k, v in data.items()
+                if v is not None and not (isinstance(v, list) and not [x for x in v if x is not None])
+            }
+        if remove_extra:
+            target = set(cls._fields() if hasattr(cls, "_fields") else getattr(cls, "model_fields", {}))
+            if target:
+                data = {k: v for k, v in data.items() if k in target}
+        data.pop("type", None)
+        return cls(**data)
+
+    def cast_none_to_default(self, cls: type, **kwargs: Any) -> Any:
+        return self.cast(cls, none_to_default=True, **kwargs)

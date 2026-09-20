@@ -1,6 +1,49 @@
 # Object Graph Mapping
 
-oold-python's core feature is *IRI-transparent references*: a field annotated with `range` can hold either a Python object or an IRI string. The library resolves IRIs on first access via the registered backend.
+oold-python's core feature is *IRI-transparent references*: a link field can hold either a Python object or an IRI string. The library resolves IRIs on first access via the registered backend.
+
+## Recommended declaration
+
+Declare a link with `Link[T]` or `LinkList[T]`, and `OoldField()` with no
+arguments:
+
+```python
+from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+
+class Person(LinkedBaseModel):
+    id: str
+    name: str | None = None
+    employer: Link["Organization | None"] = OoldField()
+    knows: LinkList["Person"] = OoldField()
+```
+
+The annotation is the single source of truth. It names the target, so
+`x-oold-range` is derived from it and written into the emitted schema - passing
+`range=` would state the same thing twice and let the two disagree. It says the
+field is a link, so `link=True` is redundant. And it declares optionality:
+`Link[T]` reads as `T`, `Link[T | None]` as `T | None`.
+
+This is also the only form a type checker reads correctly in **both**
+directions - the resolved object you get back, and the object, IRI or JSON
+object you may assign.
+
+Where the annotation cannot say it - a union arm such as
+`str | Location | None` - mark the field with `OoldField(link=True)`.
+
+Still supported, not recommended for new code:
+
+| form | why not |
+|---|---|
+| `Optional[Bar] = Field(None, json_schema_extra={"range": "Bar.json"})` | the legacy notation, and what code generation still emits. Untyped in both directions |
+| `Optional[Bar] = OoldField(range="Bar.json")` | repeats what the annotation already says |
+
+Nothing existing needs rewriting; the recommendation applies to code you write
+now. `Link[T]` / `LinkList[T]` require pydantic v2 - under `oold.model.v1` use
+the `range=` form.
+
+[Typed link declarations](#typed-link-declarations) explains the typing; the
+full comparison is in
+[the design doc](../design/graph-object-binding.md#which-notation-supports-what).
 
 ---
 
@@ -155,3 +198,122 @@ A field can carry a default IRI that is resolved automatically on instantiation:
 ```
 
 When you instantiate the model without supplying `b_default`, the IRI `"ex:tag-python"` is used and resolved on first access.
+
+---
+
+## Typed link declarations
+
+The declaration above works, but a type checker only sees half of it. A link has
+**two** types: reading it yields a resolved object, while writing it accepts that
+object *or* a reference to it - an IRI string, or a JSON object still to be
+constructed. A single annotation can only state one, so `knows: list[Person]`
+rejects `knows=["ex:bob"]` even though the library accepts it at runtime.
+
+`Link[T]` and `LinkList[T]` carry both. They are exported from `oold.model`:
+
+```python
+from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+
+class Person(LinkedBaseModel):
+    id: str
+    name: str | None = None
+    employer: Link["Organization | None"] = OoldField()
+    knows: LinkList["Person"] = OoldField()
+
+# accepted: an object, an IRI, or a JSON object
+alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
+alice.knows[0]        # a Person, not a str
+```
+
+Nothing changes at runtime - same resolution, same JSON Schema. Only what the
+checker sees changes.
+
+### Optionality is declared
+
+`Link[T]` reads as `T`, so a chain needs no guard at every hop. `Link[T | None]`
+reads as `T | None`, because absence is then part of the model:
+
+```python
+class Person(LinkedBaseModel):
+    father: Link["Person"] = OoldField()          # promises a Person
+    mother: Link["Person | None"] = OoldField()   # may legitimately be absent
+
+person.father.father.father.name    # no guards
+```
+
+A link declared mandatory raises `LinkNotResolved` when it is unset or when the
+backend cannot place the reference, so one `try/except` covers a whole walk:
+
+```python
+from oold.model import LinkNotResolved
+
+try:
+    while True:
+        person = person.father
+        print(person.name)
+except LinkNotResolved:
+    print("ancestry ends here")
+```
+
+A **transport failure is not absence** - a connection error propagates unchanged
+rather than being reported as a missing link.
+
+### `OoldField` arguments
+
+All keyword-only, all optional:
+
+```python
+OoldField(required=None, range=None, link=None, **field_kwargs)
+```
+
+| argument | effect |
+|---|---|
+| `required` | the link must be supplied at construction; omitting it raises `ValueError`. Emitted as `x-oold-required-iri` **and** into the standard `required` array |
+| `range` | target schema IRI, emitted as `x-oold-range`. **Do not pass it**: omitted, it is derived from the annotation, which already names the target |
+| `link` | marks the field a link where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
+| `required_iri` | deprecated spelling of `required`, kept because generated packages pass it. Same emitted keyword |
+| `**field_kwargs` | passed to `pydantic.Field` (`alias`, `description`, `default_factory`, ...). `default=None` is supplied unless you pass a `default_factory` |
+
+A link annotation with **no default at all** means required, as it does anywhere
+else in Python:
+
+```python
+manager: Link[Organization]                          # required
+manager: Link[Organization] = OoldField()            # optional
+manager: Link[Organization] = OoldField(required=True)   # required, explicit
+```
+
+### Requiredness is a field argument, not the annotation
+
+"Must the caller supply it?" and "what do I get when I read it?" are different
+questions, and they need separate carriers - a self-referential link needs them
+to differ. All four combinations are available:
+
+| | `OoldField()` | `OoldField(required=True)` |
+|---|---|---|
+| `Link[T]` | may omit; reading raises `LinkNotResolved` if absent | must supply; reading raises if absent |
+| `Link[T \| None]` | may omit; reading yields `None` | must supply; reading may still yield `None` |
+
+```python
+class Person(LinkedBaseModel):
+    father: Link["Person"] = OoldField()                  # chain it, no guards
+    employer: Link["Organization"] = OoldField(required=True)
+    advisor: Link["Person | None"] = OoldField()          # guard it
+```
+
+`father` is the case that forces the split. Reading it must yield a `Person` so
+that `person.father.father.father` needs no guard per hop - but no real dataset
+can require *every* person to name a father, so it cannot be required at
+construction. Requiredness in the annotation would tie those together.
+
+A link is never required at the *pydantic* level, because its value is routed
+out of the payload before validation. That is what `required` exists to express,
+and why it is also written into the schema's `required` array - otherwise the
+constraint would be invisible to any plain JSON Schema validator.
+
+!!! note "Write the whole annotation"
+    Spell the union inside: `Link[T | None]`, not `Optional[Link[T]]`, and
+    `LinkList[T]`, not `list[Link[T]]`. Nested in another annotation a checker
+    stops applying descriptor rules - `list[Link[T]]` reads as a list of
+    descriptors, and `Optional[Link[T]]` narrows on read but rejects an IRI on
+    write. Both keep working at runtime, which is what makes them easy to miss.

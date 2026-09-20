@@ -9,9 +9,9 @@ keywords = ['python', 'linked-data', 'json-ld', 'pydantic', 'oo-ld']
 requires-python = ">=3.10,<4.0"
 # Version is managed by python-semantic-release (see [tool.semantic_release]).
 # Do not edit by hand; it is bumped automatically on merge to main.
-version = "0.20.0"
+version = "1.0.1"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -160,6 +160,12 @@ changelog_file = "CHANGELOG.md"
 [tool.ty.environment]
 python = "./.venv"
 python-version = "3.10"
+# src layout: without this ty cannot resolve `oold.*` from tests, and every
+# import there silently becomes Unknown - which makes those checks vacuous rather
+# than failing, so it is not visible in the output. Note that an incomplete
+# ./.venv has the same effect on third-party imports, and an unresolved pydantic
+# then reports a spurious conflicting-metaclass on every model.
+extra-paths = ["src"]
 
 [tool.ty.src]
 # Excluded from type checking:
@@ -167,12 +173,14 @@ python-version = "3.10"
 #  - src/oold/drafts: draft/experimental code (also excluded from ruff)
 #  - src/oold/ui: optional UI integrations that import optional, un-installed
 #    packages (panel, anywidget, nicegui, traitlets, ...)
-#  - examples: illustrative scripts, not part of the distributed package
+#
+# `examples` is checked: they are the documented way to declare a link, and
+# excluding them let a broken import and the wrong static type for
+# `Model[Model.field == x]` sit there unnoticed.
 exclude = [
     "tests/data",
     "src/oold/drafts",
     "src/oold/ui",
-    "examples",
 ]
 
 [tool.ty.rules]
@@ -183,6 +191,10 @@ exclude = [
 # they are downgraded to keep `ty check` meaningful without mass inline ignores.
 unresolved-attribute = "ignore"
 not-subscriptable = "ignore"
+# Assigning an IRI to a link field is no longer a reason for this one: the
+# Link[T] / LinkList[T] annotations type both directions, and the override below
+# re-enables the rule for the file that asserts that contract. What remains are
+# unrelated sites (json_tools, the codegen spike) not yet cleaned up.
 invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
 unknown-argument = "ignore"
@@ -223,6 +235,9 @@ traitlets = "traitlets"
 nicegui = "nicegui"
 
 [tool.deptry.per_rule_ignores]
+# stdlib from 3.14 (PEP 649); deptry resolves against the running interpreter,
+# which is older, so it reads the version-gated import as a missing dependency.
+DEP001 = ["annotationlib"]
 # Declared in UI extras and required at runtime by the panel/jupyter
 # integrations, but not imported directly from `src`.
 DEP002 = ["jupyter_bokeh", "ipykernel"]
@@ -299,7 +314,10 @@ ignore = [
 # Tests and examples use literal credentials/tokens and broad exception asserts
 # on purpose; the bandit/bugbear security rules are noise there.
 "tests/*" = ["S101", "S105", "S106", "B017"]
-"examples/*" = ["S105", "S106"]
+# Examples and spikes are runnable demos: they self-check with `assert` and
+# re-invoke themselves via subprocess to isolate measurements.
+"examples/*" = ["S101", "S105", "S106", "S603", "TRY300"]
+"src/oold/experimental/*" = ["S101"]
 
 [tool.ruff.format]
 preview = true
@@ -310,3 +328,15 @@ skip_empty = true
 [tool.coverage.run]
 branch = true
 source = ["src"]
+
+[[tool.ty.overrides]]
+# The static contract of the link and query API is asserted here, so the rules
+# it exercises must actually run - the repo-wide downgrades above would
+# otherwise make every assert_type in it vacuous.
+include = ["tests/typing/**"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "error"
+invalid-assignment = "error"
+unresolved-attribute = "error"
+not-subscriptable = "error"

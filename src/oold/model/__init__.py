@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -107,7 +108,49 @@ _types: dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
 _controller_types: dict[str, list] = {}
 
 
-M = TypeVar("M", bound="LinkedBaseModel")
+M = TypeVar("M", bound="_LinkedBaseModelLegacy")
+
+
+def register_type(cls: type, iri: str | list[str] | None = None) -> None:
+    """Register a model class under the type IRI(s) it answers to.
+
+    The public entry point for the type registry that resolution consults when
+    mapping a document's ``type`` back to a class. Classes register themselves
+    on creation, so this is only needed for classes built dynamically, aliased
+    under an extra IRI, or defined before their IRI is known.
+
+    Without it callers reach for the private ``_types`` mapping and write into
+    it directly, which couples them to an internal and offers no validation.
+
+    Parameters
+    ----------
+    cls
+        The model class to register.
+    iri
+        The IRI(s) to register under. Defaults to ``cls.get_cls_iri()``.
+    """
+    if iri is None:
+        iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
+    if iri is None:
+        raise ValueError(f"{cls.__name__} has no type IRI: pass iri= or define get_cls_iri()")
+    for value in iri if isinstance(iri, list) else [iri]:
+        if isinstance(value, str):
+            _types[value] = cls
+
+
+def get_registered_type(iri: str) -> type | None:
+    """The model class registered for a type IRI, or ``None``."""
+    return _types.get(iri)
+
+
+def registered_types() -> dict:
+    """The live type registry.
+
+    The same mapping resolution uses; mutating it affects resolution. Prefer
+    :func:`register_type` over writing to it directly.
+    """
+    return _types
+
 
 _logger = logging.getLogger(__name__)
 
@@ -152,7 +195,7 @@ def _inherited_cls_iris(cls) -> frozenset:
 
 
 # pydantic v2
-class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass):
+class _LinkedBaseModelMetaClassLegacy(pydantic.main._model_construction.ModelMetaclass):
     _constructing: bool = False
     """Guards against __getattribute__ intercepting field access during class
     construction. Pydantic checks ``getattr(base, field_name, None)`` in its
@@ -161,11 +204,11 @@ class LinkedBaseModelMetaClass(pydantic.main._model_construction.ModelMetaclass)
     of the default None, causing false-positive field-name collision errors."""
 
     def __new__(mcs, name, bases, namespace, **kwargs):
-        LinkedBaseModelMetaClass._constructing = True
+        _LinkedBaseModelMetaClassLegacy._constructing = True
         try:
             cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
-            LinkedBaseModelMetaClass._constructing = False
+            _LinkedBaseModelMetaClassLegacy._constructing = False
 
         # Register type IRI mapping. Controllers go to _controller_types
         # (they extend data models but should not replace them in
@@ -393,8 +436,14 @@ class LinkedBaseModelList(Generic[T], list[T | None]):
 
 
 # class LinkedBaseModel(_LinkedBaseModel):
-class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseModelMetaClass):
-    """LinkedBaseModel for pydantic v2"""
+class _LinkedBaseModelLegacy(BaseModel, GenericLinkedBaseModel, metaclass=_LinkedBaseModelMetaClassLegacy):
+    """The per-attribute-interception binding.
+
+    Exported as ``LinkedBaseModel`` unless ``OOLD_DESCRIPTOR_BINDING=0`` selects
+    it, which is decided at the bottom of this module. It carries its own name
+    so that the exported one has a single declaration a type checker can
+    resolve - pyright keeps the first of two and would ignore the swap.
+    """
 
     __iris__: dict[str, str | list[str]] | None = {}
 
@@ -729,10 +778,10 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
                 for item, model_item in zip(value, model_value, strict=False):
                     if isinstance(item, dict) and hasattr(model_item, "__iris__"):
                         model_item._object_to_iri(item)
-                        LinkedBaseModel._recursive_object_to_iri(item, model_item)
+                        _LinkedBaseModelLegacy._recursive_object_to_iri(item, model_item)
             elif isinstance(value, dict) and hasattr(model_value, "__iris__"):
                 model_value._object_to_iri(value)
-                LinkedBaseModel._recursive_object_to_iri(value, model_value)
+                _LinkedBaseModelLegacy._recursive_object_to_iri(value, model_value)
 
     def get_iri_ref(self, field_name: str):
         """Return the stored IRI reference string(s) for a field without
@@ -778,7 +827,7 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
     @staticmethod
     def _resolve(iris):
         resolver = get_resolver(GetResolverParam(iri=iris[0])).resolver
-        node_dict = resolver.resolve(ResolveParam(iris=iris, model_cls=LinkedBaseModel)).nodes
+        node_dict = resolver.resolve(ResolveParam(iris=iris, model_cls=_LinkedBaseModelLegacy)).nodes
         return node_dict
 
     def _store(self):
@@ -988,9 +1037,9 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
         return export_jsonld(self, BaseModel)
 
     @classmethod
-    def from_jsonld(cls, jsonld: dict) -> "LinkedBaseModel":
+    def from_jsonld(cls, jsonld: dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON-LD representation."""
-        return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _types)
+        return import_jsonld(BaseModel, _LinkedBaseModelLegacy, cls, jsonld, _types)
 
     def to_json(self, exclude_defaults: bool = False) -> dict:
         """Return the JSON representation of the object.
@@ -1020,9 +1069,9 @@ class LinkedBaseModel(BaseModel, GenericLinkedBaseModel, metaclass=LinkedBaseMod
         return result
 
     @classmethod
-    def from_json(cls, data: dict) -> "LinkedBaseModel":
+    def from_json(cls, data: dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON representation."""
-        return import_json(BaseModel, LinkedBaseModel, cls, data, _types)
+        return import_json(BaseModel, _LinkedBaseModelLegacy, cls, data, _types)
 
     # @classmethod
     # def model_json_schema(
@@ -1075,12 +1124,23 @@ class BaseController:
         """
 
         def _is_data_model(cls):
+            # A data model is recognised by carrying fields, not only by not
+            # being on a name list: the descriptor binding mixes in
+            # LinkedApiMixin, which answers to_json/from_json but declares no
+            # fields, and a name-only test picked it as the data model - so
+            # to_json() intersected against an empty field set and returned
+            # nothing but the type.
+            fields = getattr(cls, "model_fields", None)
+            if fields is None:  # pydantic v1 classes
+                fields = getattr(cls, "__fields__", None)
             return (
                 cls is not type(self)
+                and bool(fields)
                 and cls.__name__
                 not in (
                     "LinkedBaseModel",
                     "_LinkedBaseModel",
+                    "_LinkedBaseModelLegacy",
                     "BaseController",
                     "GenericLinkedBaseModel",
                     "BaseModel",
@@ -1182,3 +1242,67 @@ class BaseController:
                 ):
                     del data[key]
         return data
+
+
+# ---------------------------------------------------------------------------
+# The descriptor binding
+# ---------------------------------------------------------------------------
+# The descriptor binding (see docs/design/graph-object-binding.md) replaces the
+# per-attribute interception above with one descriptor per link field, and is
+# what LinkedBaseModel means. It was made the default once before on the
+# strength of three downstream suites passing; a review then found seven
+# behaviours it did not reproduce, none of which those suites reached. Each is
+# now covered by a test in tests/test_compat_parity.py that fails without its
+# fix. The legacy binding remains one environment variable away:
+#
+#     OOLD_DESCRIPTOR_BINDING=0
+#
+# Two names move with the base class, because downstream imports them and relies
+# on their identity (see docs/design/downstream-migration.md):
+#
+#   * LinkedBaseModelMetaClass - subclassed downstream, so a derived metaclass
+#     must remain a subclass of whatever LinkedBaseModel actually uses;
+#   * _types - written to downstream, so the binding must share the very same
+#     mapping rather than keep its own.
+#
+# Which of the two a name refers to is decided at import time, and a type
+# checker cannot follow that. Left to infer, it keeps the legacy types for every
+# consumer of this module - so `Model[Model.field == x]` reads as
+# `Model | LinkedBaseModelList[Model]`, and iterating it yields pydantic's
+# `tuple[str, Any]` instead of the model. The TYPE_CHECKING branch below states
+# the default statically, so the typed subscript and link annotations reach code
+# importing from `oold.model` rather than only from the private module.
+if TYPE_CHECKING:
+    from oold.model._descriptor import LinkedBaseModel as LinkedBaseModel
+    from oold.model._descriptor import (
+        LinkedBaseModelMetaClass as LinkedBaseModelMetaClass,
+    )
+elif os.environ.get("OOLD_DESCRIPTOR_BINDING", "1") != "0":
+    from oold.model import _descriptor as _descriptor_module
+
+    _descriptor_module.use_type_registry(_types)
+    LinkedBaseModel = _descriptor_module.LinkedBaseModel
+    LinkedBaseModelMetaClass = _descriptor_module.LinkedBaseModelMetaClass
+else:  # pragma: no cover
+    _logger.info("oold: legacy binding selected (OOLD_DESCRIPTOR_BINDING=0)")
+    LinkedBaseModel = _LinkedBaseModelLegacy
+    LinkedBaseModelMetaClass = _LinkedBaseModelMetaClassLegacy
+
+# The link notations are part of the public surface either way: importing them
+# from a private module is not something an example should have to do. They are
+# only *effective* with the descriptor binding, which is what LINK_NOTATIONS_ACTIVE
+# reports - the shipped binding above reads `range` and ignores a Link[...]
+# annotation.
+from oold.model._descriptor import Link as Link  # noqa: E402
+from oold.model._descriptor import LinkList as LinkList  # noqa: E402
+from oold.model._descriptor import LinkNotResolved as LinkNotResolved  # noqa: E402
+from oold.model._descriptor import LinkResultList as LinkResultList  # noqa: E402
+from oold.model._descriptor import OoldExtra as OoldExtra  # noqa: E402
+from oold.model._descriptor import OoldField as OoldField  # noqa: E402
+
+LINK_NOTATIONS_ACTIVE = LinkedBaseModel is not _LinkedBaseModelLegacy
+"""Whether ``Link[T]`` / ``LinkList[T]`` annotations are honoured.
+
+True unless ``OOLD_DESCRIPTOR_BINDING=0``: the legacy binding recognises links
+only through the ``range`` keyword.
+"""

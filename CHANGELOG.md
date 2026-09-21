@@ -7,6 +7,15 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v1.0.2 (2026-09-21)
+
+### Bug Fixes
+
+- **frame**: Treat a bare @reverse term as reference-valued
+  ([#164](https://github.com/OO-LD/oold-python/pull/164),
+  [`6199a31`](https://github.com/OO-LD/oold-python/commit/6199a312370ef7da0046f06cca0792c3986f1ec8))
+
+
 ## v1.0.1 (2026-09-19)
 
 ### Bug Fixes

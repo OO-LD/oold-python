@@ -155,12 +155,23 @@ def keyword_alias_keys(schema: dict[str, Any]) -> set[str]:
     return found
 
 
+def _is_reference_term(definition: Any) -> bool:
+    """True when a context term definition makes its values node references."""
+    if not isinstance(definition, dict):
+        return False
+    return definition.get("@type") == "@id" or "@reverse" in definition
+
+
 def reference_properties(schema: dict[str, Any]) -> list[str]:
     """Properties whose value is a reference, so framing must leave it an IRI.
 
-    Three signals, per ``OOLD-EXT-68fa``: an ``x-oold-range`` on a string-typed value, an
-    IRI-family ``format`` (the family ``OOLD-EXT-6ea3`` recommends), or a context term mapped
-    ``"@type": "@id"``.
+    Four signals, per ``OOLD-EXT-6d10``: an ``x-oold-range`` on a string-typed value, an
+    IRI-family ``format`` (the family ``OOLD-EXT-6ea3`` recommends), a context term mapped
+    ``"@type": "@id"``, or one mapped with ``@reverse``.
+
+    ``@reverse`` stands on its own. A reverse term's values are node references by definition
+    (JSON-LD 1.1 4.1.10), so ``"@type": "@id"`` beside it is redundant and authors omit it;
+    keying only on ``@type`` misses the idiomatic spelling and embeds the targets.
 
     Embedding takes precedence where a property carries both: a property shaped like an object
     is an embed whatever its term says.
@@ -189,7 +200,7 @@ def reference_properties(schema: dict[str, Any]) -> list[str]:
         for name, prop in properties.items()
         if name not in aliases
         and not is_embed(prop)
-        and (is_reference(prop) or terms.get(name, {}).get("@type") == "@id")
+        and (is_reference(prop) or _is_reference_term(terms.get(name, {})))
     ]
 
 

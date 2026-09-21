@@ -175,6 +175,21 @@ def test_embedding_wins_where_a_property_carries_both_signals():
     assert reference_properties(schema) == []
 
 
+def test_a_bare_reverse_term_is_reference_valued():
+    """A reverse term's values are node references by definition (JSON-LD 1.1 4.1.10).
+
+    ``"@type": "@id"`` beside ``@reverse`` is redundant, and the specification's own worked
+    example writes both, so keying only on ``@type`` passed every fixture while missing the
+    idiomatic spelling and embedding the targets.
+    """
+    schema = {
+        "@context": {"employees": {"@reverse": "schema:worksFor"}},
+        "properties": {"employees": {"type": "array", "items": {"type": "string"}}},
+    }
+    assert reference_properties(schema) == ["employees"]
+    assert schema_to_frame(schema)["employees"] == {"@embed": "@never"}
+
+
 def test_a_keyword_alias_never_gets_a_subframe():
     """``id`` is the node's name, not a predicate.
 

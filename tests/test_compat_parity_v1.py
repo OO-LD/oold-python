@@ -97,6 +97,20 @@ def test_dict_and_to_json_match():
     assert shipped == auto
 
 
+def test_json_passes_dumps_kwargs_to_json_dumps():
+    """pydantic v1 splits json()'s arguments: the dict() ones select the data,
+    the rest go to json.dumps. Routing all of them to dict() raises TypeError on
+    indent, sort_keys and separators, which are valid pydantic v1 calls."""
+
+    def probe(tag, T, M):
+        m = M(id="ex:m", title="x", links=[f"ex:{tag}1", f"ex:{tag}2"], one=f"ex:{tag}1")
+        return m.json(exclude_none=True, indent=2, sort_keys=True, separators=(",", ": "))
+
+    shipped, auto = collect(probe)
+    assert "\n  " in auto, f"indent never reached json.dumps: {auto!r}"
+    assert shipped == auto
+
+
 def test_raw_dict_lists_every_field():
     def probe(tag, T, M):
         m = M(id="ex:m", title="x", one=f"ex:{tag}1")

@@ -246,11 +246,18 @@ class LinkedApiMixin(GenericLinkedBaseModel):
         return d
 
     def to_json(self, exclude_defaults: bool = False) -> dict[str, Any]:
+        from oold.model._descriptor import _matches_link_default
+
         result = json.loads(self.model_dump_json(exclude_none=True, exclude_defaults=exclude_defaults))
         for name in type(self).__link_fields__:
             iri = self.get_iri_ref(name)
-            if iri is not None and not result.get(name):
-                result[name] = iri
+            if iri is None or result.get(name):
+                continue
+            # This loop re-adds what the dump left out, so it also has to
+            # respect the one exclusion the dump applied to links.
+            if exclude_defaults and _matches_link_default(type(self), name, iri):
+                continue
+            result[name] = iri
         return result
 
     @classmethod

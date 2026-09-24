@@ -1143,6 +1143,24 @@ def _excluded(info: Any, name: str) -> bool:
     return bool(exclude) and name in exclude
 
 
+def _matches_link_default(cls: type, name: str, iris: Any) -> bool:
+    """Whether a link still holds exactly the IRI(s) its field declares.
+
+    A link value never reaches the field pydantic validates, so that field sits
+    at ``None`` and pydantic's own ``exclude_defaults`` comparison always answers
+    "not a default". The declared IRI lives in ``__link_defaults__`` instead, and
+    is what a stored value has to be compared against.
+
+    Both sides are read as lists: a to-one default seeded into a to-many link is
+    stored as a one-element list, so the shapes differ while the value does not.
+    """
+    declared = getattr(cls, "__link_defaults__", {}).get(name)
+    if declared is None:
+        return False
+    stored = iris if isinstance(iris, list) else [iris]
+    return stored == (declared if isinstance(declared, list) else [declared])
+
+
 def _alias_strings(alias: Any) -> list[str]:
     """Every name an alias can be given under.
 
@@ -1469,6 +1487,11 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             iris = descr.iris(self)
             if iris:
                 d.pop(name, None)
+                # A link left at the IRI its field declares is a default like
+                # any other. handler() cannot apply exclude_defaults to it,
+                # because the field it compares was emptied by the binding.
+                if getattr(info, "exclude_defaults", False) and _matches_link_default(type(self), name, iris):
+                    continue
                 d[name_out] = iris
                 continue
             stored = self._links.get(name)

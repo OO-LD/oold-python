@@ -33,6 +33,7 @@ from oold.model._descriptor import (
     _AutoLink,
     _Constructing,
     _default_iris,
+    _matches_link_default,
 )
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
@@ -324,6 +325,11 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     def dict(self, **kwargs: Any) -> dict[str, Any]:
         """v1 serialisation; link fields collapse to their IRIs."""
         exclude_none = kwargs.pop("exclude_none", False)
+        exclude_defaults = bool(kwargs.get("exclude_defaults"))
+        exclude = kwargs.get("exclude") or ()
+        # The link keys are written back after super().dict() has applied the
+        # exclusions, so each has to be filtered again here or it reappears.
+        skip_unset = bool(exclude_none or exclude_defaults or kwargs.get("exclude_unset"))
         links = type(self).__link_fields__
         # Reading a link caches the resolved value in __dict__, which pydantic v1
         # serialises - so whether a link had been read changed the output. Drop
@@ -335,9 +341,12 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             self.__dict__.update(cached)
         for name, descr in links.items():
             iris = descr.iris(self)
+            d.pop(name, None)
             if iris:
+                if exclude_defaults and _matches_link_default(type(self), name, iris):
+                    continue
                 d[name] = iris
-            else:
+            elif not (skip_unset or name in exclude):
                 d[name] = None
         if exclude_none:
             d = {k: v for k, v in d.items() if v is not None}

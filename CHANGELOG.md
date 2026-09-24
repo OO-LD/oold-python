@@ -7,6 +7,14 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v1.0.3 (2026-09-24)
+
+### Bug Fixes
+
+- **v1**: Route json() dumps kwargs to json.dumps, not dict()
+  ([`41b65de`](https://github.com/OO-LD/oold-python/commit/41b65ded09e9f25c5986179909e1d46df67bf805))
+
+
 ## v1.0.2 (2026-09-21)
 
 ### Bug Fixes

@@ -17,6 +17,7 @@ downstream API surface (``get_iri_ref``, ``__iris__``, ``to_json`` ...) preserve
 
 from __future__ import annotations
 
+import inspect
 import json
 from typing import Any, TypeVar, overload
 
@@ -35,6 +36,9 @@ from oold.model._descriptor import (
 )
 
 _MANY_SHAPES = {SHAPE_LIST, SHAPE_SET, SHAPE_TUPLE}
+
+_DICT_KWARGS = frozenset(inspect.signature(BaseModel.dict).parameters) - {"self"}
+"""The arguments ``BaseModel.dict`` accepts, which ``json`` has to route to it."""
 
 _M = TypeVar("_M")
 
@@ -345,7 +349,12 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
         # rejects them.
         encoder = kwargs.pop("encoder", None) or self.__json_encoder__
         kwargs.pop("models_as_dict", None)
-        return json.dumps(self.dict(**kwargs), default=encoder)
+        # pydantic v1 names the dict() arguments explicitly and collects the
+        # rest into **dumps_kwargs. Anything not selecting data - indent,
+        # sort_keys, separators - belongs to json.dumps, and dict() raises
+        # TypeError on it.
+        dumps_kwargs = {key: kwargs.pop(key) for key in list(kwargs) if key not in _DICT_KWARGS}
+        return json.dumps(self.dict(**kwargs), default=encoder, **dumps_kwargs)
 
     def to_json(self, exclude_defaults: bool = False) -> dict[str, Any]:
         return json.loads(self.json(exclude_none=True, exclude_defaults=exclude_defaults))

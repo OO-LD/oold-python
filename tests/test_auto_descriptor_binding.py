@@ -168,8 +168,9 @@ def test_typed_extras_validate():
 
 
 def test_extras_reach_the_json_schema():
-    prop = Person.model_json_schema()["$defs"]["Person"]["properties"]["knows"]
-    assert prop["x-oold-range"] == "Person"
+    schema = Person.model_json_schema()
+    props = schema.get("properties") or schema["$defs"]["Person"]["properties"]
+    assert props["knows"]["x-oold-range"] == "Person"
 
 
 @pytest.mark.xfail(

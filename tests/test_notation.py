@@ -11,7 +11,7 @@ inline object and a reference.
 """
 
 import pytest
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from oold.backend.document_store import SimpleDictDocumentStore
 from oold.backend.interface import SetResolverParam, set_resolver
@@ -219,14 +219,34 @@ def test_range_is_derived_from_the_annotation():
     """Presence of ``x-oold-range`` is what makes a property a link, so the
     annotation has to put it there - otherwise the recommended declaration
     emits a schema that does not round-trip through code generation, and the
-    only way to get one is to repeat the target in ``OoldField(range=...)``."""
-    props = _properties(Person)
-    assert props["knows"]["x-oold-range"] == Person.get_cls_iri()
-    assert props["friends"]["x-oold-range"] == Person.get_cls_iri()
-    assert props["employer"]["x-oold-range"] == Org.get_cls_iri()
-    assert props["location"]["x-oold-range"] == Location.get_cls_iri()
+    only way to get one is to repeat the target in ``OoldField(range=...)``.
+
+    It is the target's **location** - its ``$id`` - because a consumer
+    dereferences it: code generation fetches the schema, a form editor renders
+    the targets it allows.
+    """
+
+    class Located(OoldModel):
+        model_config = ConfigDict(json_schema_extra={"$id": "https://example.org/NLocated"})
+        id: str
+        type: str | None = "ex:NLocated"
+        peer: Link["Located"] = OoldField()
+
+    Located.model_rebuild()
+    props = _properties(Located)
+    assert props["peer"]["x-oold-range"] == "https://example.org/NLocated"
     # the marker was a stand-in for the range; it goes once the range is there
-    assert "x-oold-link" not in props["knows"]
+    assert "x-oold-link" not in props["peer"]
+
+
+def test_a_class_that_does_not_say_where_its_schema_lives_has_no_range():
+    """get_cls_iri() answers identity - it merges the $id with the type field's
+    defaults, which are the instances' rdf:type. Deriving a range from it
+    published identities with nothing to fetch at them. Without a $id there is
+    no location to publish; `format` still marks the property a reference."""
+    props = _properties(Person)  # declares a type default, no $id
+    assert "x-oold-range" not in props["knows"]
+    assert props["knows"]["items"]["format"] == "iri-reference"
 
 
 def test_an_explicit_range_is_not_overwritten():
@@ -258,11 +278,12 @@ def test_required_is_a_field_argument_not_the_annotation():
     with pytest.raises(LinkNotResolved):
         _ = c.father  # optional to supply, still mandatory to read
 
-    props = _properties(Chain)
-    assert props["manager"]["x-oold-required-iri"] is True
-    # a plain JSON Schema validator only sees the standard array
+    # the schema states requiredness through `required` and nothing else;
+    # x-oold-required-iri is an oold-python field annotation and stays internal
     assert "manager" in _required(Chain)
     assert "father" not in _required(Chain)
+    assert "x-oold-required-iri" not in _properties(Chain)["manager"]
+    assert Chain.__link_fields__["manager"].required_iri is True
 
 
 def test_required_iri_is_still_accepted():
@@ -276,14 +297,19 @@ def test_required_iri_is_still_accepted():
     Old.model_rebuild()
     with pytest.raises(ValueError, match="manager is required"):
         Old(id="ex:o")
-    assert _properties(Old)["manager"]["x-oold-required-iri"] is True
+    assert "manager" in _required(Old)
+    assert Old.__link_fields__["manager"].required_iri is True
 
 
-def test_a_link_annotation_without_a_default_is_required():
-    """No default means required, as it does anywhere else in Python. A link is
-    never required at the pydantic level - its value is routed out before
-    validation - so this used to fail with a misleading "Field required" about
-    a value that had in fact been supplied."""
+def test_a_link_annotation_without_a_default_is_optional():
+    """Links are declared far more often than they are required, so the terse
+    form is the common case.
+
+    Requiredness is explicit because it propagates into resolution: resolving a
+    link constructs the target, so a required link makes every stored document
+    lacking it unconstructible - and a self-referential link, `father`, could
+    then never be satisfied by a real dataset.
+    """
 
     class Bare(OoldModel):
         id: str
@@ -291,6 +317,6 @@ def test_a_link_annotation_without_a_default_is_required():
         manager: Link["Org"]
 
     Bare.model_rebuild()
+    assert Bare(id="ex:b").link_iris("manager") is None  # constructs unset
     assert Bare(id="ex:b", manager="ex:acme").link_iris("manager") == "ex:acme"
-    with pytest.raises(ValueError, match="manager is required"):
-        Bare(id="ex:b")
+    assert Bare.__link_fields__["manager"].required_iri is False

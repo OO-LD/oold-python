@@ -152,6 +152,74 @@ def registered_types() -> dict:
     return _types
 
 
+def register_controller_type(cls: type, iri: str | list[str] | None = None) -> None:
+    """Register a controller class under the type IRI(s) it can act on.
+
+    Controller subclasses register themselves on creation, so this is only
+    needed for controllers built dynamically or registered under an extra IRI.
+    Several controllers may answer to the same IRI; they are kept in
+    registration order.
+
+    Parameters
+    ----------
+    cls
+        The controller class to register.
+    iri
+        The IRI(s) to register under. Defaults to ``cls.get_cls_iri()``.
+    """
+    if iri is None:
+        iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
+    if iri is None:
+        raise ValueError(f"{cls.__name__} has no type IRI: pass iri= or define get_cls_iri()")
+    for value in iri if isinstance(iri, list) else [iri]:
+        if isinstance(value, str):
+            entries = _controller_types.setdefault(value, [])
+            if cls not in entries:
+                entries.append(cls)
+
+
+def get_registered_controller_types(iri: str) -> list:
+    """The controller classes registered for a type IRI, in registration order."""
+    return list(_controller_types.get(iri, []))
+
+
+def registered_controller_types() -> dict:
+    """The live controller registry.
+
+    Prefer :func:`register_controller_type` over writing to it directly.
+    """
+    return _controller_types
+
+
+def find_controller_type(type_iris, base: type | None = None) -> type | None:
+    """A registered controller for any of ``type_iris``.
+
+    Lets a caller act on an entity without knowing which concrete controller
+    implements it: pass the entity's type IRIs and, optionally, the interface
+    the controller has to provide. The IRIs are tried in order; within one IRI
+    the most recently registered controller wins, so a downstream package can
+    override an implementation by importing its own.
+
+    Parameters
+    ----------
+    type_iris
+        A type IRI or a list of them, tried in order.
+    base
+        If given, only controllers that are a subclass of it are considered.
+
+    Returns
+    -------
+        The controller class, or ``None`` if nothing matches.
+    """
+    if isinstance(type_iris, str):
+        type_iris = [type_iris]
+    for iri in type_iris or []:
+        for cls in reversed(_controller_types.get(iri, [])):
+            if base is None or issubclass(cls, base):
+                return cls
+    return None
+
+
 _logger = logging.getLogger(__name__)
 
 

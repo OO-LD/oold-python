@@ -13,6 +13,14 @@ Requires the ``agent`` extra::
     pip install "oold[agent]"
 """
 
+from oold.agent.client import (
+    Call,
+    CallLog,
+    ChatClient,
+    ChatResponse,
+    Message,
+    TokenUsage,
+)
 from oold.agent.enforcement import (
     ARMS,
     DecodeConstraint,
@@ -33,12 +41,18 @@ from oold.agent.provider import (
 __all__ = [
     "ARMS",
     "PROFILES",
+    "Call",
+    "CallLog",
+    "ChatClient",
+    "ChatResponse",
     "DecodeConstraint",
     "Degradation",
     "Enforcement",
+    "Message",
     "Orchestration",
     "OutputForm",
     "ProviderProfile",
+    "TokenUsage",
     "arm",
     "prepare",
     "profile_for",

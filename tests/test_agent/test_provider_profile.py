@@ -153,17 +153,13 @@ class TestRequiredAndAdditional:
 
 class TestGrounding:
     def test_grounding_keeps_the_context_and_the_iris(self):
-        prepared, report = prepare(
-            INHERITED, profile_for("openai"), grounding=True
-        )
+        prepared, report = prepare(INHERITED, profile_for("openai"), grounding=True)
         assert "@context" in prepared
         assert prepared["x-oold-iri"] == "https://schema.org/Person"
         assert report.semantics_dropped == 0
 
     def test_flattening_removes_them_and_counts_it(self):
-        prepared, report = prepare(
-            INHERITED, profile_for("openai"), grounding=False
-        )
+        prepared, report = prepare(INHERITED, profile_for("openai"), grounding=False)
         assert "@context" not in prepared
         assert "x-oold-iri" not in prepared
         assert report.semantics_dropped == 2
@@ -210,7 +206,7 @@ class TestReproducibility:
     def test_the_input_is_not_mutated(self):
         before = dict(CONSTRAINED)
         prepare(CONSTRAINED, profile_for("openai"))
-        assert CONSTRAINED == before
+        assert before == CONSTRAINED
 
     def test_an_unknown_profile_is_refused_rather_than_guessed(self):
         """A model name must never select a profile by substring."""

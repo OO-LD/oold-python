@@ -87,15 +87,10 @@ class Enforcement:
 
     def __post_init__(self) -> None:
         if self.grounding and not self.schema_in_prompt:
-            raise ValueError(
-                "grounding needs a schema to ground; "
-                "set schema_in_prompt when grounding is on"
-            )
+            raise ValueError("grounding needs a schema to ground, so set schema_in_prompt when grounding is on")
         if self.output_form is OutputForm.PROSE:
             if self.decode_constraint is not DecodeConstraint.NONE:
-                raise ValueError(
-                    "prose output cannot carry a decode-time constraint"
-                )
+                raise ValueError("prose output cannot carry a decode-time constraint")
             if self.commit_gate:
                 raise ValueError("prose output has no class path to gate")
 
@@ -104,7 +99,7 @@ class Enforcement:
         """How many classes were offered. Zero when none were."""
         return 0 if self.catalogue is None else len(self.catalogue)
 
-    def with_catalogue(self, paths: tuple[str, ...] | None) -> "Enforcement":
+    def with_catalogue(self, paths: tuple[str, ...] | None) -> Enforcement:
         """The same condition over a different catalogue.
 
         This is the one knob a catalogue-weight sweep moves, so it gets a
@@ -115,8 +110,9 @@ class Enforcement:
     def describe(self) -> dict[str, object]:
         """The condition, for the result record.
 
-        Catalogue contents are not included; they are large and belong in a
-        hash alongside the record. The size is here because it is the variable.
+        Catalogue contents are not included, because they are large and belong
+        in a hash alongside the record. The size is here because it is the
+        variable a sweep moves.
         """
         return {
             "schema_in_prompt": self.schema_in_prompt,

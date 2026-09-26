@@ -2,11 +2,11 @@
 
 Providers accept different subsets of JSON Schema, so the same OO-LD schema
 reaches each of them differently. That makes the transform part of the
-treatment, not a utility: if one provider is handed a schema that lost its
-constraints and another is not, a measured difference between them is partly a
-difference between transforms. So the profile is declared in configuration
-rather than sniffed from a model name, the prepared schema is hashed into the
-result, and what the transform removed is reported as a number.
+treatment rather than a utility. If one provider is handed a schema that lost
+its constraints and another is not, a measured difference between them is
+partly a difference between transforms. So the profile is declared in
+configuration rather than sniffed from a model name, the prepared schema is
+hashed into the result, and what the transform removed is reported as a number.
 
 The combinator flattening follows the approach taken by LiteLLM's
 ``flatten_top_level_schema_combinators``: merge where merging is sound, and
@@ -105,8 +105,8 @@ class ProviderProfile:
     name: str
     supports_combinators: bool = False
     """Whether ``allOf``, ``oneOf`` and ``not`` survive. Only a consumer that
-    takes arbitrary JSON Schema keywords does; every strict structured-output
-    mode rejects them."""
+    takes arbitrary JSON Schema keywords accepts them, because every strict
+    structured-output mode rejects all three."""
     supports_recursive_ref: bool = True
     supports_any_of: bool = True
     supports_numeric_constraints: bool = True
@@ -169,7 +169,7 @@ PROFILES: dict[str, ProviderProfile] = {
 }
 """Declared subsets.
 
-``native`` sends the schema through unchanged, which is the grounded arm: the
+``native`` sends the schema through unchanged, which is the grounded arm. The
 consumer takes arbitrary JSON Schema keywords and the ``@context`` is carried
 through as grounding. The others are the strict structured-output subset, and
 what each of them removes is the reason the two arms can differ.
@@ -178,10 +178,7 @@ what each of them removes is the reason the two arms can differ.
 
 def profile_for(name: str) -> ProviderProfile:
     if name not in PROFILES:
-        raise KeyError(
-            f"unknown provider profile {name!r}, "
-            f"expected one of {sorted(PROFILES)}"
-        )
+        raise KeyError(f"unknown provider profile {name!r}, expected one of {sorted(PROFILES)}")
     return PROFILES[name]
 
 
@@ -240,9 +237,7 @@ def prepare(
         if profile.requires_additional_properties_false:
             node["additionalProperties"] = False
         if profile.requires_all_properties_required and properties:
-            optional = [
-                k for k in properties if k not in node.get("required", [])
-            ]
+            optional = [k for k in properties if k not in node.get("required", [])]
             report.made_required += len(optional)
             for key in optional:
                 child = properties[key]
@@ -278,8 +273,7 @@ def prepare(
             keep_ref = (
                 # A consumer that takes arbitrary keywords keeps $defs too, so
                 # there is nothing to inline and nothing is lost.
-                not inlining
-                or (recursing and profile.supports_recursive_ref and not too_deep)
+                not inlining or (recursing and profile.supports_recursive_ref and not too_deep)
             )
             if keep_ref:
                 node["$ref"] = ref
@@ -288,9 +282,7 @@ def prepare(
                 report.recursion_cut += 1
                 return {
                     "type": "string",
-                    "description": node.get(
-                        "description", f"reference to {name}"
-                    ),
+                    "description": node.get("description", f"reference to {name}"),
                 }
             report.refs_inlined += 1
             resolved = walk(defs[name], (*seen, name), depth + 1)

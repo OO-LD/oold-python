@@ -63,6 +63,17 @@ mcp = [
     "referencing>=0.30",
     "click>=8.1",
 ]
+# The agent turns a schema into a validated instance with an LLM. Only the
+# bundled client adapter needs anything: the enforcement model and the
+# per-provider schema preparation are stdlib, and a consumer that brings its
+# own ChatClient implementation needs no extra at all.
+#
+# langchain-core, not langchain: this is the message and chat-model interface
+# only, without the agent framework or any provider package. A consumer
+# installs the provider integration it actually uses.
+agent = [
+    "langchain-core>=0.3",
+]
 UI-panel = [
     "panel",
     "jupyter_bokeh",
@@ -100,6 +111,7 @@ all = [
     "referencing>=0.30",
     "click>=8.1",
     "mcp>=1.2",
+    "langchain-core>=0.3",
 ]
 
 [dependency-groups]
@@ -110,6 +122,7 @@ dev = [
     "referencing>=0.30",
     "click>=8.1",
     "mcp>=1.2",
+    "langchain-core>=0.3",
     "pytest",
     "pytest-cov>=7.0.0",
     "pytest-benchmark",

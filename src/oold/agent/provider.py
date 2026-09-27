@@ -21,6 +21,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from oold.agent.union import flatten_union
+
 __all__ = [
     "PROFILES",
     "Degradation",
@@ -306,9 +308,15 @@ def prepare(
                     if isinstance(resolved, dict):
                         _merge(node, resolved)
             elif branches:
-                resolved = walk(branches[0], seen, depth + 1)
-                if isinstance(resolved, dict):
-                    _merge(node, resolved)
+                # Every branch, flattened into independent enums. Keeping the
+                # first one instead would not be a degradation: a hundred-class
+                # union would silently become one class, the model could only
+                # answer that class, and the run would read as a finding about
+                # the model. What is genuinely lost is the pairing, which the
+                # keyword counter above already records.
+                walked = [walk(branch, seen, depth + 1) for branch in branches]
+                resolved = flatten_union({combinator: [b for b in walked if isinstance(b, dict)]})
+                _merge(node, resolved)
 
         if "not" in node:
             node.pop("not")

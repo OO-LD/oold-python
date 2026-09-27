@@ -25,8 +25,30 @@ def typed(**overrides) -> Enforcement:
 
 
 class TestArms:
-    def test_all_five_arms_exist(self):
-        assert sorted(ARMS) == ["A0-json", "A0-prose", "A1", "A2", "A3"]
+    def test_every_arm_exists(self):
+        assert sorted(ARMS) == [
+            "A0-json",
+            "A0-prose",
+            "A1",
+            "A2",
+            "A2-enforced-only",
+            "A3",
+            "A4",
+        ]
+
+    def test_the_union_arm_differs_from_the_enum_arm_only_in_the_constraint(self):
+        """Or a measured difference has two candidate causes."""
+        enum_arm, union_arm = ARMS["A2"], ARMS["A4"]
+        assert enum_arm.schema_in_prompt == union_arm.schema_in_prompt
+        assert enum_arm.commit_gate == union_arm.commit_gate
+        assert enum_arm.grounding == union_arm.grounding
+        assert enum_arm.decode_constraint is not union_arm.decode_constraint
+
+    def test_the_enforced_only_arm_differs_from_a2_only_in_what_is_shown(self):
+        shown, enforced = ARMS["A2"], ARMS["A2-enforced-only"]
+        assert shown.decode_constraint is enforced.decode_constraint
+        assert shown.schema_in_prompt is True
+        assert enforced.schema_in_prompt is False
 
     def test_a0_offers_no_schema_and_no_catalogue(self):
         for name in ("A0-prose", "A0-json"):
@@ -80,7 +102,7 @@ class TestArms:
 
     def test_unknown_arm_is_refused(self):
         with pytest.raises(KeyError, match="unknown arm"):
-            arm("A4")
+            arm("A9-nonesuch")
 
 
 class TestEnforcement:
@@ -139,6 +161,7 @@ def test_orchestration_covers_single_shot_and_the_three_reference_agents():
         "recursive",
         "segmented",
         "multi_step",
+        "select_then_fill",
     ]
 
 

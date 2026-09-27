@@ -57,25 +57,22 @@ class TestWhatTheCatalogueLooksLike:
         assert "- Mass" in section
 
     def test_rendered_entries_replace_the_bare_list(self):
-        enforcement = arm("A2", ("Length", "Mass")).with_catalogue_text(
-            ("- Length (Length)\n  units: meter", "- Mass (Mass)\n  units: gram")
-        )
+        enforcement = arm("A2", ("Length", "Mass")).with_catalogue_text((
+            "- Length (Length)\n  units: meter",
+            "- Mass (Mass)\n  units: gram",
+        ))
         section = catalogue_section(enforcement)
         assert "units: meter" in section
         assert "units: gram" in section
 
     def test_the_identifier_survives_in_a_rendered_entry(self):
         """It is still the answer, however much else is shown."""
-        enforcement = arm("A2", ("Length",)).with_catalogue_text(
-            ("- Length (Length)\n  units: meter",)
-        )
+        enforcement = arm("A2", ("Length",)).with_catalogue_text(("- Length (Length)\n  units: meter",))
         assert "- Length" in catalogue_section(enforcement)
 
     def test_every_offered_class_reaches_the_prompt(self):
         names = tuple(f"C{i}" for i in range(40))
-        enforcement = arm("A2", names).with_catalogue_text(
-            tuple(f"- {n} (label {n})" for n in names)
-        )
+        enforcement = arm("A2", names).with_catalogue_text(tuple(f"- {n} (label {n})" for n in names))
         section = catalogue_section(enforcement)
         assert all(f"- {n} (label {n})" in section for n in names)
 

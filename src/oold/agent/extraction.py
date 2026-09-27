@@ -27,6 +27,7 @@ from oold.agent.enforcement import (
 )
 from oold.agent.prompts import ExtractionRequest, build_messages
 from oold.agent.provider import Degradation, ProviderProfile, prepare, schema_hash
+from oold.agent.union import union_schema
 
 __all__ = ["ExtractionAgent", "ExtractionResult", "parse_json_answer"]
 
@@ -159,6 +160,8 @@ class ExtractionAgent:
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_ENUM:
             prepared = self._pin_class(prepared)
             prepared = self._pin_units(prepared)
+        elif self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_UNION:
+            prepared = self._pin_union(prepared, request.branches)
         return prepared, degradation, schema_hash(prepared)
 
     def _pin_class(self, schema: dict[str, Any]) -> dict[str, Any]:
@@ -174,6 +177,33 @@ class ExtractionAgent:
         if target is None:
             raise ValueError("the schema has no class property to pin, so the decode-time constraint cannot be applied")
         target["enum"] = list(self.enforcement.catalogue)
+        return schema
+
+    def _pin_union(self, schema: dict[str, Any], branches: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
+        """Replace the entity shape with a union over the offered classes.
+
+        Fails loudly without branches, the same way :meth:`_pin_class` does.
+        A union arm that quietly ran unconstrained would be reported as a
+        finding about unions.
+        """
+        if not self.enforcement.catalogue:
+            return schema
+        if not branches:
+            raise ValueError("a union constraint needs one branch per offered class, and the request carried none")
+        offered = {name: branches[name] for name in self.enforcement.catalogue if name in branches}
+        if not offered:
+            raise ValueError("no offered class has a branch, so the union would admit nothing")
+        target = _find_entity_items(schema)
+        if target is None:
+            raise ValueError("the schema has no entity shape to turn into a union")
+        shared = {k: v for k, v in (target.get("properties") or {}).items() if k not in _CLASS_KEYS}
+        union = union_schema(
+            offered,
+            shared={k: v for k, v in shared.items() if k not in _UNIT_KEYS},
+            required=tuple(target.get("required") or ()),
+        )
+        target.clear()
+        target.update(union)
         return schema
 
     def _pin_units(self, schema: dict[str, Any]) -> dict[str, Any]:
@@ -274,6 +304,29 @@ def _find_property(schema: Any, keys: tuple[str, ...]) -> dict[str, Any] | None:
     elif isinstance(schema, list):
         for item in schema:
             found = _find_property(item, keys)
+            if found is not None:
+                return found
+    return None
+
+
+def _find_entity_items(schema: Any) -> dict[str, Any] | None:
+    """The subschema describing one entity, which a union replaces.
+
+    The object that carries the class slot. Replacing the array instead would
+    make the union say the list is one of several kinds, not that each entry
+    is.
+    """
+    if isinstance(schema, dict):
+        properties = schema.get("properties")
+        if isinstance(properties, dict) and any(k in properties for k in _CLASS_KEYS):
+            return schema
+        for value in schema.values():
+            found = _find_entity_items(value)
+            if found is not None:
+                return found
+    elif isinstance(schema, list):
+        for item in schema:
+            found = _find_entity_items(item)
             if found is not None:
                 return found
     return None

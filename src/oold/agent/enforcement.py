@@ -40,6 +40,14 @@ class Orchestration(str, Enum):
     MULTI_STEP = "multi_step"
     """Detect, select properties, extract, construct, deduplicate."""
 
+    SELECT_THEN_FILL = "select_then_fill"
+    """Shortlist the class, then fill the schema that shortlist implies.
+
+    The general answer to a corpus whose subclasses add properties. A flat
+    schema there is the union of every property any class might carry, which
+    admits an answer no class allows. Selecting first makes the second call
+    carry only what the chosen classes actually define."""
+
 
 class DecodeConstraint(str, Enum):
     """What the model is prevented from emitting in the first place."""
@@ -51,7 +59,17 @@ class DecodeConstraint(str, Enum):
     """Structured output against the schema, without a class enumeration."""
 
     JSON_SCHEMA_ENUM = "json_schema+enum"
-    """Structured output with the class slot pinned to the catalogue."""
+    """Structured output with the class slot pinned to the catalogue.
+
+    Every slot is pinned independently, so nothing stops a model choosing a
+    class and a unit that cannot occur together."""
+
+    JSON_SCHEMA_UNION = "json_schema+union"
+    """Structured output over a discriminated union of the offered classes.
+
+    One branch per class, so choosing the class chooses what the other slots
+    may hold. The difference from the enum form is the pairing, which is the
+    thing the enum form cannot express."""
 
 
 class OutputForm(str, Enum):
@@ -192,6 +210,20 @@ ARMS: dict[str, Enforcement] = {
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
+        commit_gate=True,
+        grounding=False,
+    ),
+    "A2-enforced-only": Enforcement(
+        schema_in_prompt=False,
+        catalogue=(),
+        decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
+        commit_gate=True,
+        grounding=False,
+    ),
+    "A4": Enforcement(
+        schema_in_prompt=True,
+        catalogue=(),
+        decode_constraint=DecodeConstraint.JSON_SCHEMA_UNION,
         commit_gate=True,
         grounding=False,
     ),

@@ -42,6 +42,10 @@ class ExtractionRequest:
     schema: dict[str, Any] | None = None
     """The target schema. Shown only when the condition says so, and sent to
     the provider only when a decode-time constraint is in force."""
+    branches: dict[str, dict[str, Any]] | None = None
+    """What each offered class narrows, for a union constraint. Supplied per
+    request and not per condition, because it is corpus material like the
+    schema beside it, and this package never learns what a corpus is."""
     instruction: str | None = None
     """Overrides the shared task sentence. For a study this stays unset, so
     every arm reads the same words."""

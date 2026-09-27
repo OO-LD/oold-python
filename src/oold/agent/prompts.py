@@ -58,6 +58,12 @@ class ExtractionRequest:
     """What each offered class narrows, for a union constraint. Supplied per
     request and not per condition, because it is corpus material like the
     schema beside it, and this package never learns what a corpus is."""
+    parents: dict[str, tuple[str, ...]] | None = None
+    """Which classes each class inherits from.
+
+    Supplied when the corpus has a hierarchy worth expressing. A union then
+    states each property where it is declared instead of repeating every
+    inherited one in every branch."""
     instruction: str | None = None
     """Overrides the shared task sentence. For a study this stays unset, so
     every arm reads the same words."""

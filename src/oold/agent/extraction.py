@@ -33,7 +33,7 @@ from oold.agent.prompts import (
     selection_schema,
 )
 from oold.agent.provider import Degradation, ProviderProfile, prepare, schema_hash
-from oold.agent.union import union_schema
+from oold.agent.union import hierarchy_union, union_schema
 
 __all__ = ["ExtractionAgent", "ExtractionResult", "parse_json_answer"]
 
@@ -304,7 +304,7 @@ class ExtractionAgent:
         # values to a slot the transform has already shaped.
         source = request.schema
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_UNION:
-            source = self._pin_union(copy.deepcopy(source), request.branches)
+            source = self._pin_union(copy.deepcopy(source), request.branches, request.parents)
 
         prepared, degradation = prepare(source, self.profile, grounding=self.enforcement.grounding)
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_ENUM:
@@ -327,7 +327,12 @@ class ExtractionAgent:
         target["enum"] = list(self.enforcement.catalogue)
         return schema
 
-    def _pin_union(self, schema: dict[str, Any], branches: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
+    def _pin_union(
+        self,
+        schema: dict[str, Any],
+        branches: dict[str, dict[str, Any]] | None,
+        parents: dict[str, tuple[str, ...]] | None = None,
+    ) -> dict[str, Any]:
         """Replace the entity shape with a union over the offered classes.
 
         Fails loudly without branches, the same way :meth:`_pin_class` does.
@@ -354,11 +359,34 @@ class ExtractionAgent:
             for name, definition in (target.get("properties") or {}).items()
             if name not in _CLASS_KEYS and name not in narrowed
         }
-        union = union_schema(
-            offered,
-            shared=shared,
-            required=tuple(name for name in (target.get("required") or ()) if name not in narrowed),
-        )
+        if parents:
+            # The offered classes and what they inherit from, and nothing else.
+            # A catalogue carries a branch for every class it knows, so sending
+            # all of them would ship the ancestry of a hundred classes to
+            # constrain twenty-five. The choice stays the offered classes: an
+            # ancestor carried only to hold shared properties is not an answer.
+            lineage = {name: tuple(values) for name, values in parents.items()}
+            needed = set(offered)
+            queue = list(needed)
+            while queue:
+                current = queue.pop()
+                for ancestor in lineage.get(current, ()):
+                    if ancestor in branches and ancestor not in needed:
+                        needed.add(ancestor)
+                        queue.append(ancestor)
+            union = hierarchy_union(
+                {name: branches[name] for name in branches if name in needed},
+                {name: values for name, values in lineage.items() if name in needed},
+                concrete=tuple(offered),
+            )
+            if shared:
+                union.setdefault("properties", {}).update(shared)
+        else:
+            union = union_schema(
+                offered,
+                shared=shared,
+                required=tuple(name for name in (target.get("required") or ()) if name not in narrowed),
+            )
         target.clear()
         target.update(union)
         return schema

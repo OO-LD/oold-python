@@ -21,30 +21,17 @@ from oold.agent.enforcement import Enforcement, OutputForm
 
 __all__ = ["ExtractionRequest", "build_messages"]
 
-_TASK = (
-    "Read the document and report every entity it describes, with the "
-    "values stated for each."
-)
+_TASK = "Read the document and report every entity it describes, with the values stated for each."
 
-_JSON_FORM = (
-    "Answer with JSON only. No explanation, no markdown fence, no commentary."
-)
+_JSON_FORM = "Answer with JSON only. No explanation, no markdown fence, no commentary."
 
-_PROSE_FORM = (
-    "Answer in plain prose. State each entity and the values given for it."
-)
+_PROSE_FORM = "Answer in plain prose. State each entity and the values given for it."
 
-_CATALOGUE = (
-    "Choose the class of each entity from this list, using one of these "
-    "exactly:"
-)
+_CATALOGUE = "Choose the class of each entity from this list, using one of these exactly:"
 
 _SCHEMA = "Each entity must conform to this schema:"
 
-_GATE_HINT = (
-    "An entity whose class is not in the list will be discarded, so leave "
-    "out anything you cannot place."
-)
+_GATE_HINT = "An entity whose class is not in the list will be discarded, so leave out anything you cannot place."
 
 
 @dataclass(frozen=True)
@@ -60,9 +47,7 @@ class ExtractionRequest:
     every arm reads the same words."""
 
 
-def build_messages(
-    request: ExtractionRequest, enforcement: Enforcement
-) -> list[Message]:
+def build_messages(request: ExtractionRequest, enforcement: Enforcement) -> list[Message]:
     """The messages one arm sends for one document.
 
     The system message is assembled from sections, the user message is the
@@ -72,9 +57,7 @@ def build_messages(
     """
     sections: list[str] = [request.instruction or _TASK]
 
-    sections.append(
-        _PROSE_FORM if enforcement.output_form is OutputForm.PROSE else _JSON_FORM
-    )
+    sections.append(_PROSE_FORM if enforcement.output_form is OutputForm.PROSE else _JSON_FORM)
 
     if enforcement.catalogue:
         listed = "\n".join(f"- {name}" for name in enforcement.catalogue)

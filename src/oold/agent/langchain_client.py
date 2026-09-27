@@ -24,7 +24,7 @@ def usage_from_message(message: Any) -> TokenUsage:
 
     LangChain normalises providers into ``usage_metadata``, but the nested
     detail dictionaries are optional and differ by provider, so every lookup
-    is defensive. A provider that reports nothing yields zeros rather than
+    is defensive. A provider that reports nothing yields zeros instead of
     raising, and a zero total is the signal that a model is uninstrumented.
     """
     metadata = getattr(message, "usage_metadata", None) or {}
@@ -44,7 +44,7 @@ class LangChainClient:
     def __init__(self, llm: BaseChatModel, model: str) -> None:
         self._llm = llm
         self.model = model
-        """The identifier recorded in the result. Passed in rather than read
+        """The identifier recorded in the result. Passed in instead of read
         off the object, because what a provider calls a model and what a
         deployment is named are different strings and the result needs the
         one that identifies the weights."""

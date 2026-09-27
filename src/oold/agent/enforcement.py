@@ -1,9 +1,9 @@
-"""Where structure is enforced, as data rather than as separate code paths.
+"""Where structure is enforced, as data instead of as separate code paths.
 
 Orchestration and enforcement are independent. The agent that walks a document
 recursively and the agent that runs a five-step pipeline can both be given a
 schema in the prompt, a decode-time constraint, a commit-time gate, all three,
-or none. Entangling the two is what makes a comparison of typed against untyped
+or none. Entangling the two makes a comparison of typed against untyped
 extraction impossible to interpret, because every measured difference has two
 candidate causes.
 """
@@ -107,7 +107,7 @@ class Enforcement:
         """The same condition over a different catalogue.
 
         This is the one knob a catalogue-weight sweep moves, so it gets a
-        method rather than being reconstructed by hand at each size.
+        method instead of being reconstructed by hand at each size.
         """
         return replace(self, catalogue=paths)
 
@@ -172,11 +172,11 @@ ARMS: dict[str, Enforcement] = {
 }
 """The five arms, with an empty catalogue that a run fills in.
 
-A0 is two arms rather than one. ``A0-json`` is the headline comparison, because
+A0 is two arms, not one. ``A0-json`` is the headline comparison, because
 its output reduces to triples by the same path as every other arm and needs no
 judge. ``A0-prose`` is reported beside it with the parse loss of its extractor
 stated, so the objection that JSON is already a form of structure has an answer
-in the results rather than in the discussion.
+in the results and not in the discussion.
 """
 
 

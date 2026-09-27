@@ -113,17 +113,14 @@ class ExtractionAgent:
         )
         response_format = (
             prepared
-            if prepared is not None
-            and self.enforcement.decode_constraint is not DecodeConstraint.NONE
+            if prepared is not None and self.enforcement.decode_constraint is not DecodeConstraint.NONE
             else None
         )
 
         text = ""
         payload: Any | None = None
         for attempt in range(1, self.attempts + 1):
-            with log.timed(
-                "extract", self.client.model, attempt=attempt, schema_sha256=digest
-            ) as sink:
+            with log.timed("extract", self.client.model, attempt=attempt, schema_sha256=digest) as sink:
                 reply = self.client.invoke(messages, response_format=response_format)
                 sink.append(reply.usage or TokenUsage())
             text = reply.text
@@ -144,19 +141,14 @@ class ExtractionAgent:
             dropped=dropped,
         )
 
-    def _schema_for(
-        self, request: ExtractionRequest
-    ) -> tuple[dict[str, Any] | None, Degradation | None, str | None]:
+    def _schema_for(self, request: ExtractionRequest) -> tuple[dict[str, Any] | None, Degradation | None, str | None]:
         """The schema this condition sends, and what preparing it cost."""
         needs_schema = (
-            self.enforcement.schema_in_prompt
-            or self.enforcement.decode_constraint is not DecodeConstraint.NONE
+            self.enforcement.schema_in_prompt or self.enforcement.decode_constraint is not DecodeConstraint.NONE
         )
         if request.schema is None or not needs_schema:
             return None, None, None
-        prepared, degradation = prepare(
-            request.schema, self.profile, grounding=self.enforcement.grounding
-        )
+        prepared, degradation = prepare(request.schema, self.profile, grounding=self.enforcement.grounding)
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_ENUM:
             prepared = self._pin_class(prepared)
         return prepared, degradation, schema_hash(prepared)
@@ -172,10 +164,7 @@ class ExtractionAgent:
             return schema
         target = _find_class_property(schema)
         if target is None:
-            raise ValueError(
-                "the schema has no class property to pin, so the decode-time "
-                "constraint cannot be applied"
-            )
+            raise ValueError("the schema has no class property to pin, so the decode-time constraint cannot be applied")
         target["enum"] = list(self.enforcement.catalogue)
         return schema
 

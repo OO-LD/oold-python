@@ -2,7 +2,7 @@
 
 Orchestration and enforcement are separate axes here, so a study can hold one
 fixed while varying the other. The three agents in the `osl-eln-demo` project
-become three values of :class:`Orchestration` rather than three code paths.
+become three values of :class:`Orchestration` instead of three code paths.
 
 Nothing in the core of ``oold`` imports this package, so installing ``oold``
 for typed data never pulls in an LLM client.

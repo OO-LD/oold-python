@@ -2,10 +2,10 @@
 
 Providers accept different subsets of JSON Schema, so the same OO-LD schema
 reaches each of them differently. That makes the transform part of the
-treatment rather than a utility. If one provider is handed a schema that lost
+treatment and not a utility. If one provider is handed a schema that lost
 its constraints and another is not, a measured difference between them is
 partly a difference between transforms. So the profile is declared in
-configuration rather than sniffed from a model name, the prepared schema is
+configuration and never sniffed from a model name, the prepared schema is
 hashed into the result, and what the transform removed is reported as a number.
 
 The combinator flattening follows the approach taken by LiteLLM's

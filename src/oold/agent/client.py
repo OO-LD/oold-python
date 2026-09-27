@@ -1,7 +1,7 @@
 """The boundary between the agent and whatever talks to a model.
 
 Two things live here. A :class:`ChatClient` protocol, so the agent depends on a
-shape rather than on a vendor SDK, and a :class:`CallLog`, so token cost is
+shape instead of on a vendor SDK, and a :class:`CallLog`, so token cost is
 attributed to the step that spent it.
 
 Per-call attribution is not a nicety. A run total cannot separate what the
@@ -114,7 +114,7 @@ class Call:
     attempt: int = 1
     schema_sha256: str | None = None
     """Hash of the schema actually sent, so a result names the bytes the model
-    saw rather than the schema someone believes it saw."""
+    saw, not the schema someone believes it saw."""
     error: str | None = None
 
     def describe(self) -> dict[str, Any]:

@@ -97,9 +97,7 @@ class TestThePromptFollowsTheCondition:
 
     def test_prose_and_json_arms_ask_for_different_forms(self):
         prose, as_json = FakeClient(), FakeClient()
-        ExtractionAgent(
-            prose, ARMS["A0-prose"], profile_for("openai")
-        ).run(ExtractionRequest("doc"))
+        ExtractionAgent(prose, ARMS["A0-prose"], profile_for("openai")).run(ExtractionRequest("doc"))
         agent("A0-json", as_json).run(ExtractionRequest("doc"))
         assert "prose" in prose.system().lower()
         assert "JSON" in as_json.system()
@@ -125,9 +123,7 @@ class TestTheDecodeConstraint:
         """A silent no-op would run an arm unconstrained and call it constrained."""
         client = FakeClient()
         with pytest.raises(ValueError, match="no class property to pin"):
-            agent("A2", client).run(
-                ExtractionRequest("doc", {"type": "object", "properties": {"v": {}}})
-            )
+            agent("A2", client).run(ExtractionRequest("doc", {"type": "object", "properties": {"v": {}}}))
 
     def test_the_schema_actually_sent_is_hashed(self):
         client = FakeClient()
@@ -136,12 +132,8 @@ class TestTheDecodeConstraint:
 
     def test_two_providers_get_different_schemas(self):
         """Preparation is part of the treatment, so it has to be recorded."""
-        strict = agent("A2", FakeClient(), profile="anthropic").run(
-            ExtractionRequest("doc", SCHEMA)
-        )
-        lenient = agent("A2", FakeClient(), profile="openai").run(
-            ExtractionRequest("doc", SCHEMA)
-        )
+        strict = agent("A2", FakeClient(), profile="anthropic").run(ExtractionRequest("doc", SCHEMA))
+        lenient = agent("A2", FakeClient(), profile="openai").run(ExtractionRequest("doc", SCHEMA))
         assert strict.schema_sha256 != lenient.schema_sha256
         assert strict.degradation is not None
 
@@ -164,10 +156,7 @@ class TestTheCommitGate:
 
     def test_the_filtered_result_is_the_one_returned(self):
         """Keeping corrections and discarding removals is the predecessor's bug."""
-        client = FakeClient(
-            '{"entities": [{"type": "quantities.Length", "value": 1},'
-            ' {"type": "Nope", "value": 2}]}'
-        )
+        client = FakeClient('{"entities": [{"type": "quantities.Length", "value": 1}, {"type": "Nope", "value": 2}]}')
         result = agent("A1", client).run(ExtractionRequest("doc", SCHEMA))
         assert len(result.payload["entities"]) == 1
 
@@ -198,9 +187,7 @@ class TestTheAnswer:
 
     def test_a_prose_arm_is_not_asked_to_parse(self):
         client = FakeClient("The length was one metre.")
-        result = ExtractionAgent(
-            client, ARMS["A0-prose"], profile_for("openai")
-        ).run(ExtractionRequest("doc"))
+        result = ExtractionAgent(client, ARMS["A0-prose"], profile_for("openai")).run(ExtractionRequest("doc"))
         assert result.text == "The length was one metre."
         assert client.calls == 1
 
@@ -240,9 +227,7 @@ class TestOrchestration:
         "orchestration",
         [Orchestration.RECURSIVE, Orchestration.SEGMENTED, Orchestration.MULTI_STEP],
     )
-    def test_an_unported_orchestration_refuses_rather_than_pretending(
-        self, orchestration
-    ):
+    def test_an_unported_orchestration_refuses_rather_than_pretending(self, orchestration):
         with pytest.raises(NotImplementedError, match="not ported yet"):
             ExtractionAgent(
                 FakeClient(),

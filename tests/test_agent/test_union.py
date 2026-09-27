@@ -203,3 +203,44 @@ class TestTheEnforcedOnlyArm:
 
         content = build_messages(ExtractionRequest(document="d"), arm("A2-enforced-only", ("Length",)))[0].content
         assert "- Length" in content
+
+
+class TestTheUnionReachesTheProviderTransform:
+    """The union has to be built before prepare(), not after.
+
+    Built after, an `anyOf` goes to a profile that rejects one and the
+    degradation measure reports that nothing was lost, because the transform
+    never saw it. A whole run then claims a fidelity it does not have.
+    """
+
+    def sent(self, profile):
+        client = RecordingClient()
+        agent = ExtractionAgent(client, arm("A4", ("Length", "Mass")), profile_for(profile))
+        result = agent.run(ExtractionRequest(document="d", schema=SCHEMA, branches=BRANCHES))
+        return client.response_format, result.degradation
+
+    def test_a_profile_that_takes_anyof_keeps_it(self):
+        schema, degradation = self.sent("openai")
+        assert "anyOf" in schema["properties"]["entities"]["items"]
+        assert degradation.dropped.get("anyOf") is None
+
+    def test_a_profile_that_refuses_anyof_never_receives_one(self):
+        schema, _ = self.sent("anthropic")
+        assert "anyOf" not in schema["properties"]["entities"]["items"]
+
+    def test_refusing_it_is_recorded_as_a_loss(self):
+        """Reporting fidelity 1.000 here is the bug this test exists for."""
+        _, degradation = self.sent("anthropic")
+        assert degradation.dropped.get("anyOf") == 1
+        assert degradation.fidelity < 1.0
+
+    def test_every_class_survives_the_flattening(self):
+        schema, _ = self.sent("anthropic")
+        items = schema["properties"]["entities"]["items"]
+        assert items["properties"]["type"]["enum"] == ["Length", "Mass"]
+
+    def test_the_two_profiles_report_different_fidelity(self):
+        """So the report can refuse to average them."""
+        _, keeps = self.sent("openai")
+        _, loses = self.sent("anthropic")
+        assert keeps.fidelity != loses.fidelity

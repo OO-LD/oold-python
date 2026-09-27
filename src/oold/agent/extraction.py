@@ -13,6 +13,7 @@ doing the scoring, so this package never learns what a benchmark is.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from dataclasses import dataclass, field, replace
@@ -295,12 +296,20 @@ class ExtractionAgent:
         )
         if request.schema is None or not needs_schema:
             return None, None, None
-        prepared, degradation = prepare(request.schema, self.profile, grounding=self.enforcement.grounding)
+
+        # The union is built before the provider transform, not after. Building
+        # it after would send an `anyOf` to a profile that rejects one, and the
+        # degradation measure would report that nothing was lost because the
+        # transform never saw it. An enum is pinned after, because pinning adds
+        # values to a slot the transform has already shaped.
+        source = request.schema
+        if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_UNION:
+            source = self._pin_union(copy.deepcopy(source), request.branches)
+
+        prepared, degradation = prepare(source, self.profile, grounding=self.enforcement.grounding)
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_ENUM:
             prepared = self._pin_class(prepared)
             prepared = self._pin_units(prepared)
-        elif self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_UNION:
-            prepared = self._pin_union(prepared, request.branches)
         return prepared, degradation, schema_hash(prepared)
 
     def _pin_class(self, schema: dict[str, Any]) -> dict[str, Any]:

@@ -10,8 +10,6 @@ contrast its name claims.
 import json
 from dataclasses import replace
 
-import pytest
-
 from oold.agent.client import ChatResponse
 from oold.agent.enforcement import arm
 from oold.agent.extraction import ExtractionAgent

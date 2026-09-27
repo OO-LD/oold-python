@@ -158,6 +158,15 @@ class LinkedApiMixin(GenericLinkedBaseModel):
         ``GenericLinkedBaseModel`` only declares this abstract, so without an
         implementation it silently returns ``None`` - which would break the
         downstream callers and the type registry alike.
+
+        This answers **identity**: it merges the ``$id`` with the ``type``
+        field's default(s), which are the instances' rdf:type, so the registry
+        can resolve a document's ``type`` back to a class. It is not a
+        **location** and must not be used as one - a consumer dereferences a
+        location, and the two only coincide sometimes.
+        ``wiki_data.Person`` answers ``["http://www.wikidata.org/entity/Q5",
+        "Item:Q5"]`` and publishes no schema at either. Emitting
+        ``x-oold-range`` uses ``$id`` alone; see ``_AutoLink.range_iri``.
         """
         schema = getattr(cls, "model_config", {}).get("json_schema_extra") or {}
         if callable(schema):

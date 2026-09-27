@@ -159,9 +159,18 @@ class Person(LinkedBaseModel):
 
 `__set__` is declared under `TYPE_CHECKING` only, so at runtime the descriptor
 stays **non-data** and the instance-`__dict__` cache from 3.1 is untouched.
-`__get_pydantic_core_schema__` builds the schema of the *target*, so the emitted
-JSON Schema is byte-identical to the plain annotation - `$ref`, arrays, unions
-and forward references included.
+`__get_pydantic_core_schema__` builds the schema of the *target*, so what
+pydantic sees is identical to the plain annotation - arrays, unions and forward
+references included, and both spellings therefore emit the same document.
+
+What that document says about a link is a separate question. A link serialises
+to an IRI, so the published property is `{"type": "string", "x-oold-range": …}`,
+or an array of strings for a to-many link - which is what a real OSW schema
+carries. The `$ref` / `allOf` form is what `generator.preprocess` builds so that
+`datamodel-code-generator` emits `Optional[Bar]` instead of a string field; it
+is a code generation shape, and publishing it described a document the library
+never writes. A union arm keeps its union: `str | Location | None` genuinely
+accepts a literal, a reference or an inline object.
 
 #### Optionality is declared, not assumed
 
@@ -325,13 +334,20 @@ read it?" - so two carriers:
 | declaration | stored as | enforced | on violation |
 |---|---|---|---|
 | `Link[T]` - no `None` arm | `_AutoLink.optional = False` | on read | `LinkNotResolved` |
-| `OoldField(required=True)` | `_AutoLink.required_iri`, precomputed into `cls.__required_links__`; emitted as `x-oold-required-iri` and into the standard `required` array | in `__init__` | `ValueError: ... is required but not set` |
+| `OoldField(required=True)` | `_AutoLink.required_iri`, precomputed into `cls.__required_links__`; reaches the schema as the standard `required` array | in `__init__` | `ValueError: ... is required but not set` |
 
 A link is never required at the *pydantic* level, because its value is routed
 out of the payload before validation - which is why the legacy binding declared
 every generated link field `Optional[...]` and carried requiredness in the
-keyword. A bare `Link[T]` annotation with no default is read as required, which
-is what Python means by "no default" everywhere else.
+keyword. `x-oold-required-iri` is that keyword, and it stays internal: a schema
+states requiredness through `required` alone, and the annotation exists only to
+carry the requirement across the point where code generation drops the property
+from `required` so the emitted field is `Optional`.
+
+A bare `Link[T]` annotation with no default is **optional**. "No default means
+required" reads well in plain Python, but requiredness propagates into
+resolution - the failure mode described next - and links are declared far more
+often than they are required, so the terse form is the common case.
 
 **Why not put requiredness in the annotation.** `required` -> `Link[T]`,
 absence -> `Link[T | None]` reads well and was the first proposal. It fails on a

@@ -644,15 +644,50 @@ def _inverse_preprocess(schema: dict):
     return schema
 
 
-def _export_schema_from_dynamic_model(model_cls: BaseModel | BaseModel_v1) -> dict:
+def _own_field_names(model_cls: BaseModel | BaseModel_v1, cutoff_base_cls: tuple = ()) -> set:
+    """The field names this class introduces, not the ones it inherits.
+
+    ``model_fields`` / ``__fields__`` are **flattened** by pydantic: they hold
+    every inherited field too, so building a "model itself" copy from them
+    produced the whole hierarchy again. What a level adds is the difference
+    against its bases.
+
+    Restating an inherited property is not merely redundant: a restatement can
+    relax a constraint the ancestor declared, which OOLD-CMP-f3c7 forbids.
+    """
+
+    def names(cls) -> set:
+        fields = getattr(cls, "model_fields", None)
+        if fields is None:
+            fields = getattr(cls, "__fields__", None) or {}
+        return set(fields)
+
+    inherited: set = set()
+    bases = cutoff_base_cls or getattr(model_cls, "__bases__", ())
+    for base in bases:
+        if base in (BaseModel, BaseModel_v1):
+            continue
+        inherited |= names(base)
+    return names(model_cls) - inherited
+
+
+def _export_schema_from_dynamic_model(
+    model_cls: BaseModel | BaseModel_v1,
+    only: set | None = None,
+) -> dict:
     """Export the OO-LD schema of a single pydantic model.
     Class hierarchy is not considered, only the model itself
     by generating a model copy without base classes.
+
+    ``only`` restricts the copy to the given field names, which is what makes
+    the copy a *level* rather than the flattened model.
     """
 
     if issubclass(model_cls, BaseModel):
         field_dict = {}
         for field_name, field in model_cls.model_fields.items():
+            if only is not None and field_name not in only:
+                continue
             field_dict[field_name] = (field.annotation, field)
 
         # create model dynamically
@@ -669,6 +704,8 @@ def _export_schema_from_dynamic_model(model_cls: BaseModel | BaseModel_v1) -> di
         model_cls: BaseModel_v1 = model_cls  # type: ignore[assignment]
         field_dict = {}
         for field_name, model_field in model_cls.__fields__.items():
+            if only is not None and field_name not in only:
+                continue
             field_dict[field_name] = (model_field.annotation, model_field.field_info)
 
         # create model dynamically
@@ -714,7 +751,7 @@ def export_schema(
         # if partial_mode == PartialSchemaExportMode.BASE_CLASS_CUTOFF:
 
         for baseclass in cutoff_base_cls:
-            if baseclass in [BaseModel, BaseModel_v1]:
+            if _is_library_base(baseclass):
                 continue
             schema = _get_schema(baseclass)
             if schema is not None:
@@ -734,18 +771,12 @@ def export_schema(
             # try the follwing schema extra attributes: $id, iri, class name
             import_ref = None
             if issubclass(model_cls, BaseModel):
-                import_ref = baseclass.model_config.get("json_schema_extra", {}).get("$id", None)
-                if import_ref is None:
-                    import_ref = baseclass.model_config.get("json_schema_extra", {}).get("iri", None)
-                if import_ref is None:
-                    import_ref = baseclass.__name__
+                extra = baseclass.model_config.get("json_schema_extra") or {}
+                import_ref = extra.get("$id") or extra.get("iri") or baseclass.__name__
 
             if issubclass(model_cls, BaseModel_v1):
-                import_ref = baseclass.__config__.schema_extra.get("$id", None)
-                if import_ref is None:
-                    import_ref = baseclass.__config__.schema_extra.get("iri", None)
-                if import_ref is None:
-                    import_ref = baseclass.__name__
+                extra = getattr(baseclass.__config__, "schema_extra", None) or {}
+                import_ref = extra.get("$id") or extra.get("iri") or baseclass.__name__
 
             if import_ref is not None:
                 imports.append(import_ref)
@@ -787,7 +818,16 @@ def export_schema(
         elif partial_mode == PartialSchemaExportMode.BASE_CLASS_CUTOFF:
             # option 2: export the schema of a model up to the specified
             # base class by cutoff the class hierarchy
-            model_schema_diff = _export_schema_from_dynamic_model(model_cls)
+            model_schema_diff = _export_schema_from_dynamic_model(
+                model_cls, only=_own_field_names(model_cls, cutoff_base_cls)
+            )
+            # ... and compose the level onto its bases. Without this the schema
+            # hierarchy did not mirror the class hierarchy at all: the `imports`
+            # below reached @context while nothing reached the schema body, so
+            # the document claimed an inheritance it never declared - the exact
+            # inverse of OOLD-CMP-b926 ("every $ref is reflected in @context").
+            if imports:
+                model_schema_diff["allOf"] = [{"$ref": ref} for ref in imports]
 
         context = None
         if "@context" in model_schema_diff:
@@ -866,4 +906,96 @@ def export_schema(
 
             del result_schema["$ref"]
     result_schema = _inverse_preprocess(result_schema)
+    _state_requiredness_in_the_required_array(result_schema)
+    _prune_unreferenced_defs(result_schema)
     return result_schema
+
+
+def _is_library_base(cls: Any) -> bool:
+    """Whether a base contributes no schema of its own.
+
+    ``LinkedBaseModel`` and friends are this library's machinery, not published
+    schemas, so a subclass must not compose onto them: ``{"$ref":
+    "LinkedBaseModel"}`` resolves to nothing, and the same string reached
+    ``@context``. A user's own base without an ``$id`` is a different matter -
+    it is named by its class, which is the established convention here.
+    """
+    if cls in (BaseModel, BaseModel_v1):
+        return True
+    return str(getattr(cls, "__module__", "")).startswith("oold.")
+
+
+def _prune_unreferenced_defs(schema: dict) -> None:
+    """Drop ``$defs`` entries nothing points at.
+
+    A partial export builds its level from a dynamically created copy of the
+    model, and pydantic leaves a definition for that copy behind - holding the
+    *flattened* model, inherited properties and all. Unreferenced, it is not
+    merely dead weight: it contradicts the level beside it, and every check that
+    walks a schema tree reports against it.
+    """
+    defs = schema.get("$defs")
+    if not isinstance(defs, dict):
+        return
+
+    def referenced(node: Any) -> set:
+        out: set = set()
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "$ref" and isinstance(value, str) and value.startswith("#/$defs/"):
+                    out.add(value.split("/")[-1])
+                else:
+                    out |= referenced(value)
+        elif isinstance(node, list):
+            for item in node:
+                out |= referenced(item)
+        return out
+
+    live = referenced({k: v for k, v in schema.items() if k != "$defs"})
+    # a kept definition may reference others, so close over the set
+    while True:
+        grown = set(live)
+        for name in live:
+            if name in defs:
+                grown |= referenced(defs[name])
+        if grown == live:
+            break
+        live = grown
+
+    for name in [n for n in defs if n not in live]:
+        del defs[name]
+    if not defs:
+        del schema["$defs"]
+
+
+def _state_requiredness_in_the_required_array(schema: dict) -> None:
+    """Move link requiredness into ``required``, and take the annotation out.
+
+    A schema states requiredness through the standard ``required`` array and
+    nothing else. ``x-oold-required-iri`` - spelled ``x_oold_required_iri`` by
+    pydantic v1, which cannot pass a hyphenated keyword to ``Field()`` - is an
+    oold-python annotation on a *field*: it carries the requirement across the
+    point where the property has to leave ``required`` so that the generated
+    field is ``Optional`` (see ``generator.preprocess``). It is not in the OO-LD
+    keyword vocabulary and does not belong in a published document.
+
+    The v2 path has already done this in ``__get_pydantic_json_schema__``, so
+    this is a no-op there; it is what fixes the v1 path, whose schema comes from
+    pydantic v1 and never passes through that hook.
+    """
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+    required = schema.get("required")
+    for name, prop in properties.items():
+        if not isinstance(prop, dict):
+            continue
+        is_required = bool(prop.pop("x-oold-required-iri", False)) | bool(prop.pop("x_oold_required_iri", False))
+        if not is_required:
+            continue
+        if required is None:
+            required = schema["required"] = []
+        if name not in required:
+            required.append(name)
+        # nothing satisfies both a requirement and a default
+        prop.pop("default", None)

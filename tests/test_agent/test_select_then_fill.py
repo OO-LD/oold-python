@@ -11,7 +11,7 @@ import pytest
 
 from oold.agent.client import ChatResponse
 from oold.agent.enforcement import Orchestration, arm
-from oold.agent.extraction import ExtractionAgent
+from oold.agent.extraction import ExtractionAgent, _entities_of
 from oold.agent.prompts import ExtractionRequest, build_selection_messages, selection_schema
 from oold.agent.provider import profile_for
 
@@ -288,3 +288,35 @@ def test_the_selection_schema_is_named():
     built = selection_schema(CATALOGUE, 3)
     assert built.get("title")
     assert built.get("description")
+
+
+class TestTheAnswerWrapperAModelChooses:
+    """Where the entity list is found when the model names it something else.
+
+    Measured on 16 gpt-5-nano selections: 3 came back as
+    ``{"EntityCandidates": [...]}`` with correct entities inside, and each one
+    scored zero because no wrapper name matched. The title was added to the
+    selection schema to stop LangChain rejecting it, so one fix caused the
+    next fault.
+    """
+
+    def test_the_declared_wrapper_is_preferred(self):
+        payload = {"entities": [{"id": "e1"}], "other": [{"id": "e2"}]}
+        assert _entities_of(payload) == [{"id": "e1"}]
+
+    def test_a_lone_key_holding_objects_is_the_wrapper(self):
+        payload = {"EntityCandidates": [{"id": "e1", "candidates": ["Seat"]}]}
+        assert _entities_of(payload) == [{"id": "e1", "candidates": ["Seat"]}]
+
+    def test_an_echoed_schema_is_not_an_answer(self):
+        """The other failure mode, and it must stay a failure.
+
+        A model that returns the schema it was given has not answered, and
+        reading its ``properties`` as entities would score that as an
+        extraction.
+        """
+        payload = {"type": "object", "properties": {"entities": {"type": "array"}}}
+        assert _entities_of(payload) == []
+
+    def test_a_lone_key_holding_scalars_is_not_a_wrapper(self):
+        assert _entities_of({"candidates": ["Seat", "Book"]}) == []

@@ -543,7 +543,15 @@ def _find_property(schema: Any, keys: tuple[str, ...]) -> dict[str, Any] | None:
 
 
 def _entities_of(payload: Any) -> list[Any]:
-    """The entity list in an answer, whatever the model called the wrapper."""
+    """The entity list in an answer, whatever the model called the wrapper.
+
+    The named wrappers are tried first. After them comes the case the names
+    cannot cover: a model that titles its answer after the schema. Naming the
+    selection schema ``EntityCandidates`` stopped one provider rejecting it and
+    started another answering ``{"EntityCandidates": [...]}``, correct entities
+    under a key no list could hold. So a lone key whose value is a list of
+    objects is read as the wrapper it plainly is.
+    """
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict):
@@ -551,6 +559,10 @@ def _entities_of(payload: Any) -> list[Any]:
             value = payload.get(wrapper)
             if isinstance(value, list):
                 return value
+        if len(payload) == 1:
+            only = next(iter(payload.values()))
+            if isinstance(only, list) and all(isinstance(item, dict) for item in only):
+                return only
     return []
 
 

@@ -59,11 +59,7 @@ class TwoStepClient:
         self.formats.append(response_format)
         self.messages.append(list(messages))
         if self.calls == 1:
-            payload = {
-                "entities": [
-                    {"id": "e1", "candidates": self.candidates, "mention": "1.0 meter"}
-                ]
-            }
+            payload = {"entities": [{"id": "e1", "candidates": self.candidates, "mention": "1.0 meter"}]}
         else:
             payload = {"entities": [{"type": self.answer, "value": 1.0, "unit": "meter"}]}
         return ChatResponse(text=json.dumps(payload), parsed=None)
@@ -80,9 +76,7 @@ def agent(client, k=2, name="A4"):
 
 
 def request():
-    return ExtractionRequest(
-        document="The reading was 1.0 meter.", schema=SCHEMA, branches=BRANCHES
-    )
+    return ExtractionRequest(document="The reading was 1.0 meter.", schema=SCHEMA, branches=BRANCHES)
 
 
 class TestTheSelectionSchema:
@@ -182,9 +176,7 @@ class TestWhenSelectionFails:
 
     def test_a_missing_catalogue_is_refused(self):
         client = TwoStepClient()
-        bare = ExtractionAgent(
-            client, arm("A0-json"), profile_for("openai"), Orchestration.SELECT_THEN_FILL
-        )
+        bare = ExtractionAgent(client, arm("A0-json"), profile_for("openai"), Orchestration.SELECT_THEN_FILL)
         with pytest.raises(ValueError, match="needs a catalogue"):
             bare.run(request())
 
@@ -201,6 +193,4 @@ class TestTheOtherOrchestrations:
     )
     def test_the_graph_orchestrations_say_they_are_not_ported(self, orchestration):
         with pytest.raises(NotImplementedError, match="entity graph"):
-            ExtractionAgent(
-                TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), orchestration
-            )
+            ExtractionAgent(TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), orchestration)

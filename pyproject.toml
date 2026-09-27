@@ -72,7 +72,13 @@ mcp = [
 # only, without the agent framework or any provider package. A consumer
 # installs the provider integration it actually uses.
 agent = [
+    # The commit gate validates an answer against the schema the arm declared,
+    # so the agent needs the validator, which needs a JSON Schema implementation.
+    # A gate that only checked a class name against a list would be a string
+    # filter wearing a validator's name.
+    "jsonschema[format-nongpl]>=4.20",
     "langchain-core>=0.3",
+    "referencing>=0.30",
 ]
 UI-panel = [
     "panel",

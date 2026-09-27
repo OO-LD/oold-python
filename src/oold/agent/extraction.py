@@ -78,6 +78,11 @@ class ExtractionResult:
     dropped: list[str] = field(default_factory=list)
     """Classes the commit-time gate removed, so the gate's effect is visible
     instead of being folded into a lower score."""
+    invalid: list[str] = field(default_factory=list)
+    """Why the answer still fails the schema, after any repair. Empty when it
+    conforms and when the condition did not ask."""
+    repairs: int = 0
+    """How many times the answer was sent back with its errors."""
 
     @property
     def parsed(self) -> bool:
@@ -90,6 +95,8 @@ class ExtractionResult:
             "prompt_sha256": self.prompt_sha256,
             "selected": {k: list(v) for k, v in self.selected.items()},
             "dropped": list(self.dropped),
+            "invalid": list(self.invalid),
+            "repairs": self.repairs,
             "degradation": self.degradation.describe() if self.degradation else None,
             "calls": self.calls.describe(),
         }
@@ -162,6 +169,13 @@ class ExtractionAgent:
         if self.enforcement.commit_gate and payload is not None:
             payload, dropped = self._gate(payload)
 
+        errors: list[str] = []
+        repairs = 0
+        if self.enforcement.validate_output and prepared is not None:
+            payload, text, errors, repairs = self._validate_and_repair(
+                payload, text, prepared, messages, response_format, log, digest
+            )
+
         return ExtractionResult(
             text=text,
             payload=payload,
@@ -170,7 +184,50 @@ class ExtractionAgent:
             schema_sha256=digest,
             prompt_sha256=digest_prompt,
             dropped=dropped,
+            invalid=errors,
+            repairs=repairs,
         )
+
+    def _validate_and_repair(
+        self,
+        payload: Any,
+        text: str,
+        schema: dict[str, Any],
+        messages: list[Any],
+        response_format: dict[str, Any] | None,
+        log: CallLog,
+        digest: str | None,
+    ) -> tuple[Any, str, list[str], int]:
+        """Check the answer against the schema, and offer it its errors back.
+
+        The errors are handed over verbatim from the validator. Rewriting them
+        into advice would make the repair rate a measure of how well the advice
+        was worded, which is a different study.
+
+        A repair that does not validate is kept anyway, with its errors
+        recorded. Silently returning the last valid answer would report a
+        conformance rate the arm did not achieve.
+        """
+        from oold.agent.repair import repair_message
+        from oold.validation.instance_checks import validate_instance
+
+        errors = [] if payload is None else validate_instance(payload, schema).errors
+        repairs = 0
+        while errors and repairs < self.enforcement.repair_attempts:
+            repairs += 1
+            turn = [*list(messages), repair_message(text, errors)]
+            with log.timed("repair", self.client.model, attempt=repairs, schema_sha256=digest) as sink:
+                reply = self.client.invoke(turn, response_format=response_format)
+                sink.append(reply.usage or TokenUsage())
+            text = reply.text
+            candidate = reply.parsed if reply.parsed is not None else parse_json_answer(text)
+            if candidate is None:
+                break
+            payload = candidate
+            if self.enforcement.commit_gate:
+                payload, _ = self._gate(payload)
+            errors = validate_instance(payload, schema).errors
+        return payload, text, errors, repairs
 
     def _select_then_fill(self, request: ExtractionRequest) -> ExtractionResult:
         """Shortlist the class, then fill the schema that shortlist implies.

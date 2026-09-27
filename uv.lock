@@ -2824,7 +2824,9 @@ dependencies = [
 
 [package.optional-dependencies]
 agent = [
+    { name = "jsonschema", extra = ["format-nongpl"] },
     { name = "langchain-core" },
+    { name = "referencing" },
 ]
 all = [
     { name = "anywidget" },
@@ -2919,6 +2921,7 @@ requires-dist = [
     { name = "ipython", marker = "extra == 'ui'" },
     { name = "ipython", marker = "extra == 'ui-jupyter'" },
     { name = "jsondiff" },
+    { name = "jsonschema", extras = ["format-nongpl"], marker = "extra == 'agent'", specifier = ">=4.20" },
     { name = "jsonschema", extras = ["format-nongpl"], marker = "extra == 'all'", specifier = ">=4.20" },
     { name = "jsonschema", extras = ["format-nongpl"], marker = "extra == 'mcp'", specifier = ">=4.20" },
     { name = "jsonschema", extras = ["format-nongpl"], marker = "extra == 'validation'", specifier = ">=4.20" },
@@ -2942,6 +2945,7 @@ requires-dist = [
     { name = "pyld" },
     { name = "pyyaml" },
     { name = "rdflib" },
+    { name = "referencing", marker = "extra == 'agent'", specifier = ">=0.30" },
     { name = "referencing", marker = "extra == 'all'", specifier = ">=0.30" },
     { name = "referencing", marker = "extra == 'mcp'", specifier = ">=0.30" },
     { name = "referencing", marker = "extra == 'validation'", specifier = ">=0.30" },

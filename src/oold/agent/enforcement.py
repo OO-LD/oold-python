@@ -107,6 +107,21 @@ class Enforcement:
 
     output_form: OutputForm = OutputForm.JSON
 
+    validate_output: bool = False
+    """Whether the answer is validated against the schema the arm declared.
+
+    Separate from :attr:`commit_gate`, which only checks a class name against a
+    list. Calling that validation would be the predecessor's construct failure
+    one level in: a string filter reported as a conformance check. Turning this
+    on is what makes a commit-time arm a commit-time arm."""
+
+    repair_attempts: int = 0
+    """How many times an invalid answer may be sent back with its errors.
+
+    Zero validates and reports, which measures conformance. Above zero also
+    repairs, which measures conformance after help, and those are different
+    claims, so the number is part of the condition."""
+
     catalogue_text: tuple[str, ...] | None = None
     """What the catalogue looks like in the prompt, one rendered entry per
     class.
@@ -175,6 +190,8 @@ class Enforcement:
             "catalogue_offered": self.catalogue is not None,
             "decode_constraint": self.decode_constraint.value,
             "commit_gate": self.commit_gate,
+            "validate_output": self.validate_output,
+            "repair_attempts": self.repair_attempts,
             "grounding": self.grounding,
             "output_form": self.output_form.value,
         }
@@ -204,6 +221,7 @@ ARMS: dict[str, Enforcement] = {
         catalogue=(),
         decode_constraint=DecodeConstraint.NONE,
         commit_gate=True,
+        validate_output=True,
         grounding=False,
     ),
     "A2": Enforcement(
@@ -211,6 +229,7 @@ ARMS: dict[str, Enforcement] = {
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
         commit_gate=True,
+        validate_output=True,
         grounding=False,
     ),
     "A2-enforced-only": Enforcement(
@@ -218,6 +237,7 @@ ARMS: dict[str, Enforcement] = {
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
         commit_gate=True,
+        validate_output=True,
         grounding=False,
     ),
     "A4": Enforcement(
@@ -225,6 +245,7 @@ ARMS: dict[str, Enforcement] = {
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_UNION,
         commit_gate=True,
+        validate_output=True,
         grounding=False,
     ),
     "A3": Enforcement(
@@ -232,6 +253,7 @@ ARMS: dict[str, Enforcement] = {
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
         commit_gate=True,
+        validate_output=True,
         grounding=True,
     ),
 }

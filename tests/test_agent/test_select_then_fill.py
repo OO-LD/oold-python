@@ -1,0 +1,206 @@
+"""Shortlist the class, then fill the schema that shortlist implies.
+
+The orchestration exists because a corpus whose subclasses add properties
+cannot be covered by one flat schema: the flat form is the union of every
+property any class might carry, and it admits an answer no class allows.
+"""
+
+import json
+
+import pytest
+
+from oold.agent.client import ChatResponse
+from oold.agent.enforcement import Orchestration, arm
+from oold.agent.extraction import ExtractionAgent
+from oold.agent.prompts import ExtractionRequest, build_selection_messages, selection_schema
+from oold.agent.provider import profile_for
+
+CATALOGUE = ("Length", "Mass", "Volume")
+
+BRANCHES = {
+    "Length": {"unit": {"type": "string", "enum": ["meter", "kilo_meter"]}},
+    "Mass": {"unit": {"type": "string", "enum": ["gram"]}},
+    "Volume": {"unit": {"type": "string", "enum": ["liter"]}},
+}
+
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string"},
+                    "value": {"type": "number"},
+                    "unit": {"type": "string"},
+                },
+                "required": ["type", "value", "unit"],
+            },
+        }
+    },
+}
+
+
+class TwoStepClient:
+    """Answers the select step, then the fill step, recording both."""
+
+    model = "two-step"
+
+    def __init__(self, candidates=("Length", "Mass"), answer="Length") -> None:
+        self.candidates = list(candidates)
+        self.answer = answer
+        self.formats: list = []
+        self.messages: list = []
+        self.calls = 0
+
+    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+        self.calls += 1
+        self.formats.append(response_format)
+        self.messages.append(list(messages))
+        if self.calls == 1:
+            payload = {
+                "entities": [
+                    {"id": "e1", "candidates": self.candidates, "mention": "1.0 meter"}
+                ]
+            }
+        else:
+            payload = {"entities": [{"type": self.answer, "value": 1.0, "unit": "meter"}]}
+        return ChatResponse(text=json.dumps(payload), parsed=None)
+
+
+def agent(client, k=2, name="A4"):
+    return ExtractionAgent(
+        client,
+        arm(name, CATALOGUE),
+        profile_for("openai"),
+        Orchestration.SELECT_THEN_FILL,
+        shortlist_k=k,
+    )
+
+
+def request():
+    return ExtractionRequest(
+        document="The reading was 1.0 meter.", schema=SCHEMA, branches=BRANCHES
+    )
+
+
+class TestTheSelectionSchema:
+    def test_the_shortlist_is_capped_in_the_schema(self):
+        """Wording alone would let it grow to the whole catalogue, and the
+        second step would gain nothing."""
+        built = selection_schema(CATALOGUE, 2)
+        assert built["properties"]["entities"]["items"]["properties"]["candidates"]["maxItems"] == 2
+
+    def test_candidates_come_from_the_catalogue(self):
+        built = selection_schema(CATALOGUE, 2)
+        items = built["properties"]["entities"]["items"]["properties"]["candidates"]["items"]
+        assert items["enum"] == list(CATALOGUE)
+
+    def test_the_mention_is_asked_for(self):
+        built = selection_schema(CATALOGUE, 2)
+        assert "mention" in built["properties"]["entities"]["items"]["properties"]
+
+    def test_the_select_prompt_shows_the_same_catalogue(self):
+        """The orchestrations differ in what is asked, not in what is shown."""
+        content = build_selection_messages(request(), arm("A4", CATALOGUE), 2)[0].content
+        assert all(f"- {name}" in content for name in CATALOGUE)
+
+    def test_the_select_prompt_carries_the_document_alone(self):
+        messages = build_selection_messages(request(), arm("A4", CATALOGUE), 2)
+        assert messages[1].content == "The reading was 1.0 meter."
+
+
+class TestTheTwoSteps:
+    def test_exactly_two_calls_are_made(self):
+        client = TwoStepClient()
+        agent(client).run(request())
+        assert client.calls == 2
+
+    def test_both_calls_are_logged_by_step(self):
+        """Per-step tokens are the only way to cost the orchestration."""
+        client = TwoStepClient()
+        result = agent(client).run(request())
+        assert [c["step"] for c in result.calls.describe()["calls"]] == ["select", "fill"]
+
+    def test_the_shortlist_is_recorded(self):
+        result = agent(TwoStepClient()).run(request())
+        assert result.selected == {"e1": ("Length", "Mass")}
+
+    def test_the_fill_step_is_narrowed_to_the_shortlist(self):
+        client = TwoStepClient()
+        agent(client).run(request())
+        items = client.formats[1]["properties"]["entities"]["items"]
+        assert [b["properties"]["type"]["const"] for b in items["anyOf"]] == ["Length", "Mass"]
+
+    def test_the_fill_step_sees_the_whole_document_again(self):
+        """A step-one summary would be a bottleneck the grader cannot see past."""
+        client = TwoStepClient()
+        agent(client).run(request())
+        assert client.messages[1][1].content == "The reading was 1.0 meter."
+
+    def test_the_answer_survives(self):
+        result = agent(TwoStepClient()).run(request())
+        assert result.payload["entities"][0]["type"] == "Length"
+
+
+class TestTheShortlistSize:
+    def test_k_of_one_is_the_commit_case(self):
+        client = TwoStepClient(candidates=["Length"])
+        result = agent(client, k=1).run(request())
+        assert result.selected == {"e1": ("Length",)}
+        assert client.calls == 2
+
+    def test_more_candidates_than_k_are_trimmed(self):
+        """The model may ignore maxItems; the record must not."""
+        client = TwoStepClient(candidates=["Length", "Mass", "Volume"])
+        result = agent(client, k=2).run(request())
+        assert result.selected == {"e1": ("Length", "Mass")}
+
+    def test_a_shortlist_of_nothing_is_refused_at_construction(self):
+        with pytest.raises(ValueError, match="no class to fill"):
+            agent(TwoStepClient(), k=0)
+
+    def test_a_candidate_outside_the_catalogue_is_dropped(self):
+        client = TwoStepClient(candidates=["Length", "Invented"])
+        result = agent(client).run(request())
+        assert result.selected == {"e1": ("Length",)}
+
+
+class TestWhenSelectionFails:
+    def test_an_empty_shortlist_stops_before_the_fill_call(self):
+        """Spending the second call on a union of nothing would fail anyway."""
+        client = TwoStepClient(candidates=[])
+        result = agent(client).run(request())
+        assert client.calls == 1
+        assert result.payload is None
+
+    def test_an_empty_shortlist_is_still_recorded(self):
+        """So the failure is attributable to the select step."""
+        result = agent(TwoStepClient(candidates=[])).run(request())
+        assert result.selected == {"e1": ()}
+
+    def test_a_missing_catalogue_is_refused(self):
+        client = TwoStepClient()
+        bare = ExtractionAgent(
+            client, arm("A0-json"), profile_for("openai"), Orchestration.SELECT_THEN_FILL
+        )
+        with pytest.raises(ValueError, match="needs a catalogue"):
+            bare.run(request())
+
+
+class TestTheOtherOrchestrations:
+    def test_single_shot_still_makes_one_call(self):
+        client = TwoStepClient()
+        ExtractionAgent(client, arm("A4", CATALOGUE), profile_for("openai")).run(request())
+        assert client.calls == 1
+
+    @pytest.mark.parametrize(
+        "orchestration",
+        [Orchestration.RECURSIVE, Orchestration.SEGMENTED, Orchestration.MULTI_STEP],
+    )
+    def test_the_graph_orchestrations_say_they_are_not_ported(self, orchestration):
+        with pytest.raises(NotImplementedError, match="entity graph"):
+            ExtractionAgent(
+                TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), orchestration
+            )

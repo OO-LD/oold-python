@@ -189,23 +189,17 @@ class TestTheEnforcedOnlyArm:
         """The enum reaches the decoder and not the prompt, so reading it and
         being constrained by it stop being the same condition."""
         client = RecordingClient()
-        agent = ExtractionAgent(
-            client, arm("A2-enforced-only", ("Length", "Mass")), profile_for("openai")
-        )
+        agent = ExtractionAgent(client, arm("A2-enforced-only", ("Length", "Mass")), profile_for("openai"))
         from oold.agent.prompts import build_messages
 
         request = ExtractionRequest(document="d", schema=SCHEMA, branches=BRANCHES)
         agent.run(request)
         assert client.response_format is not None
-        messages = build_messages(
-            ExtractionRequest(document="d", schema=None), agent.enforcement
-        )
+        messages = build_messages(ExtractionRequest(document="d", schema=None), agent.enforcement)
         assert "Each entity must conform" not in messages[0].content
 
     def test_it_still_offers_the_catalogue(self):
         from oold.agent.prompts import build_messages
 
-        content = build_messages(
-            ExtractionRequest(document="d"), arm("A2-enforced-only", ("Length",))
-        )[0].content
+        content = build_messages(ExtractionRequest(document="d"), arm("A2-enforced-only", ("Length",)))[0].content
         assert "- Length" in content

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from oold.agent.client import CallLog, ChatClient, TokenUsage, prompt_hash
@@ -25,7 +25,12 @@ from oold.agent.enforcement import (
     Orchestration,
     OutputForm,
 )
-from oold.agent.prompts import ExtractionRequest, build_messages
+from oold.agent.prompts import (
+    ExtractionRequest,
+    build_messages,
+    build_selection_messages,
+    selection_schema,
+)
 from oold.agent.provider import Degradation, ProviderProfile, prepare, schema_hash
 from oold.agent.union import union_schema
 
@@ -60,6 +65,12 @@ class ExtractionResult:
     calls: CallLog
     degradation: Degradation | None = None
     schema_sha256: str | None = None
+    selected: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """The shortlist the select step produced, per entity.
+
+    Recorded so a two-step failure can be attributed to a step. Without it,
+    the true class never being offered and the fill step choosing wrongly from
+    a shortlist that contained it look like the same failure."""
     prompt_sha256: str | None = None
     """Hash of the turns actually sent, folding included. Hashing the document
     instead would say two models got the same prompt when one of them had the
@@ -77,6 +88,7 @@ class ExtractionResult:
             "parsed": self.parsed,
             "schema_sha256": self.schema_sha256,
             "prompt_sha256": self.prompt_sha256,
+            "selected": {k: list(v) for k, v in self.selected.items()},
             "dropped": list(self.dropped),
             "degradation": self.degradation.describe() if self.degradation else None,
             "calls": self.calls.describe(),
@@ -94,19 +106,30 @@ class ExtractionAgent:
         orchestration: Orchestration = Orchestration.SINGLE_SHOT,
         *,
         attempts: int = 1,
+        shortlist_k: int = 3,
     ) -> None:
         self.client = client
         self.enforcement = enforcement
         self.profile = profile
         self.orchestration = orchestration
         self.attempts = attempts
-        if orchestration is not Orchestration.SINGLE_SHOT:
+        self.shortlist_k = shortlist_k
+        """How many classes the select step may keep per entity. One is the
+        commit case, where a wrong selection cannot be recovered."""
+        if orchestration in (Orchestration.RECURSIVE, Orchestration.SEGMENTED, Orchestration.MULTI_STEP):
             raise NotImplementedError(
-                f"orchestration {orchestration.value} is not ported yet. "
-                f"Only {Orchestration.SINGLE_SHOT.value} runs today"
+                f"orchestration {orchestration.value} is not ported yet. It addresses "
+                f"the entity graph, which comes after class selection works"
             )
+        if shortlist_k < 1:
+            raise ValueError("a shortlist of nothing leaves the second step no class to fill")
 
     def run(self, request: ExtractionRequest) -> ExtractionResult:
+        if self.orchestration is Orchestration.SELECT_THEN_FILL:
+            return self._select_then_fill(request)
+        return self._single_shot(request)
+
+    def _single_shot(self, request: ExtractionRequest) -> ExtractionResult:
         log = CallLog()
         prepared, degradation, digest = self._schema_for(request)
         messages = build_messages(
@@ -148,6 +171,65 @@ class ExtractionAgent:
             prompt_sha256=digest_prompt,
             dropped=dropped,
         )
+
+    def _select_then_fill(self, request: ExtractionRequest) -> ExtractionResult:
+        """Shortlist the class, then fill the schema that shortlist implies.
+
+        The fill step is sent the whole document again, not the mention the
+        select step reported. A summary written by step one would be a
+        bottleneck the grader cannot see past: an entity lost there would look
+        like an extraction failure rather than a selection failure.
+        """
+        log = CallLog()
+        selected, text = self._select(request, log)
+
+        offered = tuple(dict.fromkeys(name for names in selected.values() for name in names))
+        if not offered:
+            return ExtractionResult(
+                text=text,
+                payload=None,
+                calls=log,
+                selected=selected,
+            )
+
+        # One fill call for every entity, so the classes are pooled across
+        # them. With several entities that is weaker than a union per entity,
+        # because entity A may be answered with entity B's class. The shortlist
+        # dimension stays exact per entity, so the weakening is visible.
+        narrowed = self.enforcement.with_catalogue(offered)
+        filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
+        result = filler._single_shot(request)
+        for call in result.calls:
+            log.append(replace(call, step="fill"))
+        result.calls = log
+        result.selected = selected
+        return result
+
+    def _select(self, request: ExtractionRequest, log: CallLog) -> tuple[dict[str, tuple[str, ...]], str]:
+        """Ask which classes each entity could be, keeping at most k."""
+        catalogue = self.enforcement.catalogue or ()
+        if not catalogue:
+            raise ValueError("select-then-fill needs a catalogue to select from")
+
+        schema = selection_schema(catalogue, self.shortlist_k)
+        prepared, _ = prepare(schema, self.profile, grounding=False)
+        messages = build_selection_messages(request, self.enforcement, self.shortlist_k)
+        response_format = prepared if self.enforcement.decode_constraint is not DecodeConstraint.NONE else None
+
+        with log.timed("select", self.client.model, attempt=1, schema_sha256=schema_hash(prepared)) as sink:
+            reply = self.client.invoke(messages, response_format=response_format)
+            sink.append(reply.usage or TokenUsage())
+
+        payload = reply.parsed if reply.parsed is not None else parse_json_answer(reply.text)
+        allowed = set(catalogue)
+        selected: dict[str, tuple[str, ...]] = {}
+        for index, entity in enumerate(_entities_of(payload), start=1):
+            if not isinstance(entity, dict):
+                continue
+            key = str(entity.get("id") or f"e{index}")
+            names = [n for n in entity.get("candidates") or () if n in allowed]
+            selected[key] = tuple(dict.fromkeys(names))[: self.shortlist_k]
+        return selected, reply.text
 
     def _schema_for(self, request: ExtractionRequest) -> tuple[dict[str, Any] | None, Degradation | None, str | None]:
         """The schema this condition sends, and what preparing it cost."""
@@ -307,6 +389,18 @@ def _find_property(schema: Any, keys: tuple[str, ...]) -> dict[str, Any] | None:
             if found is not None:
                 return found
     return None
+
+
+def _entities_of(payload: Any) -> list[Any]:
+    """The entity list in an answer, whatever the model called the wrapper."""
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for wrapper in ("entities", "instances", "items", "results"):
+            value = payload.get(wrapper)
+            if isinstance(value, list):
+                return value
+    return []
 
 
 def _find_entity_items(schema: Any) -> dict[str, Any] | None:

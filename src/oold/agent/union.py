@@ -69,9 +69,7 @@ def union_schema(
     built = []
     for identifier, narrowed in branches.items():
         merged = {**common, **narrowed}
-        built.append(
-            branch_for(identifier, merged, discriminator=discriminator, required=required)
-        )
+        built.append(branch_for(identifier, merged, discriminator=discriminator, required=required))
     return {"anyOf": built}
 
 

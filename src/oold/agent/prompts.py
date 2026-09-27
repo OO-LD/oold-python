@@ -19,7 +19,7 @@ from typing import Any
 from oold.agent.client import Message
 from oold.agent.enforcement import Enforcement, OutputForm
 
-__all__ = ["ExtractionRequest", "build_messages"]
+__all__ = ["ExtractionRequest", "build_messages", "build_selection_messages", "selection_schema"]
 
 _TASK = "Read the document and report every entity it describes, with the values stated for each."
 
@@ -30,6 +30,18 @@ _PROSE_FORM = "Answer in plain prose. State each entity and the values given for
 _CATALOGUE = "Choose the class of each entity from this list, using one of these exactly:"
 
 _SCHEMA = "Each entity must conform to this schema:"
+
+_SELECT_TASK = "Read the document and say, for every entity it describes, which classes it could be."
+
+_SELECT_FORM = (
+    "Answer with JSON only. For each entity give a short id, the classes it could "
+    "belong to, most likely first, and the words in the document you read it from."
+)
+
+_SELECT_SHORTLIST = (
+    "List at most {k} classes per entity. Fewer is better when you are sure. "
+    "A class you leave out cannot be chosen later."
+)
 
 _GATE_HINT = "An entity whose class is not in the list will be discarded, so leave out anything you cannot place."
 
@@ -74,6 +86,68 @@ def build_messages(request: ExtractionRequest, enforcement: Enforcement) -> list
 
     if enforcement.schema_in_prompt and request.schema is not None:
         sections.append(f"{_SCHEMA}\n{json.dumps(request.schema, indent=2)}")
+
+    return [
+        Message(role="system", content="\n\n".join(sections)),
+        Message(role="user", content=request.document),
+    ]
+
+
+def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
+    """The answer shape the select step asks for.
+
+    ``candidates`` is ordered, most likely first, and capped at ``k``. The cap
+    is in the schema and not only in the wording, because a shortlist that can
+    grow to the whole catalogue is not a shortlist and the second step would
+    gain nothing.
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "entities": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "A short identifier for this entity, e.g. e1.",
+                        },
+                        "candidates": {
+                            "type": "array",
+                            "maxItems": k,
+                            "items": {"type": "string", "enum": list(catalogue)},
+                            "description": "Classes this entity could be, most likely first.",
+                        },
+                        "mention": {
+                            "type": "string",
+                            "description": "The words in the document this entity was read from.",
+                        },
+                    },
+                    "required": ["id", "candidates", "mention"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["entities"],
+        "additionalProperties": False,
+    }
+
+
+def build_selection_messages(request: ExtractionRequest, enforcement: Enforcement, k: int) -> list[Message]:
+    """The messages the select step sends.
+
+    The catalogue section and the user message are identical to the ones the
+    single-shot path sends, so the two orchestrations differ in what is asked
+    and not in what is shown. Only the task sentence and the answer form
+    change, because the question genuinely changed.
+    """
+    sections: list[str] = [_SELECT_TASK, _SELECT_FORM, _SELECT_SHORTLIST.format(k=k)]
+
+    if enforcement.catalogue:
+        entries = enforcement.catalogue_text or tuple(f"- {name}" for name in enforcement.catalogue)
+        listed = "\n".join(entries)
+        sections.append(f"{_CATALOGUE}\n{listed}")
 
     return [
         Message(role="system", content="\n\n".join(sections)),

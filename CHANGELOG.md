@@ -7,6 +7,15 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.1.0 (2026-09-27)
+
+### Features
+
+- **checks**: Name the rc.4 rules a validator can enforce
+  ([#171](https://github.com/OO-LD/oold-python/pull/171),
+  [`2832dab`](https://github.com/OO-LD/oold-python/commit/2832dab5da944b2f74b26b020f9cea774578ba5e))
+
+
 ## v2.0.0 (2026-09-27)
 
 ### Bug Fixes

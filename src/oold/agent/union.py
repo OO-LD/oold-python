@@ -17,9 +17,10 @@ of them can actually be sent.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
-__all__ = ["branch_for", "flatten_union", "nested_union", "union_schema"]
+__all__ = ["branch_for", "flatten_union", "hierarchy_union", "union_schema"]
 
 
 def branch_for(
@@ -132,73 +133,80 @@ def flatten_union(schema: dict[str, Any], *, discriminator: str = "type") -> dic
     return flattened
 
 
-def nested_union(
+def hierarchy_union(
     branches: dict[str, dict[str, Any]],
     parents: dict[str, tuple[str, ...]],
     *,
     discriminator: str = "type",
-    shared: dict[str, Any] | None = None,
+    concrete: Collection[str] | None = None,
 ) -> dict[str, Any]:
-    """A union shaped like the class hierarchy instead of flattened over it.
+    """A union over classes that inherit, stated once each.
 
-    A flat union repeats every inherited property in every branch. Measured on
-    the schema.org pool that is 3,047 property slots against the 851 the
-    classes actually declare, a 3.6x duplication, and it throws away the one
-    thing the hierarchy states: that a Book is a CreativeWork, so whatever is
-    true of a CreativeWork is already true of it.
+    Each class becomes a ``$defs`` entry holding what it declares and an
+    ``allOf`` of its parents, so a property is written where it is declared and
+    referenced everywhere it is inherited. The choice is a flat ``anyOf`` over
+    the classes an answer may take.
 
-    Nesting says it once. Each node carries what that class declares, and its
-    subclasses hang beneath it as a further choice. A sibling ``properties``
-    and ``anyOf`` are conjoined by JSON Schema, so this needs no ``allOf``,
-    which every strict provider subset rejects.
+    This is why ``allOf`` and not a tree. A tree holds one parent, and 48 of
+    906 schema.org classes name two or three: ``LocalBusiness`` is both an
+    ``Organization`` and a ``Place``. An ``allOf`` holds both, and it degrades
+    the right way. A provider that rejects combinators merges it, and merging
+    an intersection of objects is exactly the property union that inheritance
+    means, so nothing is lost. Flattening an ``anyOf`` loses the discrimination
+    and that is a real loss, which is the asymmetry the degradation measure
+    reports.
 
-    Multiple inheritance does not survive. 48 of 906 schema.org classes name
-    two parents or three, and a tree can hold one, so the first is used and
-    the rest are lost. That loss is real and belongs in the record beside the
-    result, not hidden here.
+    ``concrete`` names the classes an answer may actually be. Left out, every
+    class is offered, which is right when the catalogue is the answer space and
+    wrong when the catalogue includes abstract ancestors carried only to hold
+    shared properties.
     """
     if not branches:
         raise ValueError("a union needs at least one branch, or nothing can satisfy it")
 
-    children: dict[str, list[str]] = {}
-    roots: list[str] = []
-    for name in branches:
-        first = next((p for p in parents.get(name, ()) if p in branches), None)
-        if first is None:
-            roots.append(name)
-        else:
-            children.setdefault(first, []).append(name)
+    defs: dict[str, Any] = {}
+    for name, own in branches.items():
+        entry: dict[str, Any] = {"type": "object", "properties": dict(own)}
+        # Every ancestor, not only the direct parents. A chain of references is
+        # the tidier schema and the transform does not survive it: inlining
+        # treats the second hop as recursion and cuts it, so a grandparent's
+        # properties never arrive. Referencing the whole ancestry keeps every
+        # merge one hop deep, which the transform does handle.
+        inherited = [a for a in _ancestry(name, parents) if a in branches]
+        if inherited:
+            entry["allOf"] = [{"$ref": f"#/$defs/{a}"} for a in inherited]
+        defs[name] = entry
 
-    def node(name: str) -> dict[str, Any]:
-        built: dict[str, Any] = {
-            "type": "object",
-            "properties": {discriminator: {"const": name}, **branches[name]},
-            "required": [discriminator],
-        }
-        below = children.get(name) or []
-        if not below:
-            return built
-        # This class itself, or any of its subclasses. The self branch repeats
-        # the discriminator only, because the properties above already apply.
-        built["anyOf"] = [
-            {"properties": {discriminator: {"const": name}}},
-            *[node(child) for child in below],
-        ]
-        built["properties"] = {k: v for k, v in built["properties"].items() if k != discriminator}
-        built["properties"][discriminator] = {
-            "enum": [name, *_descendants(name, children)],
-        }
-        return built
+    offered = [name for name in branches if concrete is None or name in concrete]
+    if not offered:
+        raise ValueError("no offered class is concrete, so the union would admit nothing")
 
-    top = [node(name) for name in roots]
-    if len(top) == 1 and not shared:
-        return top[0]
-    return {"anyOf": top, **({"properties": shared} if shared else {})}
+    return {
+        "$defs": defs,
+        "anyOf": [
+            {
+                "type": "object",
+                "properties": {discriminator: {"const": name}},
+                "required": [discriminator],
+                "allOf": [{"$ref": f"#/$defs/{name}"}],
+            }
+            for name in offered
+        ],
+    }
 
 
-def _descendants(name: str, children: dict[str, list[str]]) -> list[str]:
-    out: list[str] = []
-    for child in children.get(name) or []:
-        out.append(child)
-        out.extend(_descendants(child, children))
-    return out
+def _ancestry(name: str, parents: dict[str, tuple[str, ...]]) -> list[str]:
+    """Every ancestor of a class, nearest first, each named once.
+
+    Breadth first, so a class that inherits from two parents keeps the order
+    the schema declares them in and a shared grandparent appears once.
+    """
+    seen: list[str] = []
+    queue = list(parents.get(name, ()))
+    while queue:
+        current = queue.pop(0)
+        if current in seen or current == name:
+            continue
+        seen.append(current)
+        queue.extend(parents.get(current, ()))
+    return seen

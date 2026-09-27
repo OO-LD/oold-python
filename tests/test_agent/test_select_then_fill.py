@@ -194,3 +194,88 @@ class TestTheOtherOrchestrations:
     def test_the_graph_orchestrations_say_they_are_not_ported(self, orchestration):
         with pytest.raises(NotImplementedError, match="entity graph"):
             ExtractionAgent(TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), orchestration)
+
+
+class MultiEntityClient:
+    """Shortlists different classes for two entities, then answers."""
+
+    model = "multi"
+
+    def __init__(self, first=("Length",), second=("Mass",)) -> None:
+        self.first = list(first)
+        self.second = list(second)
+        self.formats: list = []
+        self.messages: list = []
+        self.calls = 0
+
+    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+        self.calls += 1
+        self.formats.append(response_format)
+        self.messages.append(list(messages))
+        if self.calls == 1:
+            payload = {
+                "entities": [
+                    {"id": "e1", "candidates": self.first, "mention": "1.0 meter"},
+                    {"id": "e2", "candidates": self.second, "mention": "2.0 gram"},
+                ]
+            }
+        else:
+            offered = self.formats[-1]["properties"]["entities"]["items"]
+            names = [b["properties"]["type"]["const"] for b in offered["anyOf"]]
+            payload = {"entities": [{"type": names[0], "value": 1.0, "unit": "meter"}]}
+        return ChatResponse(text=json.dumps(payload), parsed=None)
+
+
+class TestOneCallPerShortlist:
+    """Pooling every entity's candidates lets entity A be answered with
+    entity B's class, which is the thing the shortlist was for."""
+
+    def run(self, client, k=2):
+        return ExtractionAgent(
+            client,
+            arm("A4", CATALOGUE),
+            profile_for("openai"),
+            Orchestration.SELECT_THEN_FILL,
+            shortlist_k=k,
+        ).run(request())
+
+    def test_two_shortlists_get_two_fill_calls(self):
+        client = MultiEntityClient()
+        self.run(client)
+        assert client.calls == 3
+
+    def test_each_fill_call_offers_only_its_own_classes(self):
+        client = MultiEntityClient()
+        self.run(client)
+        offered = [
+            [b["properties"]["type"]["const"] for b in fmt["properties"]["entities"]["items"]["anyOf"]]
+            for fmt in client.formats[1:]
+        ]
+        assert offered == [["Length"], ["Mass"]]
+
+    def test_entities_that_shortlist_the_same_classes_share_a_call(self):
+        """A single-entity document still costs one fill call."""
+        client = MultiEntityClient(first=("Length",), second=("Length",))
+        self.run(client)
+        assert client.calls == 2
+
+    def test_a_split_call_says_which_entity_it_is_for(self):
+        """Named by the words the select step read it from, because an
+        identifier it invented means nothing to a model reading again."""
+        client = MultiEntityClient()
+        self.run(client)
+        assert "1.0 meter" in client.messages[1][0].content
+
+    def test_a_single_group_sends_the_unchanged_instruction(self):
+        client = MultiEntityClient(first=("Length",), second=("Length",))
+        self.run(client)
+        assert "report only the entities" not in client.messages[1][0].content
+
+    def test_every_answer_is_merged(self):
+        client = MultiEntityClient()
+        result = self.run(client)
+        assert len(result.payload["entities"]) == 2
+
+    def test_the_shortlist_is_still_recorded_per_entity(self):
+        result = self.run(MultiEntityClient())
+        assert result.selected == {"e1": ("Length",), "e2": ("Mass",)}

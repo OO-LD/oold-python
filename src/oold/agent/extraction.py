@@ -121,6 +121,9 @@ class ExtractionAgent:
         self.profile = profile
         self.orchestration = orchestration
         self.attempts = attempts
+        self._mentions: dict[str, str] = {}
+        """What the select step read each entity from, used only to say which
+        entity a fill call is for when a document holds several."""
         self.shortlist_k = shortlist_k
         """How many classes the select step may keep per entity. One is the
         commit case, where a wrong selection cannot be recovered."""
@@ -239,6 +242,7 @@ class ExtractionAgent:
         like an extraction failure rather than a selection failure.
         """
         log = CallLog()
+        self._mentions: dict[str, str] = {}
         selected, text = self._select(request, log)
 
         offered = tuple(dict.fromkeys(name for names in selected.values() for name in names))
@@ -250,18 +254,59 @@ class ExtractionAgent:
                 selected=selected,
             )
 
-        # One fill call for every entity, so the classes are pooled across
-        # them. With several entities that is weaker than a union per entity,
-        # because entity A may be answered with entity B's class. The shortlist
-        # dimension stays exact per entity, so the weakening is visible.
-        narrowed = self.enforcement.with_catalogue(offered)
-        filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
-        result = filler._single_shot(request)
-        for call in result.calls:
-            log.append(replace(call, step="fill"))
-        result.calls = log
-        result.selected = selected
-        return result
+        # One call per distinct shortlist, not one per document. Pooling every
+        # entity's candidates into one constraint lets entity A be answered
+        # with entity B's class, which is the thing the shortlist was for.
+        # Entities that shortlisted the same classes share a call, so a
+        # single-entity document still costs one.
+        groups: dict[tuple[str, ...], list[str]] = {}
+        for key, names in selected.items():
+            if names:
+                groups.setdefault(tuple(names), []).append(key)
+
+        merged: list[Any] = []
+        last: ExtractionResult | None = None
+        for classes, keys in groups.items():
+            narrowed = self.enforcement.with_catalogue(classes)
+            filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
+            step = ExtractionRequest(
+                document=request.document,
+                schema=request.schema,
+                branches=request.branches,
+                parents=request.parents,
+                instruction=self._fill_instruction(request, selected, keys) if len(groups) > 1 else None,
+            )
+            outcome = filler._single_shot(step)
+            for call in outcome.calls:
+                log.append(replace(call, step="fill"))
+            merged.extend(_entities_of(outcome.payload))
+            last = outcome
+
+        if last is None:
+            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+        last.payload = {"entities": merged} if merged else None
+        last.calls = log
+        last.selected = selected
+        return last
+
+    def _fill_instruction(
+        self,
+        request: ExtractionRequest,
+        selected: dict[str, tuple[str, ...]],
+        keys: list[str],
+    ) -> str:
+        """Which entities this call is for, when a document holds several.
+
+        Named by the words the select step read them from, because an
+        identifier it invented means nothing to a model reading the document
+        again. Omitted entirely when there is one group, so the single-entity
+        case sends the same prompt the single-shot arm does.
+        """
+        mentions = [self._mentions.get(key) or key for key in keys]
+        listed = ", ".join(f'"{mention}"' for mention in mentions)
+        return (
+            f"Read the document and report only the entities identified as {listed}, with the values stated for each."
+        )
 
     def _select(self, request: ExtractionRequest, log: CallLog) -> tuple[dict[str, tuple[str, ...]], str]:
         """Ask which classes each entity could be, keeping at most k."""
@@ -287,6 +332,9 @@ class ExtractionAgent:
             key = str(entity.get("id") or f"e{index}")
             names = [n for n in entity.get("candidates") or () if n in allowed]
             selected[key] = tuple(dict.fromkeys(names))[: self.shortlist_k]
+            mention = entity.get("mention")
+            if isinstance(mention, str) and mention.strip():
+                self._mentions[key] = mention.strip()
         return selected, reply.text
 
     def _schema_for(self, request: ExtractionRequest) -> tuple[dict[str, Any] | None, Degradation | None, str | None]:

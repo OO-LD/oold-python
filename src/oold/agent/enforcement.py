@@ -89,6 +89,16 @@ class Enforcement:
 
     output_form: OutputForm = OutputForm.JSON
 
+    catalogue_text: tuple[str, ...] | None = None
+    """What the catalogue looks like in the prompt, one rendered entry per
+    class.
+
+    Kept apart from :attr:`catalogue`, which stays a list of bare identifiers
+    because that is what the decode-time enum and the commit gate need. A
+    catalogue shown as identifiers alone asks a model to choose between names
+    it has been told nothing about, which measures whether the names happen to
+    be self-describing. Falls back to the identifiers when unset."""
+
     unit_catalogue: tuple[str, ...] | None = None
     """Units offered for selection, when the corpus closes that slot too.
 
@@ -123,6 +133,15 @@ class Enforcement:
         """The same condition over a different unit enumeration."""
         return replace(self, unit_catalogue=units)
 
+    def with_catalogue_text(self, entries: tuple[str, ...] | None) -> Enforcement:
+        """The same condition with the catalogue rendered for the prompt."""
+        if entries is not None and self.catalogue is not None and len(entries) != len(self.catalogue):
+            raise ValueError(
+                f"catalogue_text has {len(entries)} entries but the catalogue has "
+                f"{len(self.catalogue)}, so one class would be described as another"
+            )
+        return replace(self, catalogue_text=entries)
+
     def describe(self) -> dict[str, object]:
         """The condition, for the result record.
 
@@ -134,6 +153,7 @@ class Enforcement:
             "schema_in_prompt": self.schema_in_prompt,
             "catalogue_size": self.catalogue_size,
             "unit_catalogue_size": (len(self.unit_catalogue) if self.unit_catalogue else 0),
+            "catalogue_described": self.catalogue_text is not None,
             "catalogue_offered": self.catalogue is not None,
             "decode_constraint": self.decode_constraint.value,
             "commit_gate": self.commit_gate,

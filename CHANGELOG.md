@@ -7,6 +7,15 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.2.0 (2026-09-27)
+
+### Features
+
+- **meta**: Vendor the specification 1.0.0 meta-schema
+  ([#172](https://github.com/OO-LD/oold-python/pull/172),
+  [`5a8ac8d`](https://github.com/OO-LD/oold-python/commit/5a8ac8dd99b99ea7640cb8005c73240c5a8c4fed))
+
+
 ## v2.1.0 (2026-09-27)
 
 ### Features

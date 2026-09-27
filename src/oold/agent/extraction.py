@@ -344,11 +344,20 @@ class ExtractionAgent:
         target = _find_entity_items(schema)
         if target is None:
             raise ValueError("the schema has no entity shape to turn into a union")
-        shared = {k: v for k, v in (target.get("properties") or {}).items() if k not in _CLASS_KEYS}
+        # Shared means what no branch defines. Copying every property into
+        # every branch is harmless where a class narrows one slot out of three
+        # and ruinous where it decides which of five hundred exist: the same
+        # union came to 1.5 MB on a corpus whose flat schema is 60 kB.
+        narrowed = {name for branch in offered.values() for name in branch}
+        shared = {
+            name: definition
+            for name, definition in (target.get("properties") or {}).items()
+            if name not in _CLASS_KEYS and name not in narrowed
+        }
         union = union_schema(
             offered,
-            shared={k: v for k, v in shared.items() if k not in _UNIT_KEYS},
-            required=tuple(target.get("required") or ()),
+            shared=shared,
+            required=tuple(name for name in (target.get("required") or ()) if name not in narrowed),
         )
         target.clear()
         target.update(union)

@@ -2,7 +2,7 @@
 
 The agent is one skeleton with the enforcement supplied as data. Orchestration
 is a separate axis, so a study can hold one fixed while varying the other,
-which is the property the predecessor lacked: eight of ten differences between
+the property the predecessor lacked: eight of ten differences between
 its two arms were orchestration, so nothing it measured could be attributed to
 typing.
 

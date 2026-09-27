@@ -50,7 +50,7 @@ class Degradation:
 
     Reported per arm and provider. A structured-output subset that loses most
     of a schema is a different condition from one that loses none, and saying
-    so with a number is cheaper than arguing about it.
+    so with a number makes the two comparable.
     """
 
     dropped: dict[str, int] = field(default_factory=dict)
@@ -72,7 +72,7 @@ class Degradation:
     @property
     def fidelity(self) -> float:
         """Share of the original keywords that survived, 1.0 when none were
-        lost. Inlining a ``$ref`` duplicates keywords, so this can exceed 1.0;
+        lost. Inlining a ``$ref`` duplicates keywords, so this can exceed 1.0, and
         that is information preserved, not lost."""
         if not self.keywords_before:
             return 1.0

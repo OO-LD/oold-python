@@ -3,7 +3,7 @@
 Every difference between arms has to live here or in the request to the
 provider, and nowhere else. If one arm also got a differently worded
 instruction, a measured difference between arms would be partly a difference
-in wording, which is the confound this whole design exists to remove.
+in wording, the confound this whole design exists to remove.
 
 So the instruction is one text with optional sections. The sections appear
 exactly when the condition says they do, and the wording of the parts that
@@ -104,7 +104,7 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
 
     ``candidates`` is ordered, most likely first, and capped at ``k``. The cap
     is in the schema and not only in the wording, because a shortlist that can
-    grow to the whole catalogue is not a shortlist and the second step would
+    grow to the whole catalogue does not narrow the choice and the second step would
     gain nothing.
     """
     return {

@@ -9,7 +9,7 @@ A union says what the enum pair cannot. One branch per class, the class slot
 pinned with ``const``, and every other slot carrying that class's own values.
 Choosing the class then chooses the rest.
 
-Built with ``anyOf`` and not ``oneOf``. No provider profile accepts ``oneOf``;
+Built with ``anyOf`` and not ``oneOf``. No provider profile accepts ``oneOf``, but
 the OpenAI and Google subsets accept ``anyOf``. Same meaning here, because the
 ``const`` discriminator already makes the branches mutually exclusive, and one
 of them can actually be sent.
@@ -80,7 +80,7 @@ def flatten_union(schema: dict[str, Any], *, discriminator: str = "type") -> dic
     What a provider that refuses ``anyOf`` can still be sent. Every branch's
     discriminator value becomes one enum, every other slot's values become the
     union of that slot across branches, and which value went with which class
-    is gone. That is a real loss and it is what the degradation measure counts.
+    is gone. That is a real loss and the degradation measure counts it.
 
     Used by :func:`oold.agent.provider.prepare`. Kept here beside the builder
     so the two stay in step.
@@ -147,13 +147,13 @@ def hierarchy_union(
     referenced everywhere it is inherited. The choice is a flat ``anyOf`` over
     the classes an answer may take.
 
-    This is why ``allOf`` and not a tree. A tree holds one parent, and 48 of
+    ``allOf`` is used here instead of a tree. A tree holds one parent, and 48 of
     906 schema.org classes name two or three: ``LocalBusiness`` is both an
     ``Organization`` and a ``Place``. An ``allOf`` holds both, and it degrades
     the right way. A provider that rejects combinators merges it, and merging
     an intersection of objects is exactly the property union that inheritance
     means, so nothing is lost. Flattening an ``anyOf`` loses the discrimination
-    and that is a real loss, which is the asymmetry the degradation measure
+    and that is a real loss, the asymmetry the degradation measure
     reports.
 
     ``concrete`` names the classes an answer may actually be. Left out, every

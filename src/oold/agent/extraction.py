@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from oold.agent.client import CallLog, ChatClient, TokenUsage
+from oold.agent.client import CallLog, ChatClient, TokenUsage, prompt_hash
 from oold.agent.enforcement import (
     DecodeConstraint,
     Enforcement,
@@ -59,6 +59,10 @@ class ExtractionResult:
     calls: CallLog
     degradation: Degradation | None = None
     schema_sha256: str | None = None
+    prompt_sha256: str | None = None
+    """Hash of the turns actually sent, folding included. Hashing the document
+    instead would say two models got the same prompt when one of them had the
+    system message folded into its user turn."""
     dropped: list[str] = field(default_factory=list)
     """Classes the commit-time gate removed, so the gate's effect is visible
     instead of being folded into a lower score."""
@@ -71,6 +75,7 @@ class ExtractionResult:
         return {
             "parsed": self.parsed,
             "schema_sha256": self.schema_sha256,
+            "prompt_sha256": self.prompt_sha256,
             "dropped": list(self.dropped),
             "degradation": self.degradation.describe() if self.degradation else None,
             "calls": self.calls.describe(),
@@ -111,6 +116,7 @@ class ExtractionAgent:
             ),
             self.enforcement,
         )
+        digest_prompt = prompt_hash(messages, fold_system=getattr(self.client, "fold_system", False))
         response_format = (
             prepared
             if prepared is not None and self.enforcement.decode_constraint is not DecodeConstraint.NONE
@@ -138,6 +144,7 @@ class ExtractionAgent:
             calls=log,
             degradation=degradation,
             schema_sha256=digest,
+            prompt_sha256=digest_prompt,
             dropped=dropped,
         )
 

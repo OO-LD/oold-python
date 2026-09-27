@@ -1,6 +1,6 @@
 """The bundled LangChain adapter.
 
-No provider is called. What is checked is what the adapter sends and what it
+No provider is called. The tests check what the adapter sends and what it
 reads back, because both have already been wrong in a way that looked like a
 model failing.
 """
@@ -11,7 +11,7 @@ from oold.agent.client import Message
 
 pytest.importorskip("langchain_core")
 
-from oold.agent.langchain_client import (  # noqa: E402
+from oold.agent.langchain_client import (
     LangChainClient,
     fold_system_into_user,
     usage_from_message,
@@ -44,7 +44,7 @@ class TestReadingTokenCounts:
         assert usage.output_tokens == 3
 
     def test_a_provider_reporting_nothing_yields_zeros(self):
-        """A zero total is the signal that a model is uninstrumented."""
+        """A zero total means the provider sent no token counts."""
         assert usage_from_message(_Reply("x")).total == 0
 
     def test_cached_and_reasoning_details_are_read_when_present(self):
@@ -77,14 +77,10 @@ class TestFoldingTheSystemMessage:
         assert "40.1 hertz" in turns[0][1]
 
     def test_nothing_is_lost_when_there_is_no_system_message(self):
-        assert fold_system_into_user([Message(role="user", content="Hello.")]) == [
-            ("user", "Hello.")
-        ]
+        assert fold_system_into_user([Message(role="user", content="Hello.")]) == [("user", "Hello.")]
 
     def test_a_system_message_with_nothing_to_fold_into_is_left_alone(self):
-        assert fold_system_into_user([Message(role="system", content="Only this.")]) == [
-            ("system", "Only this.")
-        ]
+        assert fold_system_into_user([Message(role="system", content="Only this.")]) == [("system", "Only this.")]
 
     def test_later_turns_are_untouched(self):
         turns = fold_system_into_user([

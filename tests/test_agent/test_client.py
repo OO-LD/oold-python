@@ -5,6 +5,7 @@ import threading
 import pytest
 
 from oold.agent import Call, CallLog, ChatClient, ChatResponse, Message, TokenUsage
+from oold.agent.client import prompt_hash
 
 
 class FakeClient:
@@ -176,3 +177,39 @@ class TestLangChainAdapter:
         usage = adapter.usage_from_message(Reply())
         assert usage.total == 12
         assert usage.cached_input_tokens == 0
+
+
+class TestHashingThePrompt:
+    """The record has to name the bytes a model was sent."""
+
+    MESSAGES = [
+        Message(role="system", content="Answer in JSON."),
+        Message(role="user", content="The reading was 40.1 hertz."),
+    ]
+
+    def test_the_same_turns_hash_the_same(self):
+        assert prompt_hash(self.MESSAGES) == prompt_hash(self.MESSAGES)
+
+    def test_a_different_document_hashes_differently(self):
+        other = [self.MESSAGES[0], Message(role="user", content="Something else.")]
+        assert prompt_hash(self.MESSAGES) != prompt_hash(other)
+
+    def test_a_different_instruction_hashes_differently(self):
+        """Two arms differ in the system message and nowhere else."""
+        other = [Message(role="system", content="Answer in prose."), self.MESSAGES[1]]
+        assert prompt_hash(self.MESSAGES) != prompt_hash(other)
+
+    def test_folding_changes_the_hash(self):
+        """One model gets different bytes, so it gets a different hash."""
+        assert prompt_hash(self.MESSAGES) != prompt_hash(self.MESSAGES, fold_system=True)
+
+    def test_a_folded_prompt_hashes_as_the_folded_turns(self):
+        folded = [Message(role="user", content="Answer in JSON.\n\nThe reading was 40.1 hertz.")]
+        assert prompt_hash(self.MESSAGES, fold_system=True) == prompt_hash(folded)
+
+    def test_the_hash_is_a_sha256(self):
+        assert len(prompt_hash(self.MESSAGES)) == 64
+
+    def test_non_ascii_content_does_not_change_between_runs(self):
+        german = [Message(role="user", content="Die Molmasse betrug 79,7 Gramm pro Mol.")]
+        assert prompt_hash(german) == prompt_hash(german)

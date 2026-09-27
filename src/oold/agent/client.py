@@ -14,6 +14,8 @@ plausible.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import threading
 import time
 from collections.abc import Iterator, Sequence
@@ -28,6 +30,8 @@ __all__ = [
     "ChatResponse",
     "Message",
     "TokenUsage",
+    "fold_system_into_user",
+    "prompt_hash",
 ]
 
 
@@ -35,6 +39,38 @@ __all__ = [
 class Message:
     role: str
     content: str
+
+
+def fold_system_into_user(messages: Sequence[Message]) -> list[tuple[str, str]]:
+    """Put the system content at the top of the first user turn.
+
+    Some deployments accept a system message, return 200, and drop it. The
+    token count shows it: a prompt carrying a schema arrives counted at five
+    tokens, and the model answers as if it had been asked nothing. If this
+    goes unnoticed, the study reports the model failing a task it was never
+    given.
+
+    Folding is declared per client, never applied on a guess, because it
+    changes the prompt and the prompt is part of the treatment.
+    """
+    system = "\n\n".join(m.content for m in messages if m.role == "system")
+    rest = [m for m in messages if m.role != "system"]
+    if not system or not rest:
+        return [(m.role, m.content) for m in messages]
+    first, *others = rest
+    folded = f"{system}\n\n{first.content}"
+    return [(first.role, folded)] + [(m.role, m.content) for m in others]
+
+
+def prompt_hash(messages: Sequence[Message], *, fold_system: bool = False) -> str:
+    """Hash of the turns a client sends, not of the document alone.
+
+    Folding changes the bytes one model receives, so a hash taken before it
+    would say two models were sent the same prompt when they were not.
+    """
+    turns = fold_system_into_user(messages) if fold_system else [(m.role, m.content) for m in messages]
+    canonical = json.dumps(turns, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)

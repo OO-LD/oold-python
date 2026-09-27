@@ -15,30 +15,14 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
-from oold.agent.client import ChatResponse, Message, TokenUsage
+from oold.agent.client import (
+    ChatResponse,
+    Message,
+    TokenUsage,
+    fold_system_into_user,
+)
 
 __all__ = ["LangChainClient", "fold_system_into_user", "usage_from_message"]
-
-
-def fold_system_into_user(messages: Sequence[Message]) -> list[tuple[str, str]]:
-    """Put the system content at the top of the first user turn.
-
-    Some deployments accept a system message, return 200, and drop it. The
-    token count shows it: a prompt carrying a schema arrives counted at five
-    tokens, and the model answers as if it had been asked nothing. If this
-    goes unnoticed, the study reports the model failing a task it was never
-    given.
-
-    Folding is declared per model and recorded, never applied on a guess,
-    because it changes the prompt and the prompt is part of the treatment.
-    """
-    system = "\n\n".join(m.content for m in messages if m.role == "system")
-    rest = [m for m in messages if m.role != "system"]
-    if not system or not rest:
-        return [(m.role, m.content) for m in messages]
-    first, *others = rest
-    folded = f"{system}\n\n{first.content}"
-    return [(first.role, folded)] + [(m.role, m.content) for m in others]
 
 
 def usage_from_message(message: Any) -> TokenUsage:

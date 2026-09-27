@@ -212,3 +212,70 @@ class TestReproducibility:
         """A model name must never select a profile by substring."""
         with pytest.raises(KeyError, match="unknown provider profile"):
             profile_for("gpt-oss-120b")
+
+
+class TestAChainOfReferences:
+    """A cycle has to be cut. A chain does not, and cutting it lost data.
+
+    The depth bound exists to end a cycle. It was also counting combinator
+    nesting and plain composition, so an inheritance chain three classes long
+    arrived without its grandparent's properties and the loss was reported as
+    a recursion cut.
+    """
+
+    def chain(self, length):
+        defs = {"C0": {"type": "object", "properties": {"p0": {"type": "string"}}}}
+        for i in range(1, length):
+            defs[f"C{i}"] = {
+                "type": "object",
+                "properties": {f"p{i}": {"type": "string"}},
+                "allOf": [{"$ref": f"#/$defs/C{i - 1}"}],
+            }
+        return {
+            "$defs": defs,
+            "anyOf": [
+                {
+                    "type": "object",
+                    "properties": {"type": {"const": f"C{length - 1}"}},
+                    "allOf": [{"$ref": f"#/$defs/C{length - 1}"}],
+                }
+            ],
+        }
+
+    def test_a_three_deep_chain_keeps_every_property(self):
+        prepared, _ = prepare(self.chain(3), profile_for("openai"))
+        assert {"p0", "p1", "p2"} <= set(prepared["anyOf"][0]["properties"])
+
+    def test_a_chain_deeper_than_the_bound_keeps_every_property(self):
+        """Six is past max_recursion_depth, and none of it is a cycle."""
+        prepared, degradation = prepare(self.chain(6), profile_for("openai"))
+        assert {f"p{i}" for i in range(6)} <= set(prepared["anyOf"][0]["properties"])
+        assert degradation.recursion_cut == 0
+
+    def test_a_cycle_is_still_cut_where_it_cannot_be_expressed(self):
+        cycle = {
+            "$defs": {
+                "Node": {
+                    "type": "object",
+                    "properties": {"label": {"type": "string"}, "child": {"$ref": "#/$defs/Node"}},
+                }
+            },
+            "$ref": "#/$defs/Node",
+        }
+        prepared, degradation = prepare(cycle, profile_for("anthropic"))
+        assert degradation.recursion_cut == 1
+        assert prepared["properties"]["child"]["type"] == "string"
+
+    def test_a_cycle_survives_where_it_can_be_expressed(self):
+        cycle = {
+            "$defs": {"Node": {"type": "object", "properties": {"child": {"$ref": "#/$defs/Node"}}}},
+            "$ref": "#/$defs/Node",
+        }
+        prepared, degradation = prepare(cycle, profile_for("openai"))
+        assert prepared["properties"]["child"] == {"$ref": "#/$defs/Node"}
+        assert degradation.recursion_cut == 0
+
+    def test_an_unresolvable_reference_is_still_cut(self):
+        prepared, degradation = prepare({"$ref": "#/$defs/Missing"}, profile_for("openai"))
+        assert degradation.recursion_cut == 1
+        assert prepared["type"] == "string"

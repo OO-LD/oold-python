@@ -280,7 +280,11 @@ def prepare(
             if keep_ref:
                 node["$ref"] = ref
                 return node
-            if name not in defs or too_deep or recursing:
+            # A cycle has to end somewhere, so it is cut. A chain of distinct
+            # references is finite and is not: cutting it lost real properties
+            # for no safety, and an inheritance chain three classes long used
+            # to arrive without its grandparent's properties.
+            if name not in defs or recursing:
                 report.recursion_cut += 1
                 return {
                     "type": "string",
@@ -304,7 +308,7 @@ def prepare(
             report._note(combinator)
             if combinator == "allOf":
                 for branch in branches:
-                    resolved = walk(branch, seen, depth + 1)
+                    resolved = walk(branch, seen, depth)
                     if isinstance(resolved, dict):
                         _merge(node, resolved)
             elif branches:
@@ -314,7 +318,7 @@ def prepare(
                 # answer that class, and the run would read as a finding about
                 # the model. What is genuinely lost is the pairing, which the
                 # keyword counter above already records.
-                walked = [walk(branch, seen, depth + 1) for branch in branches]
+                walked = [walk(branch, seen, depth) for branch in branches]
                 resolved = flatten_union({combinator: [b for b in walked if isinstance(b, dict)]})
                 _merge(node, resolved)
 

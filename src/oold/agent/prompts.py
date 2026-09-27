@@ -60,8 +60,11 @@ def build_messages(request: ExtractionRequest, enforcement: Enforcement) -> list
     sections.append(_PROSE_FORM if enforcement.output_form is OutputForm.PROSE else _JSON_FORM)
 
     if enforcement.catalogue:
-        listed = "\n".join(f"- {name}" for name in enforcement.catalogue)
-        sections.append(f"{_CATALOGUE}\n{listed}")
+        # Rendered entries when the condition supplies them, identifiers
+        # otherwise. The identifier stays the answer either way, so a rendered
+        # entry has to carry its own.
+        entries = enforcement.catalogue_text or tuple(f"- {name}" for name in enforcement.catalogue)
+        sections.append(f"{_CATALOGUE}\n" + "\n".join(entries))
         if enforcement.commit_gate:
             sections.append(_GATE_HINT)
 

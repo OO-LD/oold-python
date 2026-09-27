@@ -7,6 +7,47 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.0.0 (2026-09-27)
+
+### Bug Fixes
+
+- A partial export emits one schema level, composed with allOf
+  ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+- Declare an IRI-family format on emitted link properties
+  ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+- Derive x-oold-range from the target's location, not its identity
+  ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+- Emit schemas that validate against OO-LD v1.0.0-rc.3
+  ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+- Publish the document shape, not the code-generation shape
+  ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+### Documentation
+
+- Correct what a schema says about a link ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+### Features
+
+- A bare Link[T] annotation is optional ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+### Testing
+
+- Cover def pruning and the v1 requiredness spelling
+  ([#162](https://github.com/OO-LD/oold-python/pull/162),
+  [`c877216`](https://github.com/OO-LD/oold-python/commit/c877216364fa5980a97c5599f5ed05811a16d2d4))
+
+
 ## v1.1.0 (2026-09-27)
 
 ### Features

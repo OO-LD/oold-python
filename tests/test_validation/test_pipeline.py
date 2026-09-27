@@ -264,7 +264,12 @@ def test_a_schema_with_no_context_warns_instead_of_failing_the_round_trip(broken
     assert coverage.status == WARN
     assert coverage.detail["declared"] == ["name", "orphan"]
     assert "@vocab" in coverage.message and "x-oold-context" in coverage.message
-    assert not report.failures()
+
+    # The document itself is rejected: OOLD-SCH-96a3 requires a root @context from
+    # 1.0.0-rc.4 on. That is the meta-schema's finding, and it must stay the only one -
+    # the round-trip and coverage checks above still have to reach their own verdicts
+    # rather than piling further failures onto a schema that is already refused.
+    assert [c.id for c in report.failures()] == ["schema.meta"]
 
 
 def test_vocab_suppresses_the_coverage_finding(broken_dir):

@@ -279,3 +279,12 @@ class TestOneCallPerShortlist:
     def test_the_shortlist_is_still_recorded_per_entity(self):
         result = self.run(MultiEntityClient())
         assert result.selected == {"e1": ("Length",), "e2": ("Mass",)}
+
+
+def test_the_selection_schema_is_named():
+    """A structured-output call names a tool after the schema title, so a
+    schema without one is refused before anything is sent. The first live
+    select-then-fill run failed every cell on it."""
+    built = selection_schema(CATALOGUE, 3)
+    assert built.get("title")
+    assert built.get("description")

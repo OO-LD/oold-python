@@ -108,6 +108,9 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
     gain nothing.
     """
     return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "EntityCandidates",
+        "description": "Which classes each entity in the document could be.",
         "type": "object",
         "properties": {
             "entities": {

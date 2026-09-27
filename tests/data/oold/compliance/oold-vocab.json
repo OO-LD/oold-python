@@ -1,6 +1,6 @@
 [
   {
-    "$comment": "Keep in sync with meta/oold-meta-schema.json and meta/oold-ui-meta-schema.json: scripts/validate.mjs asserts every x-oold-* / x-oold-ui-* keyword defined there is covered by at least one case below. Each `schemas` entry is checked against the OO-LD meta-schema (well-formedness), not an instance.",
+    "$comment": "Keep in sync with meta/oold-meta-schema.json and meta/oold-ui-meta-schema.json: the validators assert every x-oold-* / x-oold-ui-* keyword defined there is covered by at least one case below. Each `schemas` entry is checked against the OO-LD meta-schema (well-formedness), not an instance.",
     "description": "a fully annotated OO-LD schema is well-formed (covers every x-oold-* and x-oold-ui-* keyword)",
     "schemas": [
       {
@@ -46,9 +46,6 @@
             }
           },
           "x-oold-reverse-required": [
-            "employees"
-          ],
-          "x-oold-reverse-default-properties": [
             "employees"
           ],
           "type": "object",
@@ -112,6 +109,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-0.schema.json",
+          "@context": {},
           "x-oold-uuid": "nope"
         }
       },
@@ -121,6 +119,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-1.schema.json",
+          "@context": {},
           "x-oold-version": 1
         }
       },
@@ -130,6 +129,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-2.schema.json",
+          "@context": {},
           "x-oold-prior-version": 1
         }
       },
@@ -139,6 +139,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-3.schema.json",
+          "@context": {},
           "x-oold-backward-compatible-with": 1
         }
       },
@@ -148,6 +149,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-4.schema.json",
+          "@context": {},
           "x-oold-incompatible-with": 1
         }
       },
@@ -157,6 +159,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-5.schema.json",
+          "@context": {},
           "x-oold-sssom": 1
         }
       },
@@ -166,6 +169,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-6.schema.json",
+          "@context": {},
           "x-oold-instance-rdf-type": "schema:Person"
         }
       },
@@ -175,6 +179,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-7.schema.json",
+          "@context": {},
           "x-oold-ref": 1
         }
       },
@@ -184,6 +189,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-8.schema.json",
+          "@context": {},
           "x-oold-range": 42
         }
       },
@@ -193,6 +199,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-9.schema.json",
+          "@context": {},
           "x-oold-multilang-title": "Person"
         }
       },
@@ -202,6 +209,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-10.schema.json",
+          "@context": {},
           "x-oold-multilang-description": "a person"
         }
       },
@@ -211,6 +219,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-11.schema.json",
+          "@context": {},
           "x-oold-context": "x"
         }
       },
@@ -220,6 +229,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-12.schema.json",
+          "@context": {},
           "x-oold-reverse-properties": "x"
         }
       },
@@ -229,16 +239,48 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-13.schema.json",
+          "@context": {},
           "x-oold-reverse-required": "x"
         }
       },
       {
-        "description": "x-oold-reverse-default-properties not an array",
+        "description": "a malformed x-oold-* keyword is rejected inside a nested subschema, not only at the root",
         "valid": false,
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-1-14.schema.json",
-          "x-oold-reverse-default-properties": "x"
+          "@context": {},
+          "type": "object",
+          "properties": {
+            "works_for": {
+              "type": "string",
+              "x-oold-range": 42
+            }
+          }
+        }
+      },
+      {
+        "description": "a nested subschema is not required to carry its own $id",
+        "valid": true,
+        "schema": {
+          "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+          "$id": "https://oo-ld.test/compliance/vocab-1-15.schema.json",
+          "@context": {},
+          "type": "object",
+          "properties": {
+            "works_for": {
+              "type": "string",
+              "x-oold-range": "Organization.schema.json"
+            }
+          },
+          "$defs": {
+            "Inner": {
+              "type": "object",
+              "x-oold-instance-rdf-type": [
+                "schema:Thing"
+              ]
+            }
+          }
         }
       }
     ]
@@ -252,6 +294,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-0.schema.json",
+          "@context": {},
           "x-oold-ui-widget": 1
         }
       },
@@ -261,6 +304,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-1.schema.json",
+          "@context": {},
           "x-oold-ui-property-order": "first"
         }
       },
@@ -270,6 +314,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-2.schema.json",
+          "@context": {},
           "x-oold-ui-property-group": 1
         }
       },
@@ -279,6 +324,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-3.schema.json",
+          "@context": {},
           "x-oold-ui-form-hidden": "x"
         }
       },
@@ -288,6 +334,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-4.schema.json",
+          "@context": {},
           "x-oold-ui-render-hidden": "x"
         }
       },
@@ -297,6 +344,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-5.schema.json",
+          "@context": {},
           "x-oold-ui-enum-titles": "x"
         }
       },
@@ -306,6 +354,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-6.schema.json",
+          "@context": {},
           "x-oold-multilang-ui-enum-titles": "x"
         }
       },
@@ -315,6 +364,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-7.schema.json",
+          "@context": {},
           "x-oold-ui-hint": 1
         }
       },
@@ -324,6 +374,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-8.schema.json",
+          "@context": {},
           "x-oold-multilang-ui-hint": 1
         }
       },
@@ -333,6 +384,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-9.schema.json",
+          "@context": {},
           "x-oold-ui-default-property": "x"
         }
       },
@@ -342,6 +394,7 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-10.schema.json",
+          "@context": {},
           "x-enum-varnames": "x"
         }
       },
@@ -351,7 +404,78 @@
         "schema": {
           "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
           "$id": "https://oo-ld.test/compliance/vocab-2-11.schema.json",
+          "@context": {},
           "x-enum-descriptions": "x"
+        }
+      }
+    ]
+  },
+  {
+    "description": "an OO-LD schema document carries a root @context",
+    "rule": "OOLD-SCH-96a3",
+    "schemas": [
+      {
+        "description": "a schema document without a root @context is rejected",
+        "valid": false,
+        "schema": {
+          "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+          "$id": "https://oo-ld.test/compliance/vocab-no-context.schema.json",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "description": "a root @context may be an IRI reference to a remote context",
+        "valid": true,
+        "schema": {
+          "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+          "$id": "https://oo-ld.test/compliance/vocab-remote-context.schema.json",
+          "@context": "https://oo-ld.test/compliance/remote.context.json",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "description": "an empty root @context satisfies the requirement",
+        "valid": true,
+        "schema": {
+          "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+          "$id": "https://oo-ld.test/compliance/vocab-empty-context.schema.json",
+          "@context": {},
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "description": "a root @context may be an array combining a remote reference and local terms",
+        "valid": true,
+        "schema": {
+          "$schema": "https://oo-ld.org/latest/meta/oold-meta-schema.json",
+          "$id": "https://oo-ld.test/compliance/vocab-array-context.schema.json",
+          "@context": [
+            "https://oo-ld.test/compliance/remote.context.json",
+            {
+              "name": "http://schema.org/name"
+            }
+          ],
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
         }
       }
     ]

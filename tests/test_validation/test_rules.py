@@ -157,8 +157,13 @@ def test_a_malformed_catalog_is_treated_as_absent(catalog_version, tmp_path):
     (tmp_path / "meta" / catalog_version / RULES_FILE).write_text("{ not json", encoding="utf-8")
     bundle = load_tracked(catalog_version)
     assert bundle.has_rules is False
-    # $id because this fixture copies the newest dialect, which requires one of a document.
-    assert bundle.meta_validator().is_valid({"$id": "https://example.org/probe.schema.json", "type": "object"})
+    # $id and @context because this fixture copies the newest dialect, which requires both
+    # of a document.
+    assert bundle.meta_validator().is_valid({
+        "$id": "https://example.org/probe.schema.json",
+        "@context": {},
+        "type": "object",
+    })
 
 
 def test_checkable_rules_exclude_implementation_advisory_and_deprecated(catalog_version):

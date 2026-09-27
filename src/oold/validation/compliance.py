@@ -58,6 +58,13 @@ VOCAB_EXEMPT: dict[str, str] = {
     "x-sssom": "renamed to x-oold-sssom in 1.0.0-rc.2; only 1.0.0-rc.1 declares the old name",
 }
 
+#: Keywords the vocabulary has withdrawn. The fixture corpus tracks the newest release, so it
+#: cannot exercise a keyword that no longer exists, while an older tracked meta-schema still
+#: declares it. Coverage would otherwise report a gap no fixture can ever close.
+VOCAB_WITHDRAWN: dict[str, str] = {
+    "x-oold-reverse-default-properties": "removed from the vocabulary in 1.0.0-rc.4",
+}
+
 
 def declared_x_keywords(bundle: MetaBundle) -> set[str]:
     """Every ``x-*`` key one version's meta-schemas declare, whatever the prefix.
@@ -411,6 +418,9 @@ def vocabulary_coverage(bundle: MetaBundle, covered: set[str]) -> list[str]:
     """Keywords the meta-schemas define but no fixture exercises.
 
     This is what keeps the suite in sync with the vocabulary: adding a keyword to a meta-schema
-    without a well-formedness fixture fails the check.
+    without a well-formedness fixture fails the check. A withdrawn keyword is excluded, since no
+    fixture drawn from the current release can cover one the vocabulary no longer has.
     """
-    return [keyword for keyword in bundle.declared_keywords() if keyword not in covered]
+    return [
+        keyword for keyword in bundle.declared_keywords() if keyword not in covered and keyword not in VOCAB_WITHDRAWN
+    ]

@@ -324,7 +324,7 @@ def test_registry_resolves_the_ui_meta_schema_cross_reference():
     # Every probe carries $id because the dialect requires one of a document from 1.0.0-rc.2 on.
     # Without it these assertions pass or fail for a reason that has nothing to do with the
     # registry.
-    probe = {"$id": "https://example.org/probe.schema.json"}
+    probe = {"$id": "https://example.org/probe.schema.json", "@context": {}}
     # The keyword has to be one the UI meta-schema constrains, and the probe has to violate that
     # constraint. Merely naming an x-oold-ui-* keyword proves nothing: 2020-12 tolerates an
     # unreached keyword as an annotation, so such a probe is valid whether or not the
@@ -368,7 +368,7 @@ def test_registry_resolves_by_file_name_when_the_id_domain_differs(tmp_path, mon
     try:
         bundle = load_tracked("9.9.9")
         assert bundle.self_check() == []
-        probe = {"$id": "https://example.org/probe.schema.json", "x-oold-ui-form-hidden": True}
+        probe = {"$id": "https://example.org/probe.schema.json", "@context": {}, "x-oold-ui-form-hidden": True}
         assert bundle.meta_validator().is_valid(probe)
     finally:
         meta_store.load_index.cache_clear()

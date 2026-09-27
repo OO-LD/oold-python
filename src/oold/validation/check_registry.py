@@ -139,6 +139,42 @@ def severity(rule: Rule | None, fallback: Status = DEFAULT_LEVEL) -> Status:
 # ---------------------------------------------------------------------------- individual rules
 
 
+def _missing_context(schema: dict[str, Any], context: ContextView) -> list[str]:
+    # Presence, not content: an empty object satisfies the rule, as does a bare reference to a
+    # remote context. Only absence makes the document unusable as one.
+    if "@context" not in schema:
+        return ["schema declares no root @context, so it cannot be referenced as one"]
+    return []
+
+
+def _range_form(schema: dict[str, Any], context: ContextView) -> list[str]:
+    """`x-oold-range` takes an IRI, an array of IRIs, or a subschema, and no other form."""
+    found: list[str] = []
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, list):
+            for i, item in enumerate(node):
+                walk(item, f"{path}[{i}]")
+            return
+        if not isinstance(node, dict):
+            return
+        if "x-oold-range" in node:
+            value = node["x-oold-range"]
+            ok = (
+                isinstance(value, str)
+                or (isinstance(value, list) and all(isinstance(v, str) for v in value))
+                or isinstance(value, dict)
+            )
+            if not ok:
+                found.append(f"{path}: x-oold-range is neither an IRI, an array of IRIs, nor a subschema")
+        for key, child in node.items():
+            if key != "x-oold-range":
+                walk(child, f"{path}.{key}" if path else key)
+
+    walk(schema, "")
+    return found
+
+
 def _missing_id(schema: dict[str, Any], context: ContextView) -> list[str]:
     if not schema.get("$id"):
         return ["schema declares no $id, so it has no global identifier"]
@@ -1048,6 +1084,20 @@ CHECKS: tuple[CheckInfo, ...] = (
         rule="OOLD-VER-3b96",
         per_version=True,
         run=_missing_id,
+    ),
+    CheckInfo(
+        "rule.context",
+        "a schema document has a root @context",
+        rule="OOLD-SCH-96a3",
+        per_version=True,
+        run=_missing_context,
+    ),
+    CheckInfo(
+        "rule.range-form",
+        "an x-oold-range is an IRI, an array of IRIs, or a subschema",
+        rule="OOLD-EXT-c77a",
+        per_version=True,
+        run=_range_form,
     ),
     CheckInfo(
         "rule.id-fragment",

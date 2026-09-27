@@ -89,6 +89,14 @@ class Enforcement:
 
     output_form: OutputForm = OutputForm.JSON
 
+    unit_catalogue: tuple[str, ...] | None = None
+    """Units offered for selection, when the corpus closes that slot too.
+
+    A quantity corpus enumerates the units each kind admits, so leaving the
+    unit a free string constrains half of what the schema actually says. Kept
+    separate from ``catalogue`` because the two are closed by different facts
+    and a study may want to close one without the other."""
+
     def __post_init__(self) -> None:
         if self.grounding and not self.schema_in_prompt:
             raise ValueError("grounding needs a schema to ground, so set schema_in_prompt when grounding is on")
@@ -111,6 +119,10 @@ class Enforcement:
         """
         return replace(self, catalogue=paths)
 
+    def with_units(self, units: tuple[str, ...] | None) -> Enforcement:
+        """The same condition over a different unit enumeration."""
+        return replace(self, unit_catalogue=units)
+
     def describe(self) -> dict[str, object]:
         """The condition, for the result record.
 
@@ -121,6 +133,7 @@ class Enforcement:
         return {
             "schema_in_prompt": self.schema_in_prompt,
             "catalogue_size": self.catalogue_size,
+            "unit_catalogue_size": (len(self.unit_catalogue) if self.unit_catalogue else 0),
             "catalogue_offered": self.catalogue is not None,
             "decode_constraint": self.decode_constraint.value,
             "commit_gate": self.commit_gate,

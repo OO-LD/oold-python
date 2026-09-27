@@ -140,3 +140,23 @@ def test_orchestration_covers_single_shot_and_the_three_reference_agents():
         "segmented",
         "multi_step",
     ]
+
+
+class TestClosingTheUnitSlot:
+    """A quantity corpus enumerates the units each kind admits."""
+
+    def test_an_arm_carries_no_unit_enumeration_by_default(self):
+        assert arm("A2", ("Length",)).unit_catalogue is None
+
+    def test_units_can_be_set_without_touching_the_catalogue(self):
+        enforcement = arm("A2", ("Length",)).with_units(("meter", "foot"))
+        assert enforcement.unit_catalogue == ("meter", "foot")
+        assert enforcement.catalogue == ("Length",)
+
+    def test_the_unit_enumeration_is_reported(self):
+        """A closed slot nobody records looks like a free one."""
+        described = arm("A2", ("Length",)).with_units(("meter", "foot")).describe()
+        assert described["unit_catalogue_size"] == 2
+
+    def test_no_unit_enumeration_reports_zero(self):
+        assert arm("A2", ("Length",)).describe()["unit_catalogue_size"] == 0

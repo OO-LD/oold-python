@@ -158,6 +158,7 @@ class ExtractionAgent:
         prepared, degradation = prepare(request.schema, self.profile, grounding=self.enforcement.grounding)
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_ENUM:
             prepared = self._pin_class(prepared)
+            prepared = self._pin_units(prepared)
         return prepared, degradation, schema_hash(prepared)
 
     def _pin_class(self, schema: dict[str, Any]) -> dict[str, Any]:
@@ -173,6 +174,26 @@ class ExtractionAgent:
         if target is None:
             raise ValueError("the schema has no class property to pin, so the decode-time constraint cannot be applied")
         target["enum"] = list(self.enforcement.catalogue)
+        return schema
+
+    def _pin_units(self, schema: dict[str, Any]) -> dict[str, Any]:
+        """Constrain the unit slot, when the corpus closes it.
+
+        A quantity corpus enumerates the units each kind admits. Pinning the
+        class and leaving the unit a free string enforces half of what the
+        schema says, and the half left open is the one models get wrong.
+
+        Silent when no unit enumeration was supplied, because a corpus that
+        does not close the slot is a condition, not a mistake. That is the
+        opposite of :meth:`_pin_class`, which raises: there the catalogue was
+        asked for and the slot to put it in was missing.
+        """
+        if not self.enforcement.unit_catalogue:
+            return schema
+        target = _find_property(schema, _UNIT_KEYS)
+        if target is None:
+            raise ValueError("the schema has no unit property to pin, so the unit enumeration cannot be applied")
+        target["enum"] = list(self.enforcement.unit_catalogue)
         return schema
 
     def _gate(self, payload: Any) -> tuple[Any, list[str]]:
@@ -213,6 +234,8 @@ class ExtractionAgent:
 
 _CLASS_KEYS = ("type", "@type", "class", "class_path", "schema_path", "kind")
 
+_UNIT_KEYS = ("unit", "units", "unit_symbol", "uom")
+
 
 def _class_of(entity: dict[str, Any]) -> str | None:
     for key in _CLASS_KEYS:
@@ -231,22 +254,31 @@ def _set_class(entity: dict[str, Any], name: str) -> None:
             return
 
 
-def _find_class_property(schema: Any) -> dict[str, Any] | None:
-    """The subschema describing an entity's class, wherever it sits."""
+def _find_property(schema: Any, keys: tuple[str, ...]) -> dict[str, Any] | None:
+    """The subschema for one of these property names, wherever it sits.
+
+    Only names under a ``properties`` map count, so the ``type`` keyword of
+    JSON Schema itself is never mistaken for a property called ``type``.
+    """
     if isinstance(schema, dict):
         properties = schema.get("properties")
         if isinstance(properties, dict):
-            for key in _CLASS_KEYS:
+            for key in keys:
                 target = properties.get(key)
                 if isinstance(target, dict):
                     return target
         for value in schema.values():
-            found = _find_class_property(value)
+            found = _find_property(value, keys)
             if found is not None:
                 return found
     elif isinstance(schema, list):
         for item in schema:
-            found = _find_class_property(item)
+            found = _find_property(item, keys)
             if found is not None:
                 return found
     return None
+
+
+def _find_class_property(schema: Any) -> dict[str, Any] | None:
+    """The subschema describing an entity's class, wherever it sits."""
+    return _find_property(schema, _CLASS_KEYS)

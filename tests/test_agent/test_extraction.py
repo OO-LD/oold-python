@@ -261,3 +261,56 @@ def test_build_messages_needs_no_agent():
     )
     messages = build_messages(ExtractionRequest("doc"), condition)
     assert [m.role for m in messages] == ["system", "user"]
+
+
+class TestPinningTheUnitSlot:
+    """A2 closes every slot the corpus closes, not only the class."""
+
+    SCHEMA = {
+        "type": "object",
+        "properties": {
+            "entities": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string"},
+                        "value": {"type": "number"},
+                        "unit": {"type": "string"},
+                    },
+                },
+            }
+        },
+    }
+
+    def sent(self, enforcement):
+        client = FakeClient('{"entities": []}')
+        ExtractionAgent(client, enforcement, profile_for("openai")).run(
+            ExtractionRequest(document="The reading was 1.0 meter.", schema=self.SCHEMA)
+        )
+        return client.response_format
+
+    def unit_slot(self, schema):
+        return schema["properties"]["entities"]["items"]["properties"]["unit"]
+
+    def test_the_unit_slot_is_pinned_when_units_are_offered(self):
+        schema = self.sent(arm("A2", ("Length",)).with_units(("meter", "foot")))
+        assert self.unit_slot(schema)["enum"] == ["meter", "foot"]
+
+    def test_the_unit_slot_is_left_open_when_none_are_offered(self):
+        """A corpus that does not close the slot is a condition, not a fault."""
+        assert "enum" not in self.unit_slot(self.sent(arm("A2", ("Length",))))
+
+    def test_the_class_slot_is_still_pinned(self):
+        schema = self.sent(arm("A2", ("Length",)).with_units(("meter",)))
+        assert schema["properties"]["entities"]["items"]["properties"]["type"]["enum"] == ["Length"]
+
+    def test_an_unconstrained_arm_sends_no_schema_at_all(self):
+        assert self.sent(arm("A1", ("Length",)).with_units(("meter",))) is None
+
+    def test_a_schema_with_no_unit_slot_is_refused(self):
+        client = FakeClient('{"entities": []}')
+        agent = ExtractionAgent(client, arm("A2", ("Length",)).with_units(("meter",)), profile_for("openai"))
+        bare = {"type": "object", "properties": {"type": {"type": "string"}}}
+        with pytest.raises(ValueError, match="no unit property"):
+            agent.run(ExtractionRequest(document="d", schema=bare))

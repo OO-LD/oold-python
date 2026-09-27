@@ -9,7 +9,8 @@ Requires the ``agent`` extra.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
@@ -58,20 +59,12 @@ class LangChainClient:
         parsed: dict[str, Any] | None = None
 
         if response_format is not None:
-            structured = llm.with_structured_output(
-                response_format, include_raw=True
-            )
-            result = structured.invoke(
-                [(m.role, m.content) for m in messages]
-            )
+            structured = llm.with_structured_output(response_format, include_raw=True)
+            result = structured.invoke([(m.role, m.content) for m in messages])
             raw = result.get("raw") if isinstance(result, dict) else None
-            parsing_error = (
-                result.get("parsing_error") if isinstance(result, dict) else None
-            )
+            parsing_error = result.get("parsing_error") if isinstance(result, dict) else None
             if parsing_error is not None:
-                raise ValueError(
-                    f"structured output did not parse: {parsing_error}"
-                )
+                raise ValueError(f"structured output did not parse: {parsing_error}")
             parsed = result.get("parsed") if isinstance(result, dict) else None
             if parsed is not None and not isinstance(parsed, dict):
                 parsed = dict(parsed)

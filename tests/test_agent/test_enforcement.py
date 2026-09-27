@@ -133,8 +133,9 @@ class TestEnforcement:
             setattr(typed(), "commit_gate", False)  # noqa: B010
 
 
-def test_orchestration_covers_the_three_reference_agents():
+def test_orchestration_covers_single_shot_and_the_three_reference_agents():
     assert [o.value for o in Orchestration] == [
+        "single_shot",
         "recursive",
         "segmented",
         "multi_step",

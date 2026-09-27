@@ -27,6 +27,10 @@ __all__ = [
 class Orchestration(str, Enum):
     """How the work is broken up, held constant while enforcement varies."""
 
+    SINGLE_SHOT = "single_shot"
+    """One call. The right shape when a document yields a flat list of
+    instances, and the baseline the others have to beat."""
+
     RECURSIVE = "recursive"
     """Depth first. Resolve each entity, recursing into its linked entities."""
 

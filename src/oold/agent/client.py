@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Iterator, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 __all__ = [
     "Call",
@@ -57,13 +58,11 @@ class TokenUsage:
     def billable_input(self) -> int:
         return self.input_tokens - self.cached_input_tokens
 
-    def __add__(self, other: "TokenUsage") -> "TokenUsage":
+    def __add__(self, other: TokenUsage) -> TokenUsage:
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
-            cached_input_tokens=(
-                self.cached_input_tokens + other.cached_input_tokens
-            ),
+            cached_input_tokens=(self.cached_input_tokens + other.cached_input_tokens),
             reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
         )
 
@@ -206,10 +205,7 @@ class CallLog:
         return {
             "calls": [call.describe() for call in self._calls],
             "totals": self.totals().describe(),
-            "by_step": {
-                step: usage.describe()
-                for step, usage in sorted(self.by_step().items())
-            },
+            "by_step": {step: usage.describe() for step, usage in sorted(self.by_step().items())},
             "n_calls": len(self._calls),
             "n_errors": sum(1 for call in self._calls if call.error),
         }

@@ -29,6 +29,12 @@ from oold.agent.enforcement import (
     OutputForm,
     arm,
 )
+from oold.agent.extraction import (
+    ExtractionAgent,
+    ExtractionResult,
+    parse_json_answer,
+)
+from oold.agent.prompts import ExtractionRequest, build_messages
 from oold.agent.provider import (
     PROFILES,
     Degradation,
@@ -48,12 +54,17 @@ __all__ = [
     "DecodeConstraint",
     "Degradation",
     "Enforcement",
+    "ExtractionAgent",
+    "ExtractionRequest",
+    "ExtractionResult",
     "Message",
     "Orchestration",
     "OutputForm",
     "ProviderProfile",
     "TokenUsage",
     "arm",
+    "build_messages",
+    "parse_json_answer",
     "prepare",
     "profile_for",
     "schema_hash",

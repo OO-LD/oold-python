@@ -66,12 +66,8 @@ class TestCallLog:
 
     def test_by_step_separates_what_the_run_total_hides(self):
         log = CallLog()
-        log.append(
-            Call("detect", "m", TokenUsage(input_tokens=8000), 0.1)
-        )
-        log.append(
-            Call("extract", "m", TokenUsage(input_tokens=500), 0.1)
-        )
+        log.append(Call("detect", "m", TokenUsage(input_tokens=8000), 0.1))
+        log.append(Call("extract", "m", TokenUsage(input_tokens=500), 0.1))
         by_step = log.by_step()
         assert by_step["detect"].input_tokens == 8000
         assert by_step["extract"].input_tokens == 500
@@ -89,9 +85,8 @@ class TestCallLog:
     def test_a_failed_call_still_leaves_a_record(self):
         """A retry that vanishes from the log makes retries look free."""
         log = CallLog()
-        with pytest.raises(RuntimeError):
-            with log.timed("extract", "m"):
-                raise RuntimeError("provider said no")
+        with pytest.raises(RuntimeError), log.timed("extract", "m"):
+            raise RuntimeError("provider said no")
         call = next(iter(log))
         assert call.error == "RuntimeError: provider said no"
         assert call.usage.total == 0
@@ -99,9 +94,7 @@ class TestCallLog:
     def test_attempts_are_recorded_separately(self):
         log = CallLog()
         for attempt in (1, 2, 3):
-            log.append(
-                Call("construct", "m", TokenUsage(input_tokens=10), 0.1, attempt)
-            )
+            log.append(Call("construct", "m", TokenUsage(input_tokens=10), 0.1, attempt))
         assert [c.attempt for c in log] == [1, 2, 3]
         assert log.totals().input_tokens == 30
 
@@ -111,9 +104,7 @@ class TestCallLog:
 
         def work():
             for _ in range(50):
-                log.append(
-                    Call("parallel", "m", TokenUsage(input_tokens=1), 0.0)
-                )
+                log.append(Call("parallel", "m", TokenUsage(input_tokens=1), 0.0))
 
         threads = [threading.Thread(target=work) for _ in range(8)]
         for thread in threads:

@@ -7,6 +7,14 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v1.1.0 (2026-09-27)
+
+### Features
+
+- **meta**: Vendor OO-LD 1.0.0-rc.4 and rc.5 ([#169](https://github.com/OO-LD/oold-python/pull/169),
+  [`9ed8118`](https://github.com/OO-LD/oold-python/commit/9ed81185117faad50b086d68c9223b1d2528874e))
+
+
 ## v1.0.3 (2026-09-24)
 
 ### Bug Fixes

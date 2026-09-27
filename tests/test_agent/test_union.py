@@ -6,6 +6,8 @@ becomes one class, the model can only answer that class, and the run reads as
 a finding about the model.
 """
 
+import json
+
 import pytest
 
 from oold.agent.client import ChatResponse
@@ -13,7 +15,7 @@ from oold.agent.enforcement import arm
 from oold.agent.extraction import ExtractionAgent
 from oold.agent.prompts import ExtractionRequest
 from oold.agent.provider import prepare, profile_for
-from oold.agent.union import branch_for, flatten_union, union_schema
+from oold.agent.union import branch_for, flatten_union, nested_union, union_schema
 
 BRANCHES = {
     "Length": {"unit": {"type": "string", "enum": ["meter", "kilo_meter"]}},
@@ -244,3 +246,81 @@ class TestTheUnionReachesTheProviderTransform:
         _, keeps = self.sent("openai")
         _, loses = self.sent("anthropic")
         assert keeps.fidelity != loses.fidelity
+
+
+class TestTheNestedUnion:
+    """A union shaped like the hierarchy instead of flattened over it.
+
+    A flat union repeats every inherited property in every branch. On the
+    schema.org pool that is 3,047 property slots against the 851 the classes
+    declare, and it discards the one thing the hierarchy states.
+    """
+
+    BRANCHES = {
+        "Thing": {"name": {"type": "string"}},
+        "CreativeWork": {"author": {"type": "string"}},
+        "Book": {"isbn": {"type": "string"}},
+        "Organization": {"legalName": {"type": "string"}},
+    }
+    PARENTS = {
+        "CreativeWork": ("Thing",),
+        "Book": ("CreativeWork",),
+        "Organization": ("Thing",),
+    }
+
+    def built(self):
+        return nested_union(self.BRANCHES, self.PARENTS)
+
+    def test_a_single_root_is_the_whole_schema(self):
+        assert self.built()["properties"]["type"]["enum"][0] == "Thing"
+
+    def test_a_subclass_hangs_beneath_its_parent(self):
+        creative = next(b for b in self.built()["anyOf"] if b.get("properties", {}).get("type", {}).get("enum"))
+        assert "Book" in creative["properties"]["type"]["enum"]
+
+    def test_an_inherited_property_is_stated_once(self):
+        """The saving, and the reason the hierarchy is worth keeping."""
+        rendered = json.dumps(self.built())
+        assert rendered.count('"name"') == 1
+
+    def test_every_class_is_still_reachable(self):
+        rendered = json.dumps(self.built())
+        assert all(name in rendered for name in self.BRANCHES)
+
+    def test_a_leaf_pins_its_own_class(self):
+        rendered = json.dumps(self.built())
+        assert '"const": "Book"' in rendered
+
+    def test_no_allof_is_used(self):
+        """Every strict provider subset rejects allOf, so nesting must not
+        need one. Sibling properties and anyOf are conjoined already."""
+        assert "allOf" not in json.dumps(self.built())
+
+    def test_an_empty_union_is_refused(self):
+        with pytest.raises(ValueError, match="at least one branch"):
+            nested_union({}, {})
+
+    def test_a_parent_outside_the_offered_set_makes_a_root(self):
+        """Offering a subclass without its parent must not lose the subclass."""
+        built = nested_union({"Book": {"isbn": {"type": "string"}}}, {"Book": ("CreativeWork",)})
+        assert built["properties"]["type"]["const"] == "Book"
+
+    def test_multiple_inheritance_keeps_the_first_parent(self):
+        """A tree holds one. 48 of 906 schema.org classes name two or three,
+        and that loss belongs in the record, not hidden."""
+        built = nested_union(
+            {"Thing": {}, "Place": {}, "LocalBusiness": {"branchCode": {"type": "string"}}},
+            {"Place": ("Thing",), "LocalBusiness": ("Organization", "Place")},
+        )
+        assert "LocalBusiness" in json.dumps(built)
+
+    def test_a_provider_that_takes_anyof_keeps_the_nesting(self):
+        prepared, degradation = prepare(self.built(), profile_for("openai"))
+        assert "anyOf" in json.dumps(prepared)
+        assert degradation.dropped.get("anyOf") is None
+
+    def test_a_provider_that_refuses_it_still_reaches_every_class(self):
+        prepared, _ = prepare(self.built(), profile_for("anthropic"))
+        rendered = json.dumps(prepared)
+        assert "anyOf" not in rendered
+        assert all(name in rendered for name in ("Book", "Organization"))

@@ -64,6 +64,14 @@ class ExtractionRequest:
     Supplied when the corpus has a hierarchy worth expressing. A union then
     states each property where it is declared instead of repeating every
     inherited one in every branch."""
+    ranges: dict[str, tuple[str, ...]] | None = None
+    """Which classes each node-valued property may point at.
+
+    Supplied per request beside ``branches`` and ``parents``, and for the same
+    reason: it is corpus material, and this package never learns what a corpus
+    is. Keyed by property name alone. A reference slot is constrained by the
+    classes the plan found on the page, not by the class that declares the
+    property, so the declaring class adds nothing a second key could use."""
     instruction: str | None = None
     """Overrides the shared task sentence. For a study this stays unset, so
     every arm reads the same words."""

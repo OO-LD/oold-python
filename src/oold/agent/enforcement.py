@@ -35,7 +35,14 @@ class Orchestration(str, Enum):
     """Depth first. Resolve each entity, recursing into its linked entities."""
 
     SEGMENTED = "segmented"
-    """Plan the whole entity graph in one call, then fill it."""
+    """Plan the whole document in one call, then fill the plan.
+
+    The plan gives every entity an id, a class shortlist and the words it was
+    read from, and the fill step is told those ids. That is what makes an edge
+    expressible: a link can name a target only once both ends have a name both
+    steps agree on. Select-then-fill shares the two calls and stops short of
+    this, because its unit of work is one entity's shortlist and an edge
+    belongs to no single entity."""
 
     MULTI_STEP = "multi_step"
     """Detect, select properties, extract, construct, deduplicate."""

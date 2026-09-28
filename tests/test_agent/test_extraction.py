@@ -225,7 +225,7 @@ class TestOrchestration:
 
     @pytest.mark.parametrize(
         "orchestration",
-        [Orchestration.RECURSIVE, Orchestration.SEGMENTED, Orchestration.MULTI_STEP],
+        [Orchestration.RECURSIVE, Orchestration.MULTI_STEP],
     )
     def test_an_unported_orchestration_refuses_rather_than_pretending(self, orchestration):
         with pytest.raises(NotImplementedError, match="not ported yet"):

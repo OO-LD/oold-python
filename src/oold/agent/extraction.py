@@ -35,7 +35,7 @@ from oold.agent.prompts import (
 from oold.agent.provider import Degradation, ProviderProfile, prepare, schema_hash
 from oold.agent.union import hierarchy_union, union_schema
 
-__all__ = ["ExtractionAgent", "ExtractionResult", "parse_json_answer"]
+__all__ = ["Edge", "ExtractionAgent", "ExtractionResult", "PlannedEntity", "parse_json_answer"]
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.MULTILINE)
 
@@ -55,6 +55,36 @@ def parse_json_answer(text: str) -> Any | None:
         return json.loads(candidate)
     except json.JSONDecodeError:
         return None
+
+
+@dataclass(frozen=True)
+class PlannedEntity:
+    """One entity the plan step found, as the fill step is told about it."""
+
+    key: str
+    """The id both steps use for this entity.
+
+    Invented by the model in the plan step and offered back to it in the fill
+    step. An id attached afterwards by position never puts the question of
+    whether two mentions are one entity to the model at all, which is why the
+    predecessor could not ask it."""
+    classes: tuple[str, ...]
+    """The shortlist, most likely first. Empty when the plan placed the entity
+    in no class, which leaves it out of the fill step."""
+    mention: str = ""
+    """The words the plan read it from, used to name it in the fill prompt."""
+
+
+@dataclass(frozen=True)
+class Edge:
+    """One link an answer asserted, by the ids the plan handed out."""
+
+    source: str
+    prop: str
+    target: str
+
+    def describe(self) -> dict[str, str]:
+        return {"source": self.source, "prop": self.prop, "target": self.target}
 
 
 @dataclass
@@ -84,6 +114,19 @@ class ExtractionResult:
     conforms and when the condition did not ask."""
     repairs: int = 0
     """How many times the answer was sent back with its errors."""
+    links: list[Edge] = field(default_factory=list)
+    """Every edge the answer asserted between planned entities. Empty for an
+    orchestration that hands out no ids, where a link has nothing to name."""
+    dangling: list[Edge] = field(default_factory=list)
+    """The links whose target was never emitted.
+
+    A subset of :attr:`links` and not a removal. The edge stays in the payload,
+    because an answer pointing at an entity it failed to report is a different
+    failure from an answer reporting no edge, and dropping it would make the
+    two the same number."""
+    unpinned: list[str] = field(default_factory=list)
+    """Reference properties left open because no planned entity fits their
+    range. Those slots ran unconstrained, and the record says which."""
 
     @property
     def parsed(self) -> bool:
@@ -98,6 +141,9 @@ class ExtractionResult:
             "dropped": list(self.dropped),
             "invalid": list(self.invalid),
             "repairs": self.repairs,
+            "links": [edge.describe() for edge in self.links],
+            "dangling": [edge.describe() for edge in self.dangling],
+            "unpinned": list(self.unpinned),
             "degradation": self.degradation.describe() if self.degradation else None,
             "calls": self.calls.describe(),
         }
@@ -127,7 +173,7 @@ class ExtractionAgent:
         self.shortlist_k = shortlist_k
         """How many classes the select step may keep per entity. One is the
         commit case, where a wrong selection cannot be recovered."""
-        if orchestration in (Orchestration.RECURSIVE, Orchestration.SEGMENTED, Orchestration.MULTI_STEP):
+        if orchestration in (Orchestration.RECURSIVE, Orchestration.MULTI_STEP):
             raise NotImplementedError(
                 f"orchestration {orchestration.value} is not ported yet. It addresses "
                 f"the entity graph, which comes after class selection works"
@@ -136,13 +182,21 @@ class ExtractionAgent:
             raise ValueError("a shortlist of nothing leaves the second step no class to fill")
 
     def run(self, request: ExtractionRequest) -> ExtractionResult:
+        if self.orchestration is Orchestration.SEGMENTED:
+            return self._segmented(request)
         if self.orchestration is Orchestration.SELECT_THEN_FILL:
             return self._select_then_fill(request)
         return self._single_shot(request)
 
-    def _single_shot(self, request: ExtractionRequest) -> ExtractionResult:
+    def _single_shot(
+        self,
+        request: ExtractionRequest,
+        *,
+        plan: tuple[PlannedEntity, ...] = (),
+        filling: tuple[str, ...] = (),
+    ) -> ExtractionResult:
         log = CallLog()
-        prepared, degradation, digest = self._schema_for(request)
+        prepared, degradation, digest, unpinned = self._schema_for(request, plan, filling)
         messages = build_messages(
             ExtractionRequest(
                 document=request.document,
@@ -190,6 +244,7 @@ class ExtractionAgent:
             dropped=dropped,
             invalid=errors,
             repairs=repairs,
+            unpinned=unpinned,
         )
 
     def _validate_and_repair(
@@ -308,18 +363,127 @@ class ExtractionAgent:
             f"Read the document and report only the entities identified as {listed}, with the values stated for each."
         )
 
-    def _select(self, request: ExtractionRequest, log: CallLog) -> tuple[dict[str, tuple[str, ...]], str]:
-        """Ask which classes each entity could be, keeping at most k."""
+    def _segmented(self, request: ExtractionRequest) -> ExtractionResult:
+        """Plan the whole document, then fill the plan.
+
+        The plan is the unit of work, which is the difference from
+        select-then-fill. Grouping by shortlist is enough while every answer is
+        one entity's own values, and an edge is nobody's own value: the call
+        holding a link has to know that the entity at the other end exists and
+        what it is called, even when another call is filling it.
+
+        The document is sent again in full, for the reason it is under
+        select-then-fill: a summary written by step one would be a bottleneck
+        the grader cannot see past, and an entity lost there would read as an
+        extraction failure. What step two gains over that arm is the ids, so a
+        link has a name to point at.
+        """
+        log = CallLog()
+        self._mentions = {}
+        selected, text = self._select(request, log, step="plan")
+        plan = tuple(
+            PlannedEntity(key=key, classes=classes, mention=self._mentions.get(key, ""))
+            for key, classes in selected.items()
+        )
+
+        # One call per distinct shortlist, as select-then-fill does, and for the
+        # same reason: pooling the candidates lets one entity be answered with
+        # another's class.
+        groups: dict[tuple[str, ...], list[str]] = {}
+        for entity in plan:
+            if entity.classes:
+                groups.setdefault(entity.classes, []).append(entity.key)
+        if not groups:
+            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+
+        merged: list[Any] = []
+        unpinned: list[str] = []
+        last: ExtractionResult | None = None
+        for classes, keys in groups.items():
+            narrowed = self.enforcement.with_catalogue(classes)
+            filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
+            step = ExtractionRequest(
+                document=request.document,
+                schema=request.schema,
+                branches=request.branches,
+                parents=request.parents,
+                ranges=request.ranges,
+                instruction=self._plan_instruction(request, plan, keys),
+            )
+            outcome = filler._single_shot(step, plan=plan, filling=tuple(keys))
+            for call in outcome.calls:
+                log.append(replace(call, step="fill"))
+            merged.extend(_entities_of(outcome.payload))
+            unpinned.extend(name for name in outcome.unpinned if name not in unpinned)
+            last = outcome
+
+        if last is None:
+            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+        links, dangling = _edges_of(merged, request.ranges)
+        last.payload = {"entities": merged} if merged else None
+        last.calls = log
+        last.selected = selected
+        last.links = links
+        last.dangling = dangling
+        last.unpinned = unpinned
+        return last
+
+    def _plan_instruction(
+        self,
+        request: ExtractionRequest,
+        plan: tuple[PlannedEntity, ...],
+        keys: list[str],
+    ) -> str:
+        """Which planned entities this call reports, and under which ids.
+
+        The ids are stated even when one call covers the whole plan, which is
+        where this parts company with :meth:`_fill_instruction`. There an id is
+        an internal label and naming it would only add words. Here it is the
+        answer's own key and the thing a link points at.
+
+        Entities another call is filling are named too, as targets and not as
+        work. Without them, a document whose source and target shortlisted
+        different classes could never state the edge between them, because the
+        call holding the source would not know the target had a name.
+        """
+        wanted = set(keys)
+        listed = "; ".join(_named(entity) for entity in plan if entity.key in wanted)
+        sections = [
+            f"Read the document and report these entities, each under the id given here: {listed}.",
+            "Give that id as the value of the id property.",
+        ]
+        others = [entity for entity in plan if entity.key not in wanted]
+        if others:
+            sections.append("The document also describes " + "; ".join(_named(entity) for entity in others) + ".")
+        if request.ranges:
+            sections.append(
+                "Where a property of an entity points at another of these entities, give that entity's id as the value."
+            )
+        return " ".join(sections)
+
+    def _select(
+        self,
+        request: ExtractionRequest,
+        log: CallLog,
+        *,
+        step: str = "select",
+    ) -> tuple[dict[str, tuple[str, ...]], str]:
+        """Ask which classes each entity could be, keeping at most k.
+
+        ``step`` names the call in the log. Two orchestrations ask this same
+        question and spend different amounts on what follows, so their first
+        calls are attributed apart rather than pooled under one name.
+        """
         catalogue = self.enforcement.catalogue or ()
         if not catalogue:
-            raise ValueError("select-then-fill needs a catalogue to select from")
+            raise ValueError(f"{self.orchestration.value} needs a catalogue to select from")
 
         schema = selection_schema(catalogue, self.shortlist_k)
         prepared, _ = prepare(schema, self.profile, grounding=False)
         messages = build_selection_messages(request, self.enforcement, self.shortlist_k)
         response_format = prepared if self.enforcement.decode_constraint is not DecodeConstraint.NONE else None
 
-        with log.timed("select", self.client.model, attempt=1, schema_sha256=schema_hash(prepared)) as sink:
+        with log.timed(step, self.client.model, attempt=1, schema_sha256=schema_hash(prepared)) as sink:
             reply = self.client.invoke(messages, response_format=response_format)
             sink.append(reply.usage or TokenUsage())
 
@@ -337,13 +501,18 @@ class ExtractionAgent:
                 self._mentions[key] = mention.strip()
         return selected, reply.text
 
-    def _schema_for(self, request: ExtractionRequest) -> tuple[dict[str, Any] | None, Degradation | None, str | None]:
+    def _schema_for(
+        self,
+        request: ExtractionRequest,
+        plan: tuple[PlannedEntity, ...] = (),
+        filling: tuple[str, ...] = (),
+    ) -> tuple[dict[str, Any] | None, Degradation | None, str | None, list[str]]:
         """The schema this condition sends, and what preparing it cost."""
         needs_schema = (
             self.enforcement.schema_in_prompt or self.enforcement.decode_constraint is not DecodeConstraint.NONE
         )
         if request.schema is None or not needs_schema:
-            return None, None, None
+            return None, None, None, []
 
         # The union is built before the provider transform, not after. Building
         # it after would send an `anyOf` to a profile that rejects one, and the
@@ -358,7 +527,19 @@ class ExtractionAgent:
         if self.enforcement.decode_constraint is DecodeConstraint.JSON_SCHEMA_ENUM:
             prepared = self._pin_class(prepared)
             prepared = self._pin_units(prepared)
-        return prepared, degradation, schema_hash(prepared)
+
+        unpinned: list[str] = []
+        if plan:
+            # The id slot goes in whatever the decode constraint is, because it
+            # belongs to the orchestration and not to the enforcement: an answer
+            # stating no id cannot be joined back to the plan, and an arm that
+            # only shows its schema still has to ask for one. The reference
+            # enums go in where the decoder is engaged and nowhere else, so the
+            # decode axis keeps meaning what it means everywhere else.
+            prepared = self._pin_identity(prepared, filling)
+            if self.enforcement.decode_constraint is not DecodeConstraint.NONE:
+                prepared, unpinned = self._pin_references(prepared, plan, request.ranges, request.parents)
+        return prepared, degradation, schema_hash(prepared), unpinned
 
     def _pin_class(self, schema: dict[str, Any]) -> dict[str, Any]:
         """Constrain the class slot to the catalogue at decode time.
@@ -459,6 +640,100 @@ class ExtractionAgent:
         target["enum"] = list(self.enforcement.unit_catalogue)
         return schema
 
+    def _pin_identity(self, schema: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+        """Give the answer a slot for the id the plan assigned.
+
+        Pinned to the ids this call is for, so one call cannot answer with an
+        entity another call is responsible for and have it counted twice. An id
+        the model states, rather than one attached afterwards by position, is
+        also the only form in which the question of whether two mentions are
+        one entity is ever put to the model.
+
+        Fails loudly when there is no entity shape to carry it, the way
+        :meth:`_pin_class` does. A plan that cannot be joined to the answer
+        would report every edge as dangling and read as a finding about links.
+        """
+        shapes = _entity_shapes(schema)
+        if not shapes:
+            raise ValueError("the schema has no entity shape to carry an id, so the plan cannot reach the answer")
+        for shape in shapes:
+            properties = shape.setdefault("properties", {})
+            name = next((key for key in _ID_KEYS if key in properties), _ID_KEYS[0])
+            slot = dict(properties.get(name) or {})
+            slot["type"] = "string"
+            slot.setdefault("description", "The id this entity was planned under.")
+            if keys:
+                slot["enum"] = list(keys)
+            properties[name] = slot
+            required = shape.setdefault("required", [])
+            if name not in required:
+                required.append(name)
+        return schema
+
+    def _pin_references(
+        self,
+        schema: dict[str, Any],
+        plan: tuple[PlannedEntity, ...],
+        ranges: dict[str, tuple[str, ...]] | None,
+        parents: dict[str, tuple[str, ...]] | None = None,
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Constrain each reference slot to the entities that could fill it.
+
+        A link left as a free string admits a target that is not on the page,
+        which costs an invented entity on top of the wrong edge. The candidates
+        are the planned entities whose shortlist holds the property's range or
+        a class descended from it, so an edge can only reach something the plan
+        found.
+
+        A property whose range no planned entity fits is left as the schema
+        declares it and named in the return. An empty ``enum`` is not a tighter
+        constraint but an unsatisfiable one: the strict subsets reject it
+        outright, and one that accepted it would leave a required slot with no
+        legal value, so a document whose target went undetected would fail on
+        the schema instead of on the edge. Left open, the failure stays where it
+        happened, and the name makes it countable.
+
+        A property the prepared schema does not carry is passed over. The
+        answer surface can lose one legitimately, by a catalogue trim upstream
+        or by a provider's optional-property limit, and a slot that is not
+        offered is not a slot left open.
+        """
+        if not ranges:
+            return schema, []
+        shapes = _entity_shapes(schema)
+        if not shapes:
+            raise ValueError("the schema has no entity shape to pin a reference in")
+
+        lineage = {name: tuple(values) for name, values in (parents or {}).items()}
+        unpinned: list[str] = []
+        for name, admitted in ranges.items():
+            carrying = [shape for shape in shapes if name in (shape.get("properties") or {})]
+            if not carrying:
+                continue
+            targets = _compatible_ids(plan, admitted, lineage)
+            if not targets:
+                unpinned.append(name)
+                continue
+            for shape in carrying:
+                properties = shape["properties"]
+                declared = properties[name]
+                # Null is how a model declines a property under a subset that
+                # makes every property required. A pinned slot that dropped it
+                # would force an edge out of every entity that has the slot.
+                values: list[Any] = list(targets)
+                if _accepts_null(declared):
+                    values.append(None)
+                    kind: Any = ["string", "null"]
+                else:
+                    kind = "string"
+                described = declared.get("description") if isinstance(declared, dict) else None
+                properties[name] = {
+                    "type": kind,
+                    "enum": values,
+                    "description": described or f"The id of the entity {name} points at.",
+                }
+        return schema, unpinned
+
     def _gate(self, payload: Any) -> tuple[Any, list[str]]:
         """Drop entities whose class is not in the catalogue.
 
@@ -498,6 +773,137 @@ class ExtractionAgent:
 _CLASS_KEYS = ("type", "@type", "class", "class_path", "schema_path", "kind")
 
 _UNIT_KEYS = ("unit", "units", "unit_symbol", "uom")
+
+_ID_KEYS = ("id", "@id", "entity_id", "key")
+
+
+def _named(entity: PlannedEntity) -> str:
+    """One planned entity as the fill prompt names it."""
+    return f'{entity.key} ("{entity.mention}")' if entity.mention else entity.key
+
+
+def _is_entity_shape(node: Any) -> bool:
+    """Whether this object describes one entity rather than the answer."""
+    if not isinstance(node, dict):
+        return False
+    properties = node.get("properties")
+    return isinstance(properties, dict) and any(key in properties for key in _CLASS_KEYS)
+
+
+def _entity_shapes(schema: Any) -> list[dict[str, Any]]:
+    """Every object an entity may take, one per union branch.
+
+    A union is recognised before the objects inside it, so pinning reaches all
+    of its branches. Pinning the first branch alone would constrain one class
+    and leave the others open, which reads as a finding about that class.
+    """
+    found: list[dict[str, Any]] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, list):
+            for item in node:
+                visit(item)
+            return
+        if not isinstance(node, dict):
+            return
+        for combinator in ("anyOf", "oneOf"):
+            branches = node.get(combinator)
+            if isinstance(branches, list) and any(_is_entity_shape(branch) for branch in branches):
+                found.extend(branch for branch in branches if _is_entity_shape(branch))
+                return
+        if _is_entity_shape(node):
+            found.append(node)
+            return
+        for value in node.values():
+            visit(value)
+
+    visit(schema)
+    return found
+
+
+def _accepts_null(slot: Any) -> bool:
+    """Whether a prepared slot was left able to say nothing."""
+    if not isinstance(slot, dict):
+        return False
+    declared = slot.get("type")
+    return "null" in (declared if isinstance(declared, list) else [declared])
+
+
+def _entity_id(entity: Any) -> str | None:
+    """The id an answered entity states, whatever key it put it under."""
+    if not isinstance(entity, dict):
+        return None
+    for key in _ID_KEYS:
+        value = entity.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _descends(name: str, admitted: set[str], lineage: dict[str, tuple[str, ...]]) -> bool:
+    """Whether a class is one of these or inherits from one."""
+    seen: set[str] = set()
+    queue = [name]
+    while queue:
+        current = queue.pop()
+        if current in admitted:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        queue.extend(lineage.get(current, ()))
+    return False
+
+
+def _compatible_ids(
+    plan: tuple[PlannedEntity, ...],
+    ranges: tuple[str, ...],
+    lineage: dict[str, tuple[str, ...]],
+) -> tuple[str, ...]:
+    """The planned entities a property with this range may point at.
+
+    A shortlist counts when any class on it fits, because the fill step has
+    not committed to one yet and offering only the first would rule out a
+    target the second call may well answer with.
+    """
+    admitted = set(ranges)
+    return tuple(
+        dict.fromkeys(
+            entity.key for entity in plan if any(_descends(name, admitted, lineage) for name in entity.classes)
+        )
+    )
+
+
+def _edges_of(
+    entities: list[Any],
+    ranges: dict[str, tuple[str, ...]] | None,
+) -> tuple[list[Edge], list[Edge]]:
+    """Every edge the answer asserted, and the ones reaching nothing.
+
+    Read from the entities that state an id. One that states none is not in
+    the plan and its links have no source to hang from; the id slot is
+    required and enumerated, so an answer without one is a decode failure
+    already and is reported as that rather than twice.
+    """
+    if not ranges:
+        return [], []
+    emitted = {found for entity in entities if (found := _entity_id(entity)) is not None}
+    links: list[Edge] = []
+    dangling: list[Edge] = []
+    for entity in entities:
+        source = _entity_id(entity)
+        if source is None:
+            continue
+        for name in ranges:
+            value = entity.get(name)
+            for item in value if isinstance(value, list) else [value]:
+                if not isinstance(item, str) or not item.strip():
+                    continue
+                edge = Edge(source=source, prop=name, target=item.strip())
+                links.append(edge)
+                if edge.target not in emitted:
+                    dangling.append(edge)
+    return links, dangling
 
 
 def _class_of(entity: dict[str, Any]) -> str | None:

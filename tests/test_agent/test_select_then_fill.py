@@ -189,7 +189,7 @@ class TestTheOtherOrchestrations:
 
     @pytest.mark.parametrize(
         "orchestration",
-        [Orchestration.RECURSIVE, Orchestration.SEGMENTED, Orchestration.MULTI_STEP],
+        [Orchestration.RECURSIVE, Orchestration.MULTI_STEP],
     )
     def test_the_graph_orchestrations_say_they_are_not_ported(self, orchestration):
         with pytest.raises(NotImplementedError, match="entity graph"):

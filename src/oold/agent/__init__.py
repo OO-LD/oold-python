@@ -30,8 +30,10 @@ from oold.agent.enforcement import (
     arm,
 )
 from oold.agent.extraction import (
+    Edge,
     ExtractionAgent,
     ExtractionResult,
+    PlannedEntity,
     parse_json_answer,
 )
 from oold.agent.prompts import ExtractionRequest, build_messages
@@ -53,6 +55,7 @@ __all__ = [
     "ChatResponse",
     "DecodeConstraint",
     "Degradation",
+    "Edge",
     "Enforcement",
     "ExtractionAgent",
     "ExtractionRequest",
@@ -60,6 +63,7 @@ __all__ = [
     "Message",
     "Orchestration",
     "OutputForm",
+    "PlannedEntity",
     "ProviderProfile",
     "TokenUsage",
     "arm",

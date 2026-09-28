@@ -160,39 +160,58 @@ def hierarchy_union(
     class is offered, which is right when the catalogue is the answer space and
     wrong when the catalogue includes abstract ancestors carried only to hold
     shared properties.
+
+    Each branch carries its inherited properties **inline**, not as a ``$ref``
+    into ``$defs``. Stating a property once and referencing it is the tidier
+    schema and it does not survive contact with a decoder. A branch whose only
+    literal property is the discriminator is satisfied by ``{"type": "X"}``,
+    and a model that reads the constraint rather than the intent answers
+    exactly that: llama returned the class and no properties on every one of
+    99 cells, scoring 0.00, while the same union inlined by the provider
+    transform scored 0.88. The reference is correct JSON Schema and it is not
+    what the model is guided by.
+
+    Inlining is what ``allOf`` meant anyway. Merging an intersection of objects
+    is the property union that inheritance denotes, so nothing is lost, and
+    several parents merge as readily as one.
     """
     if not branches:
         raise ValueError("a union needs at least one branch, or nothing can satisfy it")
-
-    defs: dict[str, Any] = {}
-    for name, own in branches.items():
-        entry: dict[str, Any] = {"type": "object", "properties": dict(own)}
-        # Every ancestor, not only the direct parents. A chain of references is
-        # the tidier schema and the transform does not survive it: inlining
-        # treats the second hop as recursion and cuts it, so a grandparent's
-        # properties never arrive. Referencing the whole ancestry keeps every
-        # merge one hop deep, which the transform does handle.
-        inherited = [a for a in _ancestry(name, parents) if a in branches]
-        if inherited:
-            entry["allOf"] = [{"$ref": f"#/$defs/{a}"} for a in inherited]
-        defs[name] = entry
 
     offered = [name for name in branches if concrete is None or name in concrete]
     if not offered:
         raise ValueError("no offered class is concrete, so the union would admit nothing")
 
     return {
-        "$defs": defs,
         "anyOf": [
             {
                 "type": "object",
-                "properties": {discriminator: {"const": name}},
+                "properties": {
+                    **_inherited_properties(name, branches, parents),
+                    discriminator: {"const": name},
+                },
                 "required": [discriminator],
-                "allOf": [{"$ref": f"#/$defs/{name}"}],
             }
             for name in offered
-        ],
+        ]
     }
+
+
+def _inherited_properties(
+    name: str,
+    branches: dict[str, dict[str, Any]],
+    parents: dict[str, tuple[str, ...]],
+) -> dict[str, Any]:
+    """Everything a class carries, its own declarations last.
+
+    Ancestors are walked furthest first so a class that narrows an inherited
+    property wins over the one that declared it.
+    """
+    merged: dict[str, Any] = {}
+    for ancestor in reversed([a for a in _ancestry(name, parents) if a in branches]):
+        merged.update(branches[ancestor])
+    merged.update(branches.get(name) or {})
+    return merged
 
 
 def _ancestry(name: str, parents: dict[str, tuple[str, ...]]) -> list[str]:

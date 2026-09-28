@@ -250,12 +250,17 @@ class TestTheUnionReachesTheProviderTransform:
 
 
 class TestAUnionOverClassesThatInherit:
-    """Why allOf and not a tree.
+    """Why a merge and not a tree, and why inline and not a reference.
 
     A tree holds one parent, and 48 of 906 schema.org classes name two or
-    three: LocalBusiness is both an Organization and a Place. An allOf holds
-    both, and it degrades the right way, because merging an intersection of
-    objects is exactly the property union that inheritance means.
+    three: LocalBusiness is both an Organization and a Place. Merging holds
+    both, because a property union is what inheritance means.
+
+    The merge is written into each branch rather than referenced from $defs.
+    A branch whose only literal property is the discriminator is satisfied by
+    {"type": "X"}, and llama answered exactly that on 99 of 99 cells for a
+    score of 0.00, while the same union inlined by the provider transform
+    scored 0.88. Correct JSON Schema is not what a decoder guides on.
     """
 
     BRANCHES: ClassVar[dict] = {
@@ -283,15 +288,28 @@ class TestAUnionOverClassesThatInherit:
         chosen = [b["properties"]["type"]["const"] for b in self.built()["anyOf"]]
         assert chosen == ["LocalBusiness", "Person"]
 
-    def test_a_class_with_two_parents_references_both(self):
-        refs = json.dumps(self.built()["$defs"]["LocalBusiness"])
-        assert "Organization" in refs
-        assert "Place" in refs
+    def test_a_class_with_two_parents_carries_both(self):
+        local = self.built()["anyOf"][0]["properties"]
+        assert "legalName" in local
+        assert "branchCode" in local
 
-    def test_a_grandparent_is_referenced_directly(self):
-        """A chain does not survive the transform: inlining treats the second
-        hop as recursion and cuts it, so the grandparent never arrives."""
-        assert "Thing" in json.dumps(self.built()["$defs"]["LocalBusiness"])
+    def test_a_grandparent_arrives(self):
+        """Two hops up, through either parent, and the property is there."""
+        assert "name" in self.built()["anyOf"][0]["properties"]
+
+    def test_no_branch_is_satisfied_by_the_discriminator_alone(self):
+        """The fault this shape exists to remove.
+
+        A branch offering only {"type": const} admits an answer carrying no
+        extracted value at all, and a model reading the constraint rather than
+        the intent returns one."""
+        for branch in self.built()["anyOf"]:
+            assert set(branch["properties"]) > {"type"}
+
+    def test_a_subclass_narrowing_a_property_wins_over_its_parent(self):
+        narrowed = dict(self.BRANCHES, LocalBusiness={"legalName": {"enum": ["a"]}})
+        built = hierarchy_union(narrowed, self.PARENTS, concrete=("LocalBusiness",))
+        assert built["anyOf"][0]["properties"]["legalName"] == {"enum": ["a"]}
 
     def test_the_merged_form_carries_both_parents(self):
         prepared, _ = prepare(self.built(), profile_for("openai"))

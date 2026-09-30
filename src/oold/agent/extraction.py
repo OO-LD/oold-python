@@ -29,7 +29,9 @@ from oold.agent.enforcement import (
 from oold.agent.prompts import (
     ExtractionRequest,
     build_messages,
+    build_property_messages,
     build_selection_messages,
+    property_schema,
     selection_schema,
 )
 from oold.agent.provider import Degradation, ProviderProfile, prepare, schema_hash
@@ -127,6 +129,13 @@ class ExtractionResult:
     unpinned: list[str] = field(default_factory=list)
     """Reference properties left open because no planned entity fits their
     range. Those slots ran unconstrained, and the record says which."""
+    properties_chosen: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """The properties the property step kept, per entity.
+
+    Recorded for the reason :attr:`selected` is. An orchestration that closes
+    the property slot can fail by never offering the property the document
+    states, or by offering it and the extract step leaving it empty, and
+    without this the two are the same missing value."""
 
     @property
     def parsed(self) -> bool:
@@ -138,6 +147,7 @@ class ExtractionResult:
             "schema_sha256": self.schema_sha256,
             "prompt_sha256": self.prompt_sha256,
             "selected": {k: list(v) for k, v in self.selected.items()},
+            "properties_chosen": {k: list(v) for k, v in self.properties_chosen.items()},
             "dropped": list(self.dropped),
             "invalid": list(self.invalid),
             "repairs": self.repairs,
@@ -161,6 +171,8 @@ class ExtractionAgent:
         *,
         attempts: int = 1,
         shortlist_k: int = 3,
+        close_properties: bool = True,
+        plan_retry: bool | None = None,
     ) -> None:
         self.client = client
         self.enforcement = enforcement
@@ -173,15 +185,33 @@ class ExtractionAgent:
         self.shortlist_k = shortlist_k
         """How many classes the select step may keep per entity. One is the
         commit case, where a wrong selection cannot be recovered."""
-        if orchestration in (Orchestration.RECURSIVE, Orchestration.MULTI_STEP):
+        self.close_properties = close_properties
+        """Whether the property step's answer removes the slots it left out.
+
+        On, the extract schema carries the chosen properties and the required
+        ones and nothing else, which is the direct analogue of closing the
+        class slot. Off, the chosen properties are named in the extract prompt
+        and the schema stays whole, so a property the step missed can still be
+        answered. The two are different claims about what closing a slot buys,
+        so which one ran is declared rather than assumed."""
+        self.plan_retry = (orchestration is Orchestration.MULTI_STEP) if plan_retry is None else plan_retry
+        """Whether a first call that answered with the schema is asked again.
+
+        Defaulted from the orchestration rather than fixed, so the mitigation
+        can be run on the orchestration it was not written for. Without that,
+        a multi-step arm beating a segmented one on a model that echoes
+        schemas would be reporting the retry as a property of the pipeline."""
+        if orchestration is Orchestration.RECURSIVE:
             raise NotImplementedError(
-                f"orchestration {orchestration.value} is not ported yet. It addresses "
-                f"the entity graph, which comes after class selection works"
+                "orchestration recursive is not ported yet. It addresses "
+                "the entity graph, which comes after class selection works"
             )
         if shortlist_k < 1:
             raise ValueError("a shortlist of nothing leaves the second step no class to fill")
 
     def run(self, request: ExtractionRequest) -> ExtractionResult:
+        if self.orchestration is Orchestration.MULTI_STEP:
+            return self._multi_step(request)
         if self.orchestration is Orchestration.SEGMENTED:
             return self._segmented(request)
         if self.orchestration is Orchestration.SELECT_THEN_FILL:
@@ -380,7 +410,7 @@ class ExtractionAgent:
         """
         log = CallLog()
         self._mentions = {}
-        selected, text = self._select(request, log, step="plan")
+        selected, text = self._select(request, log, step="plan", insist=self.plan_retry)
         plan = tuple(
             PlannedEntity(key=key, classes=classes, mention=self._mentions.get(key, ""))
             for key, classes in selected.items()
@@ -461,12 +491,177 @@ class ExtractionAgent:
             )
         return " ".join(sections)
 
+    def _multi_step(self, request: ExtractionRequest) -> ExtractionResult:
+        """Detect, choose properties per entity, extract, link.
+
+        Segmented with one call inserted between the plan and the fill. The
+        plan says which classes an entity may be, the property step says which
+        of those classes' slots the document fills at all, and the extract step
+        answers what is left against ids both ends agree on.
+
+        Four steps and not the predecessor's five. Its construct step sent the
+        hints and the schema and no document, so it asked a model to reformat
+        values it had already produced against a schema it had already matched;
+        :meth:`_validate_and_repair` covers that failure and hands the
+        validator's reasons back verbatim. Its deduplication step asks whether
+        two entities are one, which is a question about identity across
+        documents with a corpus of its own, and a judge sitting inside an
+        orchestration cannot be scored apart from the extraction around it.
+
+        Whether the property step binds is :attr:`close_properties` and not a
+        fact about this pipeline. An entity the step leaves with nothing is
+        extracted with its class and its id alone, because that is what the
+        step said, and restoring the slots behind its back would hide a
+        step-two failure inside step three.
+        """
+        log = CallLog()
+        self._mentions = {}
+        selected, text = self._select(request, log, step="detect", insist=self.plan_retry)
+        plan = tuple(
+            PlannedEntity(key=key, classes=classes, mention=self._mentions.get(key, ""))
+            for key, classes in selected.items()
+        )
+        placed = tuple(entity for entity in plan if entity.classes)
+        if not placed:
+            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+
+        chosen = self._choose_properties(request, log, placed, self._available_properties(request, placed))
+        required = _required_properties(request.schema)
+
+        # Grouped by shortlist and by chosen properties together, where
+        # segmented groups by shortlist alone. The extra key is the same
+        # argument one step on: entities sharing a call share the schema that
+        # call is sent, so two that chose different properties can no more
+        # share one than two that shortlisted different classes.
+        groups: dict[tuple[tuple[str, ...], tuple[str, ...]], list[str]] = {}
+        for entity in placed:
+            groups.setdefault((entity.classes, chosen.get(entity.key, ())), []).append(entity.key)
+
+        merged: list[Any] = []
+        unpinned: list[str] = []
+        last: ExtractionResult | None = None
+        for (classes, kept), keys in groups.items():
+            narrowed = self.enforcement.with_catalogue(classes)
+            filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
+            keep = set(kept) | required
+            step = ExtractionRequest(
+                document=request.document,
+                schema=_trim_properties(request.schema, keep) if self.close_properties else request.schema,
+                branches=_trim_branches(request.branches, keep) if self.close_properties else request.branches,
+                parents=request.parents,
+                ranges=request.ranges,
+                instruction=self._extract_instruction(request, plan, keys, kept),
+            )
+            outcome = filler._single_shot(step, plan=plan, filling=tuple(keys))
+            for call in outcome.calls:
+                log.append(replace(call, step="extract"))
+            merged.extend(_entities_of(outcome.payload))
+            unpinned.extend(name for name in outcome.unpinned if name not in unpinned)
+            last = outcome
+
+        if last is None:
+            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+        links, dangling = _edges_of(merged, request.ranges)
+        last.payload = {"entities": merged} if merged else None
+        last.calls = log
+        last.selected = selected
+        last.properties_chosen = chosen
+        last.links = links
+        last.dangling = dangling
+        last.unpinned = unpinned
+        return last
+
+    def _available_properties(
+        self,
+        request: ExtractionRequest,
+        plan: tuple[PlannedEntity, ...],
+    ) -> dict[str, tuple[str, ...]]:
+        """What each planned entity may carry, before the document is read.
+
+        The union over the entity's shortlist, for the reason
+        :func:`_compatible_ids` takes the union: the extract step has not
+        committed to one class yet, and offering only the first class's
+        properties would rule out a value the second call may well state.
+
+        Intersected with the answer shape and in its order, so the step can
+        only name a slot the extract call actually has. A corpus that declares
+        no branches falls back to the whole shape, which asks the same question
+        over every property the schema offers.
+        """
+        offered = _shape_properties(request.schema)
+        if not offered:
+            return {}
+        lineage = {name: tuple(values) for name, values in (request.parents or {}).items()}
+        available: dict[str, tuple[str, ...]] = {}
+        for entity in plan:
+            admitted = _admitted_properties(entity.classes, request.branches, lineage)
+            names = tuple(name for name in offered if not admitted or name in admitted)
+            if names:
+                available[entity.key] = names
+        return available
+
+    def _choose_properties(
+        self,
+        request: ExtractionRequest,
+        log: CallLog,
+        plan: tuple[PlannedEntity, ...],
+        available: dict[str, tuple[str, ...]],
+    ) -> dict[str, tuple[str, ...]]:
+        """Ask which of each entity's own properties the document fills.
+
+        One call for the whole plan, with one enumeration per entity. The
+        predecessor asked per entity in its construct step, which costs a call
+        per entity for an answer one schema can carry.
+
+        A name the entity cannot carry is dropped rather than repaired, the way
+        :meth:`_select` drops a candidate outside the catalogue. The
+        enumeration already said what was legal, and keeping the name would put
+        a slot in the extract schema that no class on the shortlist declares.
+        """
+        if not available:
+            return {}
+        schema = property_schema(available)
+        prepared, _ = prepare(schema, self.profile, grounding=False)
+        named = {entity.key: f"{_named(entity)}, {'/'.join(entity.classes)}" for entity in plan}
+        messages = build_property_messages(request, available, named)
+        response_format = prepared if self.enforcement.decode_constraint is not DecodeConstraint.NONE else None
+
+        with log.timed("properties", self.client.model, attempt=1, schema_sha256=schema_hash(prepared)) as sink:
+            reply = self.client.invoke(messages, response_format=response_format)
+            sink.append(reply.usage or TokenUsage())
+
+        answered = _fillable_of(reply.parsed if reply.parsed is not None else parse_json_answer(reply.text), available)
+        return {
+            key: tuple(name for name in names if name in set(answered.get(key) or ()))
+            for key, names in available.items()
+        }
+
+    def _extract_instruction(
+        self,
+        request: ExtractionRequest,
+        plan: tuple[PlannedEntity, ...],
+        keys: list[str],
+        kept: tuple[str, ...],
+    ) -> str:
+        """What :meth:`_plan_instruction` says, and which properties to fill.
+
+        The properties are named even when the schema already carries only
+        them, as the ids are named even when the id slot is already enumerated.
+        An arm that shows no schema, and an arm whose schema a provider
+        flattened, both still have to be told.
+        """
+        base = self._plan_instruction(request, plan, keys)
+        if kept:
+            return f"{base} Report only these properties for them: {', '.join(kept)}."
+        return f"{base} The document gives no property value for them, so report the class and the id only."
+
     def _select(
         self,
         request: ExtractionRequest,
         log: CallLog,
         *,
         step: str = "select",
+        insist: bool = False,
     ) -> tuple[dict[str, tuple[str, ...]], str]:
         """Ask which classes each entity could be, keeping at most k.
 
@@ -488,6 +683,18 @@ class ExtractionAgent:
             sink.append(reply.usage or TokenUsage())
 
         payload = reply.parsed if reply.parsed is not None else parse_json_answer(reply.text)
+        text = reply.text
+        if insist:
+            payload, text = self._insist(
+                payload,
+                text,
+                schema,
+                messages,
+                response_format,
+                log,
+                step=step,
+                digest=schema_hash(prepared),
+            )
         allowed = set(catalogue)
         selected: dict[str, tuple[str, ...]] = {}
         for index, entity in enumerate(_entities_of(payload), start=1):
@@ -499,7 +706,57 @@ class ExtractionAgent:
             mention = entity.get("mention")
             if isinstance(mention, str) and mention.strip():
                 self._mentions[key] = mention.strip()
-        return selected, reply.text
+        return selected, text
+
+    def _insist(
+        self,
+        payload: Any,
+        text: str,
+        schema: dict[str, Any],
+        messages: list[Any],
+        response_format: dict[str, Any] | None,
+        log: CallLog,
+        *,
+        step: str,
+        digest: str | None,
+    ) -> tuple[Any, str]:
+        """Ask once more when the first answer was not an answer.
+
+        gpt-5-nano returns the selection schema itself instead of an instance
+        of it on about a third of plan calls, and on none at all when the first
+        call asks for values: a single-shot arm has no call whose answer is a
+        structure, so there is nothing to echo. Any orchestration whose first
+        call asks for a structure inherits that, and it costs the whole cell,
+        because the classes the plan did not choose are the classes the later
+        steps may not answer with.
+
+        The trigger is both conditions at once: the answer names no entity and
+        it fails the schema it was asked for. An answer that names entities
+        under a wrapper the schema does not declare is usable and is left
+        alone, and an answer that validates and names none is a document with
+        nothing in it rather than a failed call.
+
+        The validator's reasons go back verbatim, as they do for an invalid
+        extraction, so the retry rate stays a measure of the model and not of
+        how the advice was worded.
+        """
+        from oold.agent.repair import repair_message
+        from oold.validation.instance_checks import validate_instance
+
+        if _entities_of(payload):
+            return payload, text
+        errors = validate_instance(payload, schema).errors
+        if not errors:
+            return payload, text
+
+        turn = [*list(messages), repair_message(text, errors)]
+        with log.timed(step, self.client.model, attempt=2, schema_sha256=digest) as sink:
+            reply = self.client.invoke(turn, response_format=response_format)
+            sink.append(reply.usage or TokenUsage())
+        retried = reply.parsed if reply.parsed is not None else parse_json_answer(reply.text)
+        if retried is None:
+            return payload, text
+        return retried, reply.text
 
     def _schema_for(
         self,
@@ -819,6 +1076,123 @@ def _entity_shapes(schema: Any) -> list[dict[str, Any]]:
 
     visit(schema)
     return found
+
+
+def _shape_properties(schema: Any) -> tuple[str, ...]:
+    """The property names an entity may carry, in the schema's own order.
+
+    The class slot and the id slot are left out. Neither was ever the property
+    step's to choose: the first is what the plan decided and the second is how
+    the answer is joined back to it.
+    """
+    names: list[str] = []
+    for shape in _entity_shapes(schema):
+        for name in shape.get("properties") or {}:
+            if name not in _CLASS_KEYS and name not in _ID_KEYS and name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+def _required_properties(schema: Any) -> set[str]:
+    """Every property an entity shape requires, which a trim keeps.
+
+    A required property is not the property step's to remove. Dropping it
+    leaves a name in ``required`` with nothing to satisfy it, and a provider
+    subset that rewrites ``required`` from ``properties`` would instead make
+    the answer legal without it, so the same trim would mean two things.
+    """
+    names: set[str] = set()
+    for shape in _entity_shapes(schema):
+        required = shape.get("required")
+        if isinstance(required, list):
+            names.update(name for name in required if isinstance(name, str))
+    return names
+
+
+def _admitted_properties(
+    classes: tuple[str, ...],
+    branches: dict[str, dict[str, Any]] | None,
+    lineage: dict[str, tuple[str, ...]],
+) -> set[str]:
+    """Everything the classes on a shortlist declare or inherit.
+
+    Empty when the corpus declares no branches, which the caller reads as no
+    narrowing rather than as no properties.
+    """
+    if not branches:
+        return set()
+    found: set[str] = set()
+    for name in classes:
+        seen: set[str] = set()
+        queue = [name]
+        while queue:
+            current = queue.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            found.update(branches.get(current) or {})
+            queue.extend(lineage.get(current, ()))
+    return found
+
+
+def _trim_properties(schema: dict[str, Any] | None, keep: set[str]) -> dict[str, Any] | None:
+    """The answer shape with the slots the property step left out removed."""
+    if schema is None:
+        return None
+    trimmed = copy.deepcopy(schema)
+    for shape in _entity_shapes(trimmed):
+        properties = shape.get("properties") or {}
+        shape["properties"] = {
+            name: definition
+            for name, definition in properties.items()
+            if name in keep or name in _CLASS_KEYS or name in _ID_KEYS
+        }
+    return trimmed
+
+
+def _trim_branches(
+    branches: dict[str, dict[str, Any]] | None,
+    keep: set[str],
+) -> dict[str, dict[str, Any]] | None:
+    """The union branches, narrowed the way the answer shape was.
+
+    Trimmed together or not at all. A branch still declaring a property the
+    answer shape no longer carries would put that property back on the union
+    arm alone, and the difference between the arms would be a difference in
+    what each was asked for.
+    """
+    if not branches:
+        return branches
+    return {
+        name: {prop: definition for prop, definition in properties.items() if prop in keep}
+        for name, properties in branches.items()
+    }
+
+
+def _fillable_of(payload: Any, available: dict[str, tuple[str, ...]]) -> dict[str, list[Any]]:
+    """The property lists in an answer, whatever the model called the wrapper.
+
+    The declared wrapper first, then a lone key holding an object, then the
+    answer itself. The same allowance :func:`_entities_of` makes, and for the
+    same observation: giving a schema a title stopped one provider rejecting it
+    and started another answering under that title.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    candidates: list[dict[str, Any]] = []
+    inner = payload.get("fillable")
+    if isinstance(inner, dict):
+        candidates.append(inner)
+    elif len(payload) == 1:
+        only = next(iter(payload.values()))
+        if isinstance(only, dict):
+            candidates.append(only)
+    candidates.append(payload)
+    for candidate in candidates:
+        found = {key: value for key, value in candidate.items() if key in available and isinstance(value, list)}
+        if found:
+            return found
+    return {}
 
 
 def _accepts_null(slot: Any) -> bool:

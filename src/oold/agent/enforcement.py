@@ -45,7 +45,20 @@ class Orchestration(str, Enum):
     belongs to no single entity."""
 
     MULTI_STEP = "multi_step"
-    """Detect, select properties, extract, construct, deduplicate."""
+    """Detect, choose properties per entity, extract, link.
+
+    Segmented with a property step in the middle. The plan closes the class
+    slot, the property step closes which slots exist at all, and the extract
+    step fills what is left against ids both steps agree on.
+
+    Four steps and not the predecessor's five. Its construct step sent the
+    hints and the schema and no document, so it asked a model to reformat
+    values it had already produced against a schema it had already matched,
+    which is the failure :meth:`~oold.agent.extraction.ExtractionAgent._validate_and_repair`
+    already covers with the validator's own reasons. Its deduplication step is
+    a question about identity across documents, measured against its own
+    corpus, and an identity judge inside an orchestration cannot be scored
+    apart from the extraction it sits in."""
 
     SELECT_THEN_FILL = "select_then_fill"
     """Shortlist the class, then fill the schema that shortlist implies.

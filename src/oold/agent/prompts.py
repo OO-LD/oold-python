@@ -13,13 +13,21 @@ are shared is identical across arms, character for character.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from oold.agent.client import Message
 from oold.agent.enforcement import Enforcement, OutputForm
 
-__all__ = ["ExtractionRequest", "build_messages", "build_selection_messages", "selection_schema"]
+__all__ = [
+    "ExtractionRequest",
+    "build_messages",
+    "build_property_messages",
+    "build_selection_messages",
+    "property_schema",
+    "selection_schema",
+]
 
 _TASK = "Read the document and report every entity it describes, with the values stated for each."
 
@@ -44,6 +52,22 @@ _SELECT_SHORTLIST = (
 )
 
 _GATE_HINT = "An entity whose class is not in the list will be discarded, so leave out anything you cannot place."
+
+_PROPERTY_TASK = (
+    "Read the document and say, for each entity listed below, which of its own "
+    "properties the document gives a value for."
+)
+
+_PROPERTY_FORM = (
+    "Answer with JSON only. Give one list of property names per entity, under that entity's id, "
+    "using the names exactly as they are written here."
+)
+
+_PROPERTY_HONESTY = (
+    "Leave out a property whose value you would have to invent. A property you leave out will not be asked for again."
+)
+
+_PROPERTY_ENTITIES = "The entities, with the properties each one may carry:"
 
 
 @dataclass(frozen=True)
@@ -149,6 +173,75 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
         "required": ["entities"],
         "additionalProperties": False,
     }
+
+
+def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """The answer shape the property step asks for.
+
+    One array per entity, whose items enumerate **that entity's own** property
+    names. Pooling every entity's properties into one enumeration would let one
+    entity be given another's property, which is the thing a per-entity
+    enumeration is for, and it is the same argument that makes the fill step
+    group by shortlist rather than pool the candidate classes.
+
+    Refuses an entity with no properties. An empty ``enum`` is unsatisfiable
+    rather than tight: the strict subsets reject it outright, and one that
+    accepted it would leave a required array with no legal member.
+    """
+    if not offered:
+        raise ValueError("the property step needs at least one entity with properties, or there is nothing to ask")
+    empty = [key for key, names in offered.items() if not names]
+    if empty:
+        raise ValueError(f"no property is available for {', '.join(empty)}, so the enumeration would admit nothing")
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "FillableProperties",
+        "description": "Which properties of each entity the document gives a value for.",
+        "type": "object",
+        "properties": {
+            "fillable": {
+                "type": "object",
+                "properties": {
+                    key: {
+                        "type": "array",
+                        "maxItems": len(names),
+                        "items": {"type": "string", "enum": list(names)},
+                        "description": f"The properties of {key} the document gives a value for.",
+                    }
+                    for key, names in offered.items()
+                },
+                "required": list(offered),
+                "additionalProperties": False,
+            }
+        },
+        "required": ["fillable"],
+        "additionalProperties": False,
+    }
+
+
+def build_property_messages(
+    request: ExtractionRequest,
+    offered: Mapping[str, Sequence[str]],
+    named: Mapping[str, str] | None = None,
+) -> list[Message]:
+    """The messages the property step sends.
+
+    The document is the user message, as it is for every other step. The
+    properties are listed in the system message as well as enumerated in the
+    answer shape, because an arm that shows no schema still has to say what the
+    names are before it can ask which of them the document fills.
+    """
+    listed = "\n".join(f"{(named or {}).get(key) or key}: {', '.join(names)}" for key, names in offered.items())
+    sections = [
+        _PROPERTY_TASK,
+        _PROPERTY_FORM,
+        _PROPERTY_HONESTY,
+        f"{_PROPERTY_ENTITIES}\n{listed}",
+    ]
+    return [
+        Message(role="system", content="\n\n".join(sections)),
+        Message(role="user", content=request.document),
+    ]
 
 
 def build_selection_messages(request: ExtractionRequest, enforcement: Enforcement, k: int) -> list[Message]:

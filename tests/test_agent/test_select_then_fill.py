@@ -187,13 +187,9 @@ class TestTheOtherOrchestrations:
         ExtractionAgent(client, arm("A4", CATALOGUE), profile_for("openai")).run(request())
         assert client.calls == 1
 
-    @pytest.mark.parametrize(
-        "orchestration",
-        [Orchestration.RECURSIVE, Orchestration.MULTI_STEP],
-    )
-    def test_the_graph_orchestrations_say_they_are_not_ported(self, orchestration):
+    def test_the_recursive_orchestration_says_it_is_not_ported(self):
         with pytest.raises(NotImplementedError, match="entity graph"):
-            ExtractionAgent(TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), orchestration)
+            ExtractionAgent(TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), Orchestration.RECURSIVE)
 
 
 class MultiEntityClient:

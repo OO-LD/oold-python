@@ -223,17 +223,13 @@ class TestOrchestration:
         agent("A1", client).run(ExtractionRequest("doc", SCHEMA))
         assert client.calls == 1
 
-    @pytest.mark.parametrize(
-        "orchestration",
-        [Orchestration.RECURSIVE, Orchestration.MULTI_STEP],
-    )
-    def test_an_unported_orchestration_refuses_rather_than_pretending(self, orchestration):
+    def test_an_unported_orchestration_refuses_rather_than_pretending(self):
         with pytest.raises(NotImplementedError, match="not ported yet"):
             ExtractionAgent(
                 FakeClient(),
                 ARMS["A1"],
                 profile_for("openai"),
-                orchestration,
+                Orchestration.RECURSIVE,
             )
 
 

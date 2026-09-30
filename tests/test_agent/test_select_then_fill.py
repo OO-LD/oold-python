@@ -316,3 +316,24 @@ class TestTheAnswerWrapperAModelChooses:
 
     def test_a_lone_key_holding_scalars_is_not_a_wrapper(self):
         assert _entities_of({"candidates": ["Seat", "Book"]}) == []
+
+
+def test_the_select_prompt_says_what_one_entity_is():
+    """The wording that stops the step returning one entity per mention.
+
+    Asserted because the whole four-orchestration grid was scored on a prompt
+    that asked for "every entity it describes" and never said an entity is a
+    thing rather than a statement about one. Every orchestration lost to
+    single shot, and the detect step was planning 7.6 entities for a document
+    holding two.
+
+    The count is deliberately absent. The step is asked how many entities a
+    document describes, so a prompt that said would be answering it.
+    """
+    request = ExtractionRequest(document="anything", schema=None)
+    system = build_selection_messages(request, arm("A2", CATALOGUE), 3)[0].content
+
+    assert "not a statement about one" in system
+    assert "one entity, not four" in system
+    for leak in ("two entities", "2 entities", "exactly two"):
+        assert leak not in system.lower()

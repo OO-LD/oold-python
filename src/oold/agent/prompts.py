@@ -39,12 +39,34 @@ _CATALOGUE = "Choose the class of each entity from this list, using one of these
 
 _SCHEMA = "Each entity must conform to this schema:"
 
-_SELECT_TASK = "Read the document and say, for every entity it describes, which classes it could be."
+_SELECT_TASK = (
+    "Read the document and say, for every entity it describes, which classes it could be. "
+    "An entity is a thing the document describes, not a statement about one. "
+    "A document that gives four properties of one thing describes one entity, not four, "
+    "so list a thing once however many times the document mentions it, and do not list "
+    "a property, a value or a field name as an entity of its own."
+)
+"""What to detect.
+
+The second and third sentences were added after measurement: without them the
+step returns roughly one entity per property mention. Over 120 two-entity
+documents haiku planned 7.6 entities per document and gpt-5-nano 3.9, and a
+traced case returned four ``LodgingBusiness`` for the four fields stated about
+one hotel and three ``Rating`` for the three stated about one rating.
+
+It says what an entity is and never how many there are. A count would be the
+answer, and the step is being asked to find it.
+"""
 
 _SELECT_FORM = (
     "Answer with JSON only. For each entity give a short id, the classes it could "
-    "belong to, most likely first, and the words in the document you read it from."
+    "belong to, most likely first, and the words that identify it in the document."
 )
+"""How to answer.
+
+"The words that identify it" rather than the earlier "the words in the document
+you read it from", which asked for a span and so invited one entry per span.
+"""
 
 _SELECT_SHORTLIST = (
     "List at most {k} classes per entity. Fewer is better when you are sure. "
@@ -138,6 +160,11 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
     is in the schema and not only in the wording, because a shortlist that can
     grow to the whole catalogue does not narrow the choice and the second step would
     gain nothing.
+
+    ``entities`` carries no ``maxItems``. How many entities a document describes
+    is the question this step is asked, and capping it would answer it. The
+    over-segmentation the cap would hide is addressed in the wording instead,
+    at :data:`_SELECT_TASK`.
     """
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -162,7 +189,10 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
                         },
                         "mention": {
                             "type": "string",
-                            "description": "The words in the document this entity was read from.",
+                            "description": (
+                                "The words that identify this entity, not the properties it carries. "
+                                "Give the same entity one line however often the document mentions it."
+                            ),
                         },
                     },
                     "required": ["id", "candidates", "mention"],

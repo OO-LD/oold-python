@@ -12,6 +12,7 @@ that answers with the schema instead of a plan, which is asked again here.
 """
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -112,7 +113,7 @@ class MultiStepClient:
         self.messages: list = []
         self.calls = 0
 
-    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
         self.calls += 1
         self.formats.append(response_format)
         self.messages.append(list(messages))
@@ -615,3 +616,65 @@ class TestWhatItShares:
         client = MultiStepClient()
         agent(client).run(request(ranges=None))
         assert "points at" not in client.messages[2][0].content
+
+
+class TestAskingForWhatTheDocumentDoesNotSay:
+    """A required property the property step left out is a question, not a guess."""
+
+    @staticmethod
+    def _schema_requiring(name):
+        return {
+            "type": "object",
+            "properties": {
+                "entities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string"},
+                            "id": {"type": "string"},
+                            "value": {"type": "number"},
+                            name: {"type": "string"},
+                        },
+                        "required": ["type", name],
+                    },
+                }
+            },
+        }
+
+    def test_an_unfillable_required_property_is_asked_for_and_left_out(self):
+        """Inventing a value is the one answer that is always wrong.
+
+        Under a strict grammar over a subset that makes every property
+        required, the model has no way to decline, so the agent has to decline
+        on its behalf. Left out of the fill schema is the honest shape of
+        "this document does not say".
+        """
+        client = MultiStepClient()
+        built = agent(client)
+        built.run(replace(request(), schema=self._schema_requiring("serial")))
+
+        assert [a["property"] for a in built.asked] == ["serial"] * len(built.asked)
+        assert built.asked, "a required property the property step omitted was never asked for"
+        assert "serial" not in json.dumps(client.formats[-1])
+
+    def test_an_answered_question_puts_the_property_back(self):
+        """A caller that can supply it gets it filled rather than dropped.
+
+        A benchmark answers mechanically from the corpus and a playground asks
+        the person in front of it; the agent only has to ask.
+        """
+        client = MultiStepClient()
+        built = agent(client, information=lambda key, name: "SN-1")
+        built.run(replace(request(), schema=self._schema_requiring("serial")))
+
+        assert built.asked
+        assert "serial" in json.dumps(client.formats[-1])
+        assert built.supplied and all("serial" in v for v in built.supplied.values())
+
+    def test_nothing_is_asked_when_the_document_fills_what_is_required(self):
+        """`name` is in the fixture's fillable set, so there is no question."""
+        client = MultiStepClient()
+        built = agent(client)
+        built.run(replace(request(), schema=self._schema_requiring("name")))
+        assert built.asked == []

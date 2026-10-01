@@ -136,6 +136,7 @@ class ChatClient(Protocol):
         messages: Sequence[Message],
         *,
         response_format: dict[str, Any] | None = None,
+        strict: bool = False,
     ) -> ChatResponse: ...
 
 

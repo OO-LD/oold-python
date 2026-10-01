@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -173,8 +174,20 @@ class ExtractionAgent:
         shortlist_k: int = 3,
         close_properties: bool = True,
         plan_retry: bool | None = None,
+        information: Callable[[str, str], Any] | None = None,
     ) -> None:
         self.client = client
+        self.information = information
+        """Asked for a required property the document does not state.
+
+        ``(entity_key, property_name) -> value or None``. ``None`` leaves the
+        property out of the fill schema rather than forcing an invention, and
+        a caller that supplies nothing gets that behaviour by default. See
+        :meth:`_ask_for`."""
+        self.asked: list[dict[str, str]] = []
+        """Every escalation, in order, whether or not it was answered."""
+        self.supplied: dict[str, dict[str, Any]] = {}
+        """What the caller answered, per entity."""
         self.enforcement = enforcement
         self.profile = profile
         self.orchestration = orchestration
@@ -246,7 +259,9 @@ class ExtractionAgent:
         payload: Any | None = None
         for attempt in range(1, self.attempts + 1):
             with log.timed("extract", self.client.model, attempt=attempt, schema_sha256=digest) as sink:
-                reply = self.client.invoke(messages, response_format=response_format)
+                reply = self.client.invoke(
+                    messages, response_format=response_format, strict=self.enforcement.decode_strict
+                )
                 sink.append(reply.usage or TokenUsage())
             text = reply.text
             payload = reply.parsed if reply.parsed is not None else parse_json_answer(text)
@@ -306,7 +321,7 @@ class ExtractionAgent:
             repairs += 1
             turn = [*list(messages), repair_message(text, errors)]
             with log.timed("repair", self.client.model, attempt=repairs, schema_sha256=digest) as sink:
-                reply = self.client.invoke(turn, response_format=response_format)
+                reply = self.client.invoke(turn, response_format=response_format, strict=self.enforcement.decode_strict)
                 sink.append(reply.usage or TokenUsage())
             text = reply.text
             candidate = reply.parsed if reply.parsed is not None else parse_json_answer(text)
@@ -543,7 +558,8 @@ class ExtractionAgent:
         for (classes, kept), keys in groups.items():
             narrowed = self.enforcement.with_catalogue(classes)
             filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
-            keep = set(kept) | required
+            wanted = self._ask_for(keys, frozenset(required).difference(kept))
+            keep = set(kept) | required.intersection(wanted)
             step = ExtractionRequest(
                 document=request.document,
                 schema=_trim_properties(request.schema, keep) if self.close_properties else request.schema,
@@ -600,6 +616,48 @@ class ExtractionAgent:
                 available[entity.key] = names
         return available
 
+    def _ask_for(self, keys: list[str], missing: frozenset[str]) -> set[str]:
+        """Resolve a required property the document does not fill.
+
+        The schema insists on it and the property step said the document does
+        not state it. Inventing a value is the one answer that is always
+        wrong, and it is what a strict decoder forces: a grammar over a
+        subset that makes every property required leaves the model no way to
+        decline. Before :attr:`Enforcement.decode_strict` this surfaced as
+        14,526 recorded ``None is not one of [...]`` messages, which is the
+        same question arriving as a validation error instead of as a question.
+
+        So the agent asks instead, through :attr:`information`. A caller that
+        can answer supplies the value; a caller that cannot leaves the
+        property out of the fill schema, which is the honest shape of "this
+        document does not say". The asking is recorded either way, because
+        whether an agent knew it needed to ask is the thing worth measuring
+        and it is invisible in a final answer that guessed.
+
+        A benchmark answers mechanically from the corpus and a playground
+        asks the person sitting in front of it. Neither is the agent's
+        business, which is why this takes a callback rather than a policy.
+        """
+        # The class slot and the id slot are required and are never the
+        # document's to state: the plan assigns the id and the shortlist
+        # decides the class, and _trim_properties keeps both regardless. A
+        # question about them would be the pipeline asking for what it is
+        # itself about to supply.
+        missing = frozenset(name for name in missing if name not in _CLASS_KEYS and name not in _ID_KEYS)
+        if not missing:
+            return set()
+        answered: set[str] = set()
+        for key in keys:
+            for name in sorted(missing):
+                self.asked.append({"entity": key, "property": name})
+                if self.information is None:
+                    continue
+                value = self.information(key, name)
+                if value is not None:
+                    self.supplied.setdefault(key, {})[name] = value
+                    answered.add(name)
+        return answered
+
     def _choose_properties(
         self,
         request: ExtractionRequest,
@@ -627,7 +685,7 @@ class ExtractionAgent:
         response_format = prepared if self.enforcement.decode_constraint is not DecodeConstraint.NONE else None
 
         with log.timed("properties", self.client.model, attempt=1, schema_sha256=schema_hash(prepared)) as sink:
-            reply = self.client.invoke(messages, response_format=response_format)
+            reply = self.client.invoke(messages, response_format=response_format, strict=self.enforcement.decode_strict)
             sink.append(reply.usage or TokenUsage())
 
         answered = _fillable_of(reply.parsed if reply.parsed is not None else parse_json_answer(reply.text), available)
@@ -679,7 +737,7 @@ class ExtractionAgent:
         response_format = prepared if self.enforcement.decode_constraint is not DecodeConstraint.NONE else None
 
         with log.timed(step, self.client.model, attempt=1, schema_sha256=schema_hash(prepared)) as sink:
-            reply = self.client.invoke(messages, response_format=response_format)
+            reply = self.client.invoke(messages, response_format=response_format, strict=self.enforcement.decode_strict)
             sink.append(reply.usage or TokenUsage())
 
         payload = reply.parsed if reply.parsed is not None else parse_json_answer(reply.text)
@@ -751,7 +809,7 @@ class ExtractionAgent:
 
         turn = [*list(messages), repair_message(text, errors)]
         with log.timed(step, self.client.model, attempt=2, schema_sha256=digest) as sink:
-            reply = self.client.invoke(turn, response_format=response_format)
+            reply = self.client.invoke(turn, response_format=response_format, strict=self.enforcement.decode_strict)
             sink.append(reply.usage or TokenUsage())
         retried = reply.parsed if reply.parsed is not None else parse_json_answer(reply.text)
         if retried is None:

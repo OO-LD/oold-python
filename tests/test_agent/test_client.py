@@ -17,7 +17,7 @@ class FakeClient:
         self.usage = usage or TokenUsage(input_tokens=100, output_tokens=10)
         self.calls: list[tuple[Message, ...]] = []
 
-    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
         self.calls.append(tuple(messages))
         return ChatResponse(text="ok", parsed=None, usage=self.usage)
 

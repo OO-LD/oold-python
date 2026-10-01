@@ -51,7 +51,7 @@ class ScriptedClient:
         self.turns: list[int] = []
         self.last: list = []
 
-    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
         self.calls += 1
         self.turns.append(len(messages))
         self.last = list(messages)

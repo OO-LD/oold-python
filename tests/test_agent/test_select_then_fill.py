@@ -54,7 +54,7 @@ class TwoStepClient:
         self.messages: list = []
         self.calls = 0
 
-    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
         self.calls += 1
         self.formats.append(response_format)
         self.messages.append(list(messages))
@@ -204,7 +204,7 @@ class MultiEntityClient:
         self.messages: list = []
         self.calls = 0
 
-    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
         self.calls += 1
         self.formats.append(response_format)
         self.messages.append(list(messages))

@@ -69,13 +69,18 @@ class LangChainClient:
         messages: Sequence[Message],
         *,
         response_format: dict[str, Any] | None = None,
+        strict: bool = False,
     ) -> ChatResponse:
         llm: Any = self._llm
         parsed: dict[str, Any] | None = None
         turns = fold_system_into_user(messages) if self.fold_system else [(m.role, m.content) for m in messages]
 
         if response_format is not None:
-            structured = llm.with_structured_output(response_format, include_raw=True)
+            # strict=False sends the schema and applies no grammar, which is
+            # the default and was never set. An arm that asked for a decode
+            # constraint got a hint; 589 recorded cells answered outside an
+            # enum the arm had pinned.
+            structured = llm.with_structured_output(response_format, include_raw=True, strict=strict or None)
             result = structured.invoke(turns)
             raw = result.get("raw") if isinstance(result, dict) else None
             parsing_error = result.get("parsing_error") if isinstance(result, dict) else None

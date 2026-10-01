@@ -32,9 +32,27 @@ class TestArms:
             "A1",
             "A2",
             "A2-enforced-only",
+            "A2-strict",
             "A3",
             "A4",
+            "A4-strict",
         ]
+
+    def test_a_strict_arm_differs_from_its_base_only_in_the_grammar(self):
+        """Or the third rung would not be a rung on the same ladder.
+
+        A2 and A2-strict send the same schema. The difference is whether the
+        provider enforces it or is merely shown it, which is what 589 cells
+        answering outside a pinned enum proved was never the case.
+        """
+        for base, strict in (("A2", "A2-strict"), ("A4", "A4-strict")):
+            loose, tight = ARMS[base], ARMS[strict]
+            assert tight.decode_strict is True
+            assert loose.decode_strict is False
+            assert loose.schema_in_prompt == tight.schema_in_prompt
+            assert loose.decode_constraint == tight.decode_constraint
+            assert loose.commit_gate == tight.commit_gate
+            assert loose.validate_output == tight.validate_output
 
     def test_the_union_arm_differs_from_the_enum_arm_only_in_the_constraint(self):
         """Or a measured difference has two candidate causes."""

@@ -49,7 +49,7 @@ class RecordingClient:
     def __init__(self) -> None:
         self.response_format = None
 
-    def invoke(self, messages, *, response_format=None) -> ChatResponse:
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
         self.response_format = response_format
         return ChatResponse(text='{"entities": []}', parsed=None)
 

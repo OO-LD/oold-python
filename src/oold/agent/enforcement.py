@@ -127,6 +127,36 @@ class Enforcement:
 
     output_form: OutputForm = OutputForm.JSON
 
+    decode_strict: bool = False
+    """Whether the decode constraint is a grammar or a hint.
+
+    This is the difference between a schema the provider enforces and a schema
+    it is merely shown, and until it existed the benchmark could not tell them
+    apart. ``with_structured_output`` defaults to ``strict=False``, which sends
+    the schema in the request body and applies no grammar, so every arm named
+    for a decode-time constraint was measuring **schema in the prompt against
+    schema in the request body**, both of them presentation.
+
+    It was not silent. Over 24,763 recorded cells, 589 answered with a value
+    outside an enum the arm had pinned, which a grammar makes impossible. The
+    leak is register-dependent: on generated quantity documents the enum
+    escaped 0.0 to 0.6 per cent of the time, and on Wikipedia sentences 13.1
+    per cent, so the arms behaved almost exactly like enforcement where the
+    vocabulary was easy and noticeably less like it where it was not.
+
+    A field rather than a change to the existing arms, because those arms
+    measured something real and the numbers stay interpretable under their
+    corrected name. ``A2-strict`` is the third rung.
+
+    The cost is output volume, and it is the reason an orchestration exists.
+    :func:`~oold.agent.provider.prepare` makes every property required under a
+    strict subset, so a grammar forces a value for all of them: measured on one
+    schema.org document at gpt-5-nano, the whole catalogue emits **333 keys per
+    entity of which 25 are not null**, 5,456 output tokens, where the same
+    document through a narrowed fill schema emits 5 keys and 2,948. Schema
+    breadth stops predicting output volume and becomes it.
+    """
+
     validate_output: bool = False
     """Whether the answer is validated against the schema the arm declared.
 
@@ -209,6 +239,7 @@ class Enforcement:
             "catalogue_described": self.catalogue_text is not None,
             "catalogue_offered": self.catalogue is not None,
             "decode_constraint": self.decode_constraint.value,
+            "decode_strict": self.decode_strict,
             "commit_gate": self.commit_gate,
             "validate_output": self.validate_output,
             "repair_attempts": self.repair_attempts,
@@ -248,6 +279,24 @@ ARMS: dict[str, Enforcement] = {
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
+        commit_gate=True,
+        validate_output=True,
+        grounding=False,
+    ),
+    "A2-strict": Enforcement(
+        schema_in_prompt=True,
+        catalogue=(),
+        decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
+        decode_strict=True,
+        commit_gate=True,
+        validate_output=True,
+        grounding=False,
+    ),
+    "A4-strict": Enforcement(
+        schema_in_prompt=True,
+        catalogue=(),
+        decode_constraint=DecodeConstraint.JSON_SCHEMA_UNION,
+        decode_strict=True,
         commit_gate=True,
         validate_output=True,
         grounding=False,

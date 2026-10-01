@@ -46,7 +46,7 @@ class FakeClient:
         self.response_format = None
         self.calls = 0
 
-    def invoke(self, messages, *, response_format=None):
+    def invoke(self, messages, *, response_format=None, strict=False):
         self.calls += 1
         self.messages = list(messages)
         self.response_format = response_format

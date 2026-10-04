@@ -131,7 +131,7 @@ class MultiStepClient:
         )
 
 
-def agent(client, name="A2", profile="openai", k=2, **kwargs):
+def agent(client, name="schema-dump-catalog-flat-enforced", profile="openai", k=2, **kwargs):
     return ExtractionAgent(
         client,
         arm(name, CATALOGUE),
@@ -409,7 +409,7 @@ class TestPinningAReference:
 
     def test_an_unconstrained_arm_pins_no_reference(self):
         client = MultiStepClient()
-        agent(client, name="A1").run(request())
+        agent(client, name="schema-dump-catalog-not-enforced-gated").run(request())
         assert client.formats[2] is None
 
 
@@ -453,7 +453,7 @@ class TestWhatEachProviderGets:
             fillable={"fillable": {"e1": ["name", "worksFor"], "e2": ["name"]}},
             answers=[[{"id": "e1", "type": "Person", "worksFor": "e2"}], [{"id": "e2", "type": "Organization"}]],
         )
-        result = agent(client, name="A4", profile=profile).run(request())
+        result = agent(client, name="schema-dump-catalog-enforced", profile=profile).run(request())
         return items_of(client.formats[2]), result.degradation
 
     def test_a_profile_that_takes_anyof_keeps_the_union_and_the_pin(self):
@@ -492,9 +492,10 @@ class TestWhatEachProviderGets:
 class TestAskingAgain:
     """The first call that answered with the schema instead of an answer.
 
-    gpt-5-nano returned the selection schema on 37 of 120 plan calls under A2
-    segmented and on none at all under A2 single shot, because a single-shot arm
-    has no call whose answer is a structure. It costs the whole cell: the
+    gpt-5-nano returned the selection schema on 37 of 120 plan calls under a
+    segmented flat-enforced arm and on none at all under the same arm single
+    shot, because a single-shot arm has no call whose answer is a structure.
+    It costs the whole cell: the
     classes the plan did not choose are the classes the later steps may not
     answer with.
     """
@@ -557,7 +558,7 @@ class TestTheOtherOrchestrationsAreUnchanged:
         client = MultiStepClient(detects=[SCHEMA_ECHO])
         ExtractionAgent(
             client,
-            arm("A2", CATALOGUE),
+            arm("schema-dump-catalog-flat-enforced", CATALOGUE),
             profile_for("openai"),
             Orchestration.SEGMENTED,
             shortlist_k=2,
@@ -572,7 +573,7 @@ class TestTheOtherOrchestrationsAreUnchanged:
         client = MultiStepClient(detects=[SCHEMA_ECHO, {"entities": PLAN}])
         result = ExtractionAgent(
             client,
-            arm("A2", CATALOGUE),
+            arm("schema-dump-catalog-flat-enforced", CATALOGUE),
             profile_for("openai"),
             Orchestration.SEGMENTED,
             shortlist_k=2,
@@ -585,7 +586,9 @@ class TestTheOtherOrchestrationsAreUnchanged:
         [Orchestration.SINGLE_SHOT, Orchestration.SELECT_THEN_FILL, Orchestration.SEGMENTED],
     )
     def test_only_multi_step_asks_again_unasked(self, orchestration):
-        built = ExtractionAgent(MultiStepClient(), arm("A2", CATALOGUE), profile_for("openai"), orchestration)
+        built = ExtractionAgent(
+            MultiStepClient(), arm("schema-dump-catalog-flat-enforced", CATALOGUE), profile_for("openai"), orchestration
+        )
         assert built.plan_retry is False
 
     def test_multi_step_asks_again_unasked(self):
@@ -596,7 +599,7 @@ class TestWhatItShares:
     def test_a_missing_catalogue_is_refused(self):
         bare = ExtractionAgent(
             MultiStepClient(),
-            arm("A0-json"),
+            arm("no-catalog-not-enforced"),
             profile_for("openai"),
             Orchestration.MULTI_STEP,
         )

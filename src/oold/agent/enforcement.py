@@ -144,9 +144,9 @@ class Enforcement:
     per cent, so the arms behaved almost exactly like enforcement where the
     vocabulary was easy and noticeably less like it where it was not.
 
-    A field rather than a change to the existing arms, because those arms
-    measured something real and the numbers stay interpretable under their
-    corrected name. ``A2-strict`` is the third rung.
+    A field rather than a change to the arms it qualifies, so a result
+    measured without a grammar keeps its own name and stays interpretable.
+    The rungs carrying it are suffixed ``-strict``.
 
     The cost is output volume, and it is the reason an orchestration exists.
     :func:`~oold.agent.provider.prepare` makes every property required under a
@@ -263,10 +263,20 @@ class Enforcement:
         }
 
 
-ArmName = Literal["A0-prose", "A0-json", "A1", "A2", "A3"]
+ArmName = Literal[
+    "no-catalog-not-enforced-prose",
+    "no-catalog-not-enforced",
+    "schema-dump-catalog-not-enforced-gated",
+    "schema-dump-catalog-flat-enforced",
+    "schema-dump-catalog-flat-enforced-strict",
+    "schema-dump-catalog-flat-enforced-grounded",
+    "catalog-flat-enforced",
+    "schema-dump-catalog-enforced",
+    "schema-dump-catalog-enforced-strict",
+]
 
 ARMS: dict[str, Enforcement] = {
-    "A0-prose": Enforcement(
+    "no-catalog-not-enforced-prose": Enforcement(
         schema_in_prompt=False,
         catalogue=None,
         decode_constraint=DecodeConstraint.NONE,
@@ -274,7 +284,7 @@ ARMS: dict[str, Enforcement] = {
         grounding=False,
         output_form=OutputForm.PROSE,
     ),
-    "A0-json": Enforcement(
+    "no-catalog-not-enforced": Enforcement(
         schema_in_prompt=False,
         catalogue=None,
         decode_constraint=DecodeConstraint.NONE,
@@ -282,7 +292,7 @@ ARMS: dict[str, Enforcement] = {
         grounding=False,
         output_form=OutputForm.JSON,
     ),
-    "A1": Enforcement(
+    "schema-dump-catalog-not-enforced-gated": Enforcement(
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.NONE,
@@ -290,7 +300,7 @@ ARMS: dict[str, Enforcement] = {
         validate_output=True,
         grounding=False,
     ),
-    "A2": Enforcement(
+    "schema-dump-catalog-flat-enforced": Enforcement(
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
@@ -298,7 +308,7 @@ ARMS: dict[str, Enforcement] = {
         validate_output=True,
         grounding=False,
     ),
-    "A2-strict": Enforcement(
+    "schema-dump-catalog-flat-enforced-strict": Enforcement(
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
@@ -307,7 +317,7 @@ ARMS: dict[str, Enforcement] = {
         validate_output=True,
         grounding=False,
     ),
-    "A4-strict": Enforcement(
+    "schema-dump-catalog-enforced-strict": Enforcement(
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_UNION,
@@ -316,7 +326,7 @@ ARMS: dict[str, Enforcement] = {
         validate_output=True,
         grounding=False,
     ),
-    "A2-enforced-only": Enforcement(
+    "catalog-flat-enforced": Enforcement(
         schema_in_prompt=False,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
@@ -324,7 +334,7 @@ ARMS: dict[str, Enforcement] = {
         validate_output=True,
         grounding=False,
     ),
-    "A4": Enforcement(
+    "schema-dump-catalog-enforced": Enforcement(
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_UNION,
@@ -332,7 +342,7 @@ ARMS: dict[str, Enforcement] = {
         validate_output=True,
         grounding=False,
     ),
-    "A3": Enforcement(
+    "schema-dump-catalog-flat-enforced-grounded": Enforcement(
         schema_in_prompt=True,
         catalogue=(),
         decode_constraint=DecodeConstraint.JSON_SCHEMA_ENUM,
@@ -341,18 +351,42 @@ ARMS: dict[str, Enforcement] = {
         grounding=True,
     ),
 }
-"""The five arms, with an empty catalogue that a run fills in.
+"""The enforcement ladder, with an empty catalogue that a run fills in.
 
-A0 is two arms, not one. ``A0-json`` is the headline comparison, because
-its output reduces to triples by the same path as every other arm and needs no
-judge. ``A0-prose`` is reported beside it with the parse loss of its extractor
-stated, so the objection that JSON is already a form of structure has an answer
-in the results and not in the discussion.
+A name is composed of what varies, so a table can be read without a legend::
+
+    <what the prompt carries>-<what the decoder accepts>[-qualifiers]
+
+The first half is ``no-catalog``, ``catalog`` or ``schema-dump-catalog``: the
+document alone, the document and the class list, or both plus the schema
+printed out. ``catalog`` says only that the catalogue is in the prompt; how
+much it says about each class is a property of the run and not of the arm, so
+a report refines ``catalog`` to ``schema-prose-catalog`` or
+``schema-prose-full-catalog`` from the condition that produced the cell.
+
+The second half is ``not-enforced``, ``flat-enforced`` or ``enforced``.
+``flat-enforced`` pins each slot against its own enumeration, so a class and a
+unit that cannot occur together are still both producible. ``enforced`` is an
+``anyOf`` over one branch per class, where choosing the class chooses what the
+other slots may hold.
+
+The qualifiers name the one further thing that arm fixes: ``-prose`` asks for
+free text rather than JSON, ``-gated`` validates the answer and repairs it
+without constraining generation, ``-strict`` sends the schema as a grammar
+rather than as a request-body field, ``-grounded`` requires each value to be
+traceable to the document.
+
+Two unenforced arms rather than one. ``no-catalog-not-enforced`` is the
+headline comparison, because its output reduces to triples by the same path as
+every other arm and needs no judge. ``no-catalog-not-enforced-prose`` is
+reported beside it with the parse loss of its extractor stated, so the
+objection that JSON is already a form of structure has an answer in the
+results and not in the discussion.
 """
 
 
 def arm(name: str, catalogue: tuple[str, ...] | None = None) -> Enforcement:
-    """One of the five arms, over a given catalogue."""
+    """One rung of the ladder, over a given catalogue."""
     if name not in ARMS:
         raise KeyError(f"unknown arm {name!r}, expected one of {sorted(ARMS)}")
     base = ARMS[name]

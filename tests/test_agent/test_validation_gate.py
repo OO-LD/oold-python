@@ -11,7 +11,7 @@ import json
 from dataclasses import replace
 
 from oold.agent.client import ChatResponse
-from oold.agent.enforcement import arm
+from oold.agent.enforcement import ARMS, arm
 from oold.agent.extraction import ExtractionAgent
 from oold.agent.prompts import ExtractionRequest
 from oold.agent.provider import profile_for
@@ -59,8 +59,8 @@ class ScriptedClient:
         return ChatResponse(text=self.answers[index], parsed=None)
 
 
-def run(client, *, attempts=0, name="A1"):
-    base = arm(name) if name.startswith("A0") else arm(name, ("Length",))
+def run(client, *, attempts=0, name="schema-dump-catalog-not-enforced-gated"):
+    base = arm(name) if ARMS[name].catalogue is None else arm(name, ("Length",))
     enforcement = replace(base, repair_attempts=attempts)
     agent = ExtractionAgent(client, enforcement, profile_for("openai"))
     return agent.run(ExtractionRequest(document="d", schema=SCHEMA))
@@ -85,15 +85,21 @@ class TestValidatingTheAnswer:
         assert run(ScriptedClient(MISSING)).payload == MISSING
 
     def test_an_arm_that_does_not_validate_reports_nothing(self):
-        result = run(ScriptedClient(MISSING), name="A0-json")
+        result = run(ScriptedClient(MISSING), name="no-catalog-not-enforced")
         assert result.invalid == []
 
     def test_the_arms_that_claim_a_commit_gate_validate(self):
-        for name in ("A1", "A2", "A2-enforced-only", "A3", "A4"):
+        for name in (
+            "schema-dump-catalog-not-enforced-gated",
+            "schema-dump-catalog-flat-enforced",
+            "catalog-flat-enforced",
+            "schema-dump-catalog-flat-enforced-grounded",
+            "schema-dump-catalog-enforced",
+        ):
             assert arm(name, ("Length",)).validate_output is True
 
     def test_the_arms_that_claim_nothing_do_not(self):
-        for name in ("A0-json", "A0-prose"):
+        for name in ("no-catalog-not-enforced", "no-catalog-not-enforced-prose"):
             assert arm(name).validate_output is False
 
 
@@ -174,7 +180,7 @@ class TestWhatTheRecordSays:
         assert described["invalid"]
 
     def test_the_condition_says_whether_it_validated(self):
-        described = arm("A1", ("Length",)).describe()
+        described = arm("schema-dump-catalog-not-enforced-gated", ("Length",)).describe()
         assert described["validate_output"] is True
         assert described["repair_attempts"] == 0
 

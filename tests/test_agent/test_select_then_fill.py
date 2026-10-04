@@ -65,7 +65,7 @@ class TwoStepClient:
         return ChatResponse(text=json.dumps(payload), parsed=None)
 
 
-def agent(client, k=2, name="A4"):
+def agent(client, k=2, name="schema-dump-catalog-enforced"):
     return ExtractionAgent(
         client,
         arm(name, CATALOGUE),
@@ -97,11 +97,11 @@ class TestTheSelectionSchema:
 
     def test_the_select_prompt_shows_the_same_catalogue(self):
         """The orchestrations differ in what is asked, not in what is shown."""
-        content = build_selection_messages(request(), arm("A4", CATALOGUE), 2)[0].content
+        content = build_selection_messages(request(), arm("schema-dump-catalog-enforced", CATALOGUE), 2)[0].content
         assert all(f"- {name}" in content for name in CATALOGUE)
 
     def test_the_select_prompt_carries_the_document_alone(self):
-        messages = build_selection_messages(request(), arm("A4", CATALOGUE), 2)
+        messages = build_selection_messages(request(), arm("schema-dump-catalog-enforced", CATALOGUE), 2)
         assert messages[1].content == "The reading was 1.0 meter."
 
 
@@ -176,7 +176,9 @@ class TestWhenSelectionFails:
 
     def test_a_missing_catalogue_is_refused(self):
         client = TwoStepClient()
-        bare = ExtractionAgent(client, arm("A0-json"), profile_for("openai"), Orchestration.SELECT_THEN_FILL)
+        bare = ExtractionAgent(
+            client, arm("no-catalog-not-enforced"), profile_for("openai"), Orchestration.SELECT_THEN_FILL
+        )
         with pytest.raises(ValueError, match="needs a catalogue"):
             bare.run(request())
 
@@ -184,12 +186,17 @@ class TestWhenSelectionFails:
 class TestTheOtherOrchestrations:
     def test_single_shot_still_makes_one_call(self):
         client = TwoStepClient()
-        ExtractionAgent(client, arm("A4", CATALOGUE), profile_for("openai")).run(request())
+        ExtractionAgent(client, arm("schema-dump-catalog-enforced", CATALOGUE), profile_for("openai")).run(request())
         assert client.calls == 1
 
     def test_the_recursive_orchestration_says_it_is_not_ported(self):
         with pytest.raises(NotImplementedError, match="entity graph"):
-            ExtractionAgent(TwoStepClient(), arm("A4", CATALOGUE), profile_for("openai"), Orchestration.RECURSIVE)
+            ExtractionAgent(
+                TwoStepClient(),
+                arm("schema-dump-catalog-enforced", CATALOGUE),
+                profile_for("openai"),
+                Orchestration.RECURSIVE,
+            )
 
 
 class MultiEntityClient:
@@ -229,7 +236,7 @@ class TestOneCallPerShortlist:
     def run(self, client, k=2):
         return ExtractionAgent(
             client,
-            arm("A4", CATALOGUE),
+            arm("schema-dump-catalog-enforced", CATALOGUE),
             profile_for("openai"),
             Orchestration.SELECT_THEN_FILL,
             shortlist_k=k,
@@ -331,7 +338,7 @@ def test_the_select_prompt_says_what_one_entity_is():
     document describes, so a prompt that said would be answering it.
     """
     request = ExtractionRequest(document="anything", schema=None)
-    system = build_selection_messages(request, arm("A2", CATALOGUE), 3)[0].content
+    system = build_selection_messages(request, arm("schema-dump-catalog-flat-enforced", CATALOGUE), 3)[0].content
 
     assert "not a statement about one" in system
     assert "one entity, not four" in system

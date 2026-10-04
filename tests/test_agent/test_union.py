@@ -160,31 +160,31 @@ class TestTheUnionArm:
         return client.response_format
 
     def test_a4_sends_a_union_over_the_offered_classes(self):
-        items = self.sent("A4")["properties"]["entities"]["items"]
+        items = self.sent("schema-dump-catalog-enforced")["properties"]["entities"]["items"]
         assert [b["properties"]["type"]["const"] for b in items["anyOf"]] == ["Length", "Mass"]
 
     def test_a4_pairs_each_class_with_its_own_units(self):
-        items = self.sent("A4")["properties"]["entities"]["items"]
+        items = self.sent("schema-dump-catalog-enforced")["properties"]["entities"]["items"]
         by_class = {b["properties"]["type"]["const"]: b["properties"]["unit"]["enum"] for b in items["anyOf"]}
         assert by_class == {"Length": ["meter", "kilo_meter"], "Mass": ["gram", "kilo_gram"]}
 
     def test_a2_cannot_express_the_pairing(self):
-        items = self.sent("A2")["properties"]["entities"]["items"]
+        items = self.sent("schema-dump-catalog-flat-enforced")["properties"]["entities"]["items"]
         assert "anyOf" not in items
         assert items["properties"]["type"]["enum"] == ["Length", "Mass"]
 
     def test_a_class_outside_the_catalogue_is_not_offered(self):
-        items = self.sent("A4")["properties"]["entities"]["items"]
+        items = self.sent("schema-dump-catalog-enforced")["properties"]["entities"]["items"]
         assert "Volume" not in [b["properties"]["type"]["const"] for b in items["anyOf"]]
 
     def test_a_union_arm_without_branches_fails_loudly(self):
         """Running unconstrained would be reported as a finding about unions."""
         with pytest.raises(ValueError, match="carried none"):
-            self.sent("A4", branches=None)
+            self.sent("schema-dump-catalog-enforced", branches=None)
 
     def test_a_union_arm_whose_classes_have_no_branch_fails_loudly(self):
         with pytest.raises(ValueError, match="admit nothing"):
-            self.sent("A4", catalogue=("Nonesuch",))
+            self.sent("schema-dump-catalog-enforced", catalogue=("Nonesuch",))
 
 
 class TestTheEnforcedOnlyArm:
@@ -192,7 +192,7 @@ class TestTheEnforcedOnlyArm:
         """The enum reaches the decoder and not the prompt, so reading it and
         being constrained by it stop being the same condition."""
         client = RecordingClient()
-        agent = ExtractionAgent(client, arm("A2-enforced-only", ("Length", "Mass")), profile_for("openai"))
+        agent = ExtractionAgent(client, arm("catalog-flat-enforced", ("Length", "Mass")), profile_for("openai"))
         from oold.agent.prompts import build_messages
 
         request = ExtractionRequest(document="d", schema=SCHEMA, branches=BRANCHES)
@@ -204,7 +204,7 @@ class TestTheEnforcedOnlyArm:
     def test_it_still_offers_the_catalogue(self):
         from oold.agent.prompts import build_messages
 
-        content = build_messages(ExtractionRequest(document="d"), arm("A2-enforced-only", ("Length",)))[0].content
+        content = build_messages(ExtractionRequest(document="d"), arm("catalog-flat-enforced", ("Length",)))[0].content
         assert "- Length" in content
 
 
@@ -218,7 +218,7 @@ class TestTheUnionReachesTheProviderTransform:
 
     def sent(self, profile):
         client = RecordingClient()
-        agent = ExtractionAgent(client, arm("A4", ("Length", "Mass")), profile_for(profile))
+        agent = ExtractionAgent(client, arm("schema-dump-catalog-enforced", ("Length", "Mass")), profile_for(profile))
         result = agent.run(ExtractionRequest(document="d", schema=SCHEMA, branches=BRANCHES))
         return client.response_format, result.degradation
 

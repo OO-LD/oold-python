@@ -112,7 +112,7 @@ class PlanThenFillClient:
         )
 
 
-def agent(client, name="A2", profile="openai", k=2):
+def agent(client, name="schema-dump-catalog-flat-enforced", profile="openai", k=2):
     return ExtractionAgent(
         client,
         arm(name, CATALOGUE),
@@ -228,7 +228,7 @@ class TestWhatTheFillStepIsGiven:
         client = PlanThenFillClient()
         ExtractionAgent(
             client,
-            arm("A2", CATALOGUE),
+            arm("schema-dump-catalog-flat-enforced", CATALOGUE),
             profile_for("openai"),
             Orchestration.SEGMENTED,
             shortlist_k=2,
@@ -355,7 +355,7 @@ class TestPinningAReference:
     def test_an_unconstrained_arm_pins_no_reference(self):
         """The decode axis keeps meaning what it means everywhere else."""
         client = PlanThenFillClient()
-        agent(client, name="A1").run(request())
+        agent(client, name="schema-dump-catalog-not-enforced-gated").run(request())
         assert client.formats[1] is None
 
 
@@ -421,7 +421,7 @@ class TestWhatEachProviderGets:
             plan=UNION_PLAN,
             answers=[[{"id": "e1", "type": "Person", "worksFor": "e2"}], [{"id": "e2", "type": "Organization"}]],
         )
-        result = agent(client, name="A4", profile=profile).run(request())
+        result = agent(client, name="schema-dump-catalog-enforced", profile=profile).run(request())
         return items_of(client.formats[1]), result.degradation
 
     def test_a_profile_that_takes_anyof_keeps_the_union_and_the_pin(self):
@@ -465,7 +465,7 @@ class TestWhatItShares:
     def test_a_missing_catalogue_is_refused(self):
         bare = ExtractionAgent(
             PlanThenFillClient(),
-            arm("A0-json"),
+            arm("no-catalog-not-enforced"),
             profile_for("openai"),
             Orchestration.SEGMENTED,
         )

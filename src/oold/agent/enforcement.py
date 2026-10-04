@@ -172,6 +172,21 @@ class Enforcement:
     repairs, which measures conformance after help, and those are different
     claims, so the number is part of the condition."""
 
+    catalogue_in_prompt: bool = True
+    """Whether the prompt names the classes at all.
+
+    :attr:`catalogue` does two jobs: it is the answer space the decode-time
+    enum and the commit gate are built from, and it is what the prompt prints.
+    Dropping it to withhold the list also empties the grammar, so a condition
+    that wanted an enforced answer space and a silent prompt could not be
+    expressed.
+
+    Off is that condition. The grammar still admits one branch per class with
+    that class's units, so nothing invalid can be produced; the prompt names
+    none of them. It asks whether a model needs to be told what it is choosing
+    among when it could not produce anything else.
+    """
+
     catalogue_text: tuple[str, ...] | None = None
     """What the catalogue looks like in the prompt, one rendered entry per
     class.

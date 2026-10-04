@@ -135,7 +135,7 @@ def build_messages(request: ExtractionRequest, enforcement: Enforcement) -> list
 
     sections.append(_PROSE_FORM if enforcement.output_form is OutputForm.PROSE else _JSON_FORM)
 
-    if enforcement.catalogue:
+    if enforcement.catalogue and enforcement.catalogue_in_prompt:
         # Rendered entries when the condition supplies them, identifiers
         # otherwise. The identifier stays the answer either way, so a rendered
         # entry has to carry its own.
@@ -284,7 +284,7 @@ def build_selection_messages(request: ExtractionRequest, enforcement: Enforcemen
     """
     sections: list[str] = [_SELECT_TASK, _SELECT_FORM, _SELECT_SHORTLIST.format(k=k)]
 
-    if enforcement.catalogue:
+    if enforcement.catalogue and enforcement.catalogue_in_prompt:
         entries = enforcement.catalogue_text or tuple(f"- {name}" for name in enforcement.catalogue)
         listed = "\n".join(entries)
         sections.append(f"{_CATALOGUE}\n{listed}")

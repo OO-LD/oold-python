@@ -18,7 +18,7 @@ import pytest
 
 from oold.agent.client import ChatResponse, TokenUsage
 from oold.agent.enforcement import Orchestration, arm
-from oold.agent.extraction import Edge, ExtractionAgent
+from oold.agent.extraction import Edge, ExtractionAgent, PlannedEntity
 from oold.agent.prompts import ExtractionRequest, property_schema
 from oold.agent.provider import profile_for
 
@@ -681,3 +681,75 @@ class TestAskingForWhatTheDocumentDoesNotSay:
         built = agent(client)
         built.run(replace(request(), schema=self._schema_requiring("name")))
         assert built.asked == []
+
+
+class TestEachStepAlone:
+    """A pipeline whose steps cannot be run apart cannot be attributed.
+
+    The four steps already exist inside the orchestrations. These are the
+    public doors onto them, so a benchmark can hand one step known-correct
+    input and score it on its own question rather than on the one before it.
+    """
+
+    def test_identify_returns_the_shortlist_and_the_mention(self):
+        client = MultiStepClient()
+        selected, mentions = agent(client).identify(request())
+        assert selected == {"e1": ("Person",), "e2": ("Organization",)}
+        assert mentions == {"e1": "Ada", "e2": "Acme"}
+        assert client.calls == 1, "identify is one call and nothing after it"
+
+    def test_identify_does_not_carry_a_mention_between_documents(self):
+        """An agent reused across documents would otherwise answer with a
+        mention read from the one before."""
+        one = agent(MultiStepClient())
+        one.identify(request())
+        one.client = MultiStepClient(
+            detects=[{"entities": [{"id": "e9", "candidates": ["Book"], "mention": "Ulysses"}]}]
+        )
+        _, mentions = one.identify(request())
+        assert mentions == {"e9": "Ulysses"}
+
+    def test_fillable_properties_takes_the_plan_it_is_given(self):
+        client = MultiStepClient(detects=[])
+        plan = (
+            PlannedEntity(key="e1", classes=("Person",), mention="Ada"),
+            PlannedEntity(key="e2", classes=("Organization",), mention="Acme"),
+        )
+        assert agent(client).fillable_properties(request(), plan) == {"e1": ("name", "worksFor"), "e2": ("name",)}
+
+    def test_available_properties_is_what_the_step_may_choose_from(self):
+        """The union over the shortlist, so a step scored on its choice is
+        scored against what it was actually offered."""
+        plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
+        available = agent(MultiStepClient()).available_properties(request(), plan)
+        assert set(available["e1"]) == {"name", "jobTitle", "worksFor"}
+
+    def test_extract_pins_the_id_to_the_entities_the_call_is_for(self):
+        """Without this the answer cannot be joined back to the plan, and
+        every edge reads as dangling."""
+        client = MultiStepClient(detects=[])
+        plan = (
+            PlannedEntity(key="e1", classes=("Person",), mention="Ada"),
+            PlannedEntity(key="e2", classes=("Organization",), mention="Acme"),
+        )
+        agent(client).extract(request(), plan=plan, filling=("e1",))
+        assert _id_slot(client.formats[-1])["enum"] == ["e1"]
+
+    def test_extract_without_a_plan_is_the_single_shot_arm(self):
+        client = MultiStepClient(detects=[])
+        result = agent(client).extract(request())
+        assert result.payload is not None
+        assert _id_slot(client.formats[-1]) is None
+
+
+def _id_slot(schema):
+    """The id property of whichever entity shape the request carried."""
+    if not isinstance(schema, dict):
+        return None
+    if "id" in (schema.get("properties") or {}) and schema.get("type") == "object":
+        return schema["properties"]["id"]
+    for value in list((schema.get("properties") or {}).values()) + schema.get("anyOf", []) + [schema.get("items")]:
+        found = _id_slot(value)
+        if found is not None:
+            return found
+    return None

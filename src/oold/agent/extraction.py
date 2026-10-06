@@ -231,6 +231,71 @@ class ExtractionAgent:
             return self._select_then_fill(request)
         return self._single_shot(request)
 
+    def identify(
+        self,
+        request: ExtractionRequest,
+        log: CallLog | None = None,
+        *,
+        step: str = "detect",
+        insist: bool = False,
+    ) -> tuple[dict[str, tuple[str, ...]], dict[str, str]]:
+        """One step: which classes each entity could be, and what it is called.
+
+        The first of the four steps, reachable on its own so it can be scored
+        on its own. An orchestration runs it and spends more calls on what
+        follows; a benchmark wants the answer before anything was spent.
+
+        Returns the shortlist per entity and the mention each was read from,
+        which is the input the next step needs.
+        """
+        # Cleared first, because an agent reused across documents would
+        # otherwise answer with a mention read from the one before.
+        self._mentions = {}
+        selected, _ = self._select(request, log if log is not None else CallLog(), step=step, insist=insist)
+        return selected, dict(self._mentions)
+
+    def available_properties(
+        self,
+        request: ExtractionRequest,
+        plan: tuple[PlannedEntity, ...],
+    ) -> dict[str, tuple[str, ...]]:
+        """What each planned entity may carry, before the document is read."""
+        return self._available_properties(request, plan)
+
+    def fillable_properties(
+        self,
+        request: ExtractionRequest,
+        plan: tuple[PlannedEntity, ...],
+        log: CallLog | None = None,
+    ) -> dict[str, tuple[str, ...]]:
+        """Step two on its own: which of those properties the document fills.
+
+        ``plan`` is whatever the caller has. A benchmark hands it the true
+        classes so the step is scored on its own question rather than on the
+        one before it.
+        """
+        return self._choose_properties(
+            request,
+            log if log is not None else CallLog(),
+            plan,
+            self._available_properties(request, plan),
+        )
+
+    def extract(
+        self,
+        request: ExtractionRequest,
+        *,
+        plan: tuple[PlannedEntity, ...] = (),
+        filling: tuple[str, ...] = (),
+    ) -> ExtractionResult:
+        """Step three on its own: fill the schema the first two steps implied.
+
+        With a plan, the id slot is pinned to ``filling`` and a reference slot
+        to the planned entities whose class fits its range, which is what
+        makes an edge nameable. Without one, this is the single-shot arm.
+        """
+        return self._single_shot(request, plan=plan, filling=filling)
+
     def _single_shot(
         self,
         request: ExtractionRequest,

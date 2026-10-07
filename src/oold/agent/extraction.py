@@ -743,7 +743,7 @@ class ExtractionAgent:
         """
         if not available:
             return {}
-        schema = property_schema(available)
+        schema = property_schema(available, evidence=request.property_evidence)
         prepared, _ = prepare(schema, self.profile, grounding=False)
         named = {entity.key: f"{_named(entity)}, {'/'.join(entity.classes)}" for entity in plan}
         messages = build_property_messages(request, available, named)
@@ -754,6 +754,9 @@ class ExtractionAgent:
             sink.append(reply.usage or TokenUsage())
 
         answered = _fillable_of(reply.parsed if reply.parsed is not None else parse_json_answer(reply.text), available)
+        # Kept so a caller can read what the step thought it was reading. The
+        # answer is the names; this is the working behind them.
+        self.fillable_answer = answered
         return {
             key: tuple(name for name in names if name in _named_in(answered.get(key) or ()))
             for key, names in available.items()

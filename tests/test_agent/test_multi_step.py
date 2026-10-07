@@ -793,3 +793,40 @@ class TestReadingTheAnswer:
         client = MultiStepClient(detects=[], fillable={"fillable": {"e1": [{"stated": "Ada"}]}})
         plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
         assert agent(client).fillable_properties(request(), plan) == {"e1": ()}
+
+
+class TestAskingForTheWordsThatStateIt:
+    """Off by default, because it costs more than it buys.
+
+    What a model writes there says what it thought it was reading, which is
+    worth being able to ask for even though requiring it lowers the score.
+    """
+
+    def test_the_default_answer_is_names_alone(self):
+        from oold.agent.prompts import property_schema
+
+        assert property_schema({"e1": ("name",)})["properties"]["fillable"]["properties"]["e1"]["items"] == {
+            "type": "string",
+            "enum": ["name"],
+        }
+
+    def test_asked_for_it_the_answer_carries_both(self):
+        from oold.agent.prompts import property_schema
+
+        item = property_schema({"e1": ("name",)}, evidence=True)["properties"]["fillable"]["properties"]["e1"]["items"]
+        assert item["required"] == ["property", "stated"]
+        assert item["properties"]["property"]["enum"] == ["name"]
+
+    def test_the_request_decides(self):
+        client = MultiStepClient(detects=[])
+        plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
+        agent(client).fillable_properties(request(), plan)
+        assert client.formats[-1]["properties"]["fillable"]["properties"]["e1"]["items"]["type"] == "string"
+
+    def test_what_the_model_wrote_is_kept_for_the_caller(self):
+        """The answer is the names; this is the working behind them."""
+        client = MultiStepClient(detects=[])
+        plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
+        one = agent(client)
+        one.fillable_properties(request(), plan)
+        assert one.fillable_answer["e1"][0] == {"property": "name", "stated": "Ada"}

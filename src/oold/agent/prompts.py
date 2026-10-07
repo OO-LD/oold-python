@@ -125,6 +125,16 @@ class ExtractionRequest:
 
     document: str
     schema: dict[str, Any] | None = None
+    property_evidence: bool = False
+    """Whether the property step must quote the words it read each one from.
+
+    Off, because it costs more than it buys: measured over six models, two
+    invented *more* with a quotation required, gpt-oss-120b lost a third of
+    its correct answers and claude-sonnet-5 over half. Raising the cost of
+    answering is not the same as raising the cost of guessing.
+
+    Kept as a condition because what a model writes there says what it
+    thought it was reading, and that is worth being able to ask for."""
     property_text: Mapping[str, str] | None = None
     """What each property name means, for the step that chooses between them.
 
@@ -243,7 +253,7 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
     }
 
 
-def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+def property_schema(offered: Mapping[str, Sequence[str]], evidence: bool = False) -> dict[str, Any]:
     """The answer shape the property step asks for.
 
     One array per entity, whose items enumerate **that entity's own** property
@@ -280,7 +290,7 @@ def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
                     key: {
                         "type": "array",
                         "maxItems": len(names),
-                        "items": {"type": "string", "enum": list(names)},
+                        "items": _property_item(list(names), evidence),
                         "description": f"The properties of {key} the document states a value for.",
                     }
                     for key, names in offered.items()
@@ -290,6 +300,21 @@ def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
             }
         },
         "required": ["fillable"],
+        "additionalProperties": False,
+    }
+
+
+def _property_item(names: list[str], evidence: bool) -> dict[str, Any]:
+    """One answered property, with or without the words that state it."""
+    if not evidence:
+        return {"type": "string", "enum": names}
+    return {
+        "type": "object",
+        "properties": {
+            "property": {"type": "string", "enum": names},
+            "stated": {"type": "string", "description": "The words in the document that state it."},
+        },
+        "required": ["property", "stated"],
         "additionalProperties": False,
     }
 

@@ -78,9 +78,10 @@ _GATE_HINT = "An entity whose class is not in the list will be discarded, so lea
 _PROPERTY_TASK = (
     "Read the document and say, for each entity listed below, which of its own "
     "properties the document states a value for. A property is stated when the "
-    "value itself appears in the text, in some spelling of it. A property the "
-    "document makes likely, or that the entity would usually have, is not "
-    "stated, and neither is one whose value you would have to supply."
+    "value itself appears in the text, in some spelling of it. Answer only "
+    "from what the text in front of you says, never from what you know about "
+    "the subject. A property the document makes likely, or that the entity "
+    "would usually have, or that you could fill from memory, is not stated."
 )
 """The rule the corpus actually applies, said out loud.
 
@@ -88,6 +89,12 @@ Ground truth here is a value whose spelling was found in the document. Six
 models asked a looser question answered it six different ways, which is a
 prompt that has not said what it wants rather than a disagreement between
 models.
+
+Memory is named because agreement showed it at work. Over six models in four
+families, a property all six named was still rejected 29 per cent of the
+time, and the clearest case is ``award`` on a film whose lead mentions no
+award: six models agreeing is evidence about films, not about the document.
+A model reading only the page cannot make that mistake.
 """
 
 _PROPERTY_FORM = (

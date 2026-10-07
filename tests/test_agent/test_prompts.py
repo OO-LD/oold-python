@@ -131,7 +131,13 @@ class TestThePropertyStepStatesBothCosts:
         which is a prompt that has not said what it wants."""
         system = self._system()
         assert "appears in the text, in some spelling of it" in system
-        assert "would usually have, is not" in system
+        assert "would usually have" in system
+
+    def test_it_forbids_answering_from_memory(self):
+        """A property all six models named was still rejected 29 per cent of
+        the time, and the clearest case is an award on a film whose lead
+        mentions none: six models agreeing is evidence about films."""
+        assert "never from what you know about" in self._system()
 
 
 class TestThePropertyStepIsShownWhatTheNamesMean:

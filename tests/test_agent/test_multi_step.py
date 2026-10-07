@@ -74,7 +74,15 @@ PLAN = [
     {"id": "e2", "candidates": ["Organization"], "mention": "Acme"},
 ]
 
-FILLABLE = {"fillable": {"e1": ["name", "worksFor"], "e2": ["name"]}}
+FILLABLE = {
+    "fillable": {
+        "e1": [
+            {"property": "name", "stated": "Ada"},
+            {"property": "worksFor", "stated": "Acme"},
+        ],
+        "e2": [{"property": "name", "stated": "Acme"}],
+    }
+}
 
 EXTRACTED = [
     [{"id": "e1", "type": "Person", "name": "Ada", "worksFor": "e2"}],
@@ -163,9 +171,12 @@ def targets_of(slot):
 
 
 def enums_of(response_format):
-    """The property enumeration each entity was offered, per entity."""
+    """The property enumeration each entity was offered, per entity.
+
+    Each item is the property and the words the document states it in, so the
+    enumeration sits on the property rather than on the item."""
     offered = response_format["properties"]["fillable"]["properties"]
-    return {key: slot["items"]["enum"] for key, slot in offered.items()}
+    return {key: slot["items"]["properties"]["property"]["enum"] for key, slot in offered.items()}
 
 
 class TestTheCallsItMakes:
@@ -753,3 +764,34 @@ def _id_slot(schema):
         if found is not None:
             return found
     return None
+
+
+class TestPointingAtTheText:
+    """The step has to quote the words it read a property from.
+
+    Never validated and never graded: the answer is the property names alone.
+    It is asked for because a model that has to point at the text names fewer
+    properties the text does not support.
+    """
+
+    def test_the_quotation_is_required_of_the_answer(self):
+        from oold.agent.prompts import property_schema
+
+        item = property_schema({"e1": ("name",)})["properties"]["fillable"]["properties"]["e1"]["items"]
+        assert item["required"] == ["property", "stated"]
+
+    def test_the_quotation_is_not_part_of_the_answer(self):
+        client = MultiStepClient(detects=[])
+        plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
+        assert agent(client).fillable_properties(request(), plan) == {"e1": ("name", "worksFor")}
+
+    def test_a_bare_name_is_still_read(self):
+        """A model answering the older shape has answered the question."""
+        client = MultiStepClient(detects=[], fillable={"fillable": {"e1": ["name"]}})
+        plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
+        assert agent(client).fillable_properties(request(), plan) == {"e1": ("name",)}
+
+    def test_an_item_naming_no_property_is_dropped(self):
+        client = MultiStepClient(detects=[], fillable={"fillable": {"e1": [{"stated": "Ada"}]}})
+        plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
+        assert agent(client).fillable_properties(request(), plan) == {"e1": ()}

@@ -755,7 +755,7 @@ class ExtractionAgent:
 
         answered = _fillable_of(reply.parsed if reply.parsed is not None else parse_json_answer(reply.text), available)
         return {
-            key: tuple(name for name in names if name in set(answered.get(key) or ()))
+            key: tuple(name for name in names if name in _named_in(answered.get(key) or ()))
             for key, names in available.items()
         }
 
@@ -1316,6 +1316,25 @@ def _fillable_of(payload: Any, available: dict[str, tuple[str, ...]]) -> dict[st
         if found:
             return found
     return {}
+
+
+def _named_in(answered: Any) -> set[str]:
+    """The property names in one entity's answer.
+
+    Each item is the property and the words the document states it in. The
+    quotation is not read: it is asked for so the step has to point at the
+    text, and reading it would make an unvalidated string part of the answer.
+
+    A bare name is still accepted, because a model that answers the older
+    shape has answered the question.
+    """
+    found: set[str] = set()
+    for item in answered if isinstance(answered, list) else ():
+        if isinstance(item, str):
+            found.add(item)
+        elif isinstance(item, dict) and isinstance(item.get("property"), str):
+            found.add(item["property"])
+    return found
 
 
 def _accepts_null(slot: Any) -> bool:

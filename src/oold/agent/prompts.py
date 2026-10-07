@@ -220,8 +220,15 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
 def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
     """The answer shape the property step asks for.
 
-    One array per entity, whose items enumerate **that entity's own** property
-    names. Pooling every entity's properties into one enumeration would let one
+    One array per entity, whose items name **that entity's own** properties
+    and, with each, the words in the document that state it.
+
+    The quotation is never read: nothing validates it, nothing grades it, and
+    the step's answer is the property names alone. It is asked for because a
+    model that has to point at the text names fewer properties the text does
+    not support. Measured across six models before it existed, every one
+    named more properties than the document states than it missed, by between
+    five and eighteen to one. Pooling every entity's properties into one enumeration would let one
     entity be given another's property, which is the thing a per-entity
     enumeration is for, and it is the same argument that makes the fill step
     group by shortlist rather than pool the candidate classes.
@@ -247,8 +254,19 @@ def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
                     key: {
                         "type": "array",
                         "maxItems": len(names),
-                        "items": {"type": "string", "enum": list(names)},
-                        "description": f"The properties of {key} the document gives a value for.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "property": {"type": "string", "enum": list(names)},
+                                "stated": {
+                                    "type": "string",
+                                    "description": "The words in the document that state it.",
+                                },
+                            },
+                            "required": ["property", "stated"],
+                            "additionalProperties": False,
+                        },
+                        "description": f"The properties of {key} the document states, each with the words stating it.",
                     }
                     for key, names in offered.items()
                 },

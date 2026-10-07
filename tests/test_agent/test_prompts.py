@@ -102,3 +102,30 @@ class TestWhatTheSchemaSectionCarries:
     def test_the_gate_warning_appears_only_with_a_gate(self):
         assert any("discarded" in s for s in sections(arm("schema-dump-catalog-flat-enforced", ("Length",))))
         assert not any("discarded" in s for s in sections(arm("no-catalog-not-enforced")))
+
+
+class TestThePropertyStepStatesBothCosts:
+    """A step told only that omission is irreversible will include when unsure.
+
+    Measured before this: 21 properties named that the document does not
+    state against 6 missed. The prompt named the cost of leaving one out and
+    no cost for putting one in, so the step did what it was told.
+    """
+
+    def _system(self) -> str:
+        from oold.agent.prompts import build_property_messages
+
+        messages = build_property_messages(ExtractionRequest(document="d"), {"e1": ("name", "award")})
+        return messages[0].content
+
+    def test_naming_one_too_many_has_a_stated_cost(self):
+        system = self._system()
+        assert "invented or left empty" in system
+
+    def test_leaving_one_out_still_has_its_cost(self):
+        assert "will not be asked for again" in self._system()
+
+    def test_it_asks_for_what_is_in_the_text_not_what_is_likely(self):
+        """ "The collection of Tate Britain" makes a location likely, which is
+        not the same as the document stating one."""
+        assert "not when the document makes it" in self._system()

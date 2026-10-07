@@ -77,7 +77,9 @@ _GATE_HINT = "An entity whose class is not in the list will be discarded, so lea
 
 _PROPERTY_TASK = (
     "Read the document and say, for each entity listed below, which of its own "
-    "properties the document gives a value for."
+    "properties the document states a value for. A property is stated when the "
+    "value is there in the text to be read, not when the document makes it "
+    "likely or when the entity would usually have one."
 )
 
 _PROPERTY_FORM = (
@@ -86,8 +88,18 @@ _PROPERTY_FORM = (
 )
 
 _PROPERTY_HONESTY = (
-    "Leave out a property whose value you would have to invent. A property you leave out will not be asked for again."
+    "Both ways of being wrong cost something. A property you leave out will not be asked for again, "
+    "so a value that is there is lost. A property you name will be asked for next, and if the "
+    "document does not state it the answer has to be invented or left empty. Name the ones you "
+    "could point at in the text."
 )
+"""Both costs, because naming one was the only one stated.
+
+Measured on the Wikidata-schema.org corpus at gpt-5-nano: 21 properties
+named that the document does not state against 6 missed, better than three
+to one. A step told only that omission is irreversible has been told to
+include when unsure, which is what it did.
+"""
 
 _PROPERTY_ENTITIES = "The entities, with the properties each one may carry:"
 

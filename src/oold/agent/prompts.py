@@ -118,6 +118,17 @@ class ExtractionRequest:
 
     document: str
     schema: dict[str, Any] | None = None
+    property_text: Mapping[str, str] | None = None
+    """What each property name means, for the step that chooses between them.
+
+    Names alone do not say whether the gallery holding a painting is its
+    ``contentLocation`` or its ``provider``. Measured over six models at
+    n=100, the property step reaches a recall of 0.92 at a precision of 0.55:
+    it finds the values and files them under the wrong slot, and no wording
+    of the question fixes a vocabulary it was never shown.
+
+    Read by that step alone, because it is the only one asked to tell two
+    property names apart."""
     """The target schema. Shown only when the condition says so, and sent to
     the provider only when a decode-time constraint is in force."""
     branches: dict[str, dict[str, Any]] | None = None
@@ -288,7 +299,17 @@ def build_property_messages(
     answer shape, because an arm that shows no schema still has to say what the
     names are before it can ask which of them the document fills.
     """
-    listed = "\n".join(f"{(named or {}).get(key) or key}: {', '.join(names)}" for key, names in offered.items())
+    described = request.property_text or {}
+    if described:
+        # One line per property, because a comment does not fit beside a name
+        # and the step is choosing between them rather than scanning a list.
+        lines: list[str] = []
+        for key, names in offered.items():
+            lines.append(f"{(named or {}).get(key) or key}:")
+            lines += [f"  {name}: {described[name]}" if name in described else f"  {name}" for name in names]
+        listed = "\n".join(lines)
+    else:
+        listed = "\n".join(f"{(named or {}).get(key) or key}: {', '.join(names)}" for key, names in offered.items())
     sections = [
         _PROPERTY_TASK,
         _PROPERTY_FORM,

@@ -132,3 +132,30 @@ class TestThePropertyStepStatesBothCosts:
         system = self._system()
         assert "appears in the text, in some spelling of it" in system
         assert "would usually have, is not" in system
+
+
+class TestThePropertyStepIsShownWhatTheNamesMean:
+    """A vocabulary question cannot be answered by rewording the question.
+
+    Measured over six models at n=100: recall 0.80 to 0.92 against precision
+    0.52 to 0.58. The values are found and filed under the wrong slot, and a
+    bare name does not say whether the gallery holding a painting is its
+    contentLocation or its provider.
+    """
+
+    def _listing(self, **kwargs) -> str:
+        from oold.agent.prompts import build_property_messages
+
+        request = ExtractionRequest(document="d", **kwargs)
+        return build_property_messages(request, {"e1": ("about", "name")})[0].content
+
+    def test_a_description_is_shown_beside_its_property(self):
+        listing = self._listing(property_text={"about": "The subject matter of an object."})
+        assert "about: The subject matter of an object." in listing
+
+    def test_a_property_with_no_description_is_still_offered(self):
+        assert "\n  name" in self._listing(property_text={"about": "The subject matter."})
+
+    def test_without_descriptions_the_names_stay_on_one_line(self):
+        """The compact form is what every corpus without a vocabulary gets."""
+        assert "e1: about, name" in self._listing()

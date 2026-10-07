@@ -171,12 +171,9 @@ def targets_of(slot):
 
 
 def enums_of(response_format):
-    """The property enumeration each entity was offered, per entity.
-
-    Each item is the property and the words the document states it in, so the
-    enumeration sits on the property rather than on the item."""
+    """The property enumeration each entity was offered, per entity."""
     offered = response_format["properties"]["fillable"]["properties"]
-    return {key: slot["items"]["properties"]["property"]["enum"] for key, slot in offered.items()}
+    return {key: slot["items"]["enum"] for key, slot in offered.items()}
 
 
 class TestTheCallsItMakes:
@@ -766,21 +763,22 @@ def _id_slot(schema):
     return None
 
 
-class TestPointingAtTheText:
-    """The step has to quote the words it read a property from.
+class TestReadingTheAnswer:
+    """Names alone, and an answer that carries more is still read.
 
-    Never validated and never graded: the answer is the property names alone.
-    It is asked for because a model that has to point at the text names fewer
-    properties the text does not support.
+    A quotation was required for a while, to make the step point at the text.
+    It did not reduce invention and it cost the cautious models their recall,
+    so the schema asks for names; the reader stays tolerant because a model
+    may volunteer more than it was asked for.
     """
 
-    def test_the_quotation_is_required_of_the_answer(self):
+    def test_the_answer_is_names_alone(self):
         from oold.agent.prompts import property_schema
 
         item = property_schema({"e1": ("name",)})["properties"]["fillable"]["properties"]["e1"]["items"]
-        assert item["required"] == ["property", "stated"]
+        assert item == {"type": "string", "enum": ["name"]}
 
-    def test_the_quotation_is_not_part_of_the_answer(self):
+    def test_an_answer_carrying_a_quotation_is_still_read(self):
         client = MultiStepClient(detects=[])
         plan = (PlannedEntity(key="e1", classes=("Person",), mention="Ada"),)
         assert agent(client).fillable_properties(request(), plan) == {"e1": ("name", "worksFor")}

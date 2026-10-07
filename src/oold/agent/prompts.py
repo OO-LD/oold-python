@@ -78,9 +78,17 @@ _GATE_HINT = "An entity whose class is not in the list will be discarded, so lea
 _PROPERTY_TASK = (
     "Read the document and say, for each entity listed below, which of its own "
     "properties the document states a value for. A property is stated when the "
-    "value is there in the text to be read, not when the document makes it "
-    "likely or when the entity would usually have one."
+    "value itself appears in the text, in some spelling of it. A property the "
+    "document makes likely, or that the entity would usually have, is not "
+    "stated, and neither is one whose value you would have to supply."
 )
+"""The rule the corpus actually applies, said out loud.
+
+Ground truth here is a value whose spelling was found in the document. Six
+models asked a looser question answered it six different ways, which is a
+prompt that has not said what it wants rather than a disagreement between
+models.
+"""
 
 _PROPERTY_FORM = (
     "Answer with JSON only. Give one list of property names per entity, under that entity's id, "
@@ -220,15 +228,15 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
 def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
     """The answer shape the property step asks for.
 
-    One array per entity, whose items name **that entity's own** properties
-    and, with each, the words in the document that state it.
+    One array per entity, whose items enumerate **that entity's own** property
+    names.
 
-    The quotation is never read: nothing validates it, nothing grades it, and
-    the step's answer is the property names alone. It is asked for because a
-    model that has to point at the text names fewer properties the text does
-    not support. Measured across six models before it existed, every one
-    named more properties than the document states than it missed, by between
-    five and eighteen to one. Pooling every entity's properties into one enumeration would let one
+    Names alone. Asking for the words that state each property as well does
+    not reduce invention and costs recall: measured over six models,
+    deepseek-v3.2 and gpt-5-nano invented *more* with a quotation required,
+    while gpt-oss-120b lost a third of its correct answers and
+    claude-sonnet-5 over half. Raising the cost of answering is not the same
+    as raising the cost of guessing. Pooling every entity's properties into one enumeration would let one
     entity be given another's property, which is the thing a per-entity
     enumeration is for, and it is the same argument that makes the fill step
     group by shortlist rather than pool the candidate classes.
@@ -254,19 +262,8 @@ def property_schema(offered: Mapping[str, Sequence[str]]) -> dict[str, Any]:
                     key: {
                         "type": "array",
                         "maxItems": len(names),
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "property": {"type": "string", "enum": list(names)},
-                                "stated": {
-                                    "type": "string",
-                                    "description": "The words in the document that state it.",
-                                },
-                            },
-                            "required": ["property", "stated"],
-                            "additionalProperties": False,
-                        },
-                        "description": f"The properties of {key} the document states, each with the words stating it.",
+                        "items": {"type": "string", "enum": list(names)},
+                        "description": f"The properties of {key} the document states a value for.",
                     }
                     for key, names in offered.items()
                 },

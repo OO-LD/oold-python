@@ -125,7 +125,10 @@ class TestThePropertyStepStatesBothCosts:
     def test_leaving_one_out_still_has_its_cost(self):
         assert "will not be asked for again" in self._system()
 
-    def test_it_asks_for_what_is_in_the_text_not_what_is_likely(self):
-        """ "The collection of Tate Britain" makes a location likely, which is
-        not the same as the document stating one."""
-        assert "not when the document makes it" in self._system()
+    def test_it_states_the_rule_the_corpus_applies(self):
+        """Ground truth is a value whose spelling was found in the document.
+        Six models asked a looser question answered it six different ways,
+        which is a prompt that has not said what it wants."""
+        system = self._system()
+        assert "appears in the text, in some spelling of it" in system
+        assert "would usually have, is not" in system

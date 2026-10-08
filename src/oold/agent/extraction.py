@@ -293,8 +293,69 @@ class ExtractionAgent:
         With a plan, the id slot is pinned to ``filling`` and a reference slot
         to the planned entities whose class fits its range, which is what
         makes an edge nameable. Without one, this is the single-shot arm.
+
+        Narrows nothing else. ``self.enforcement.catalogue`` is whatever the
+        caller built the agent with, so a plan naming one true class still
+        sends the whole catalogue's union unless that catalogue was already
+        narrowed before this call. :meth:`extract_narrowed` is the door for a
+        caller that knows the true class, the true properties, or both, and
+        wants the request to say so instead of asking the model to rediscover
+        what the plan already answers.
         """
         return self._single_shot(request, plan=plan, filling=filling)
+
+    def extract_narrowed(
+        self,
+        request: ExtractionRequest,
+        *,
+        plan: tuple[PlannedEntity, ...],
+        filling: tuple[str, ...],
+        classes: tuple[str, ...],
+        properties: tuple[str, ...] | None = None,
+    ) -> ExtractionResult:
+        """Step three, given the classes and (optionally) the properties a
+        plan already settled, rather than left for this call to answer again.
+
+        ``_multi_step`` narrows its own groups exactly this way, by
+        ``(classes, chosen_properties)``, before ever calling the single-shot
+        filler. A caller that already holds that pair from its own oracle, a
+        corpus's expected classes and fields rather than another step's
+        output, had no public way to send the same narrowed request: calling
+        :meth:`extract` instead sends every class and every property the
+        condition's catalogue carries, so a class the plan already settled is
+        still something the model can get wrong, and a property the plan
+        never named is still something the model can invent a value for.
+
+        ``classes`` narrows the catalogue the union is built from, the same
+        way :meth:`enforcement.Enforcement.with_catalogue` does for a
+        catalogue-size sweep. ``properties`` is the stricter half: left
+        ``None``, every property the narrowed classes admit stays offered;
+        given, the answer shape is trimmed to exactly those, plus whatever
+        ``_trim_properties`` keeps regardless (the class and id slots), the
+        same trim :meth:`_multi_step` applies to its own groups.
+        """
+        narrowed = self.enforcement.with_catalogue(classes)
+        filler = ExtractionAgent(
+            self.client,
+            narrowed,
+            self.profile,
+            attempts=self.attempts,
+            close_properties=self.close_properties,
+        )
+        keep = set(properties) if properties is not None else None
+        step = (
+            request
+            if keep is None
+            else ExtractionRequest(
+                document=request.document,
+                schema=_trim_properties(request.schema, keep),
+                branches=_trim_branches(request.branches, keep),
+                parents=request.parents,
+                ranges=request.ranges,
+                instruction=request.instruction,
+            )
+        )
+        return filler._single_shot(step, plan=plan, filling=filling)
 
     def _single_shot(
         self,

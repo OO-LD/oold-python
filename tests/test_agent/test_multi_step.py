@@ -629,6 +629,43 @@ class TestWhatItShares:
         assert "points at" not in client.messages[2][0].content
 
 
+class TestWhatTheDocumentCalledIt:
+    """The mention the plan read, carried out of the whole run.
+
+    ``identify`` returns it to a caller running one step. A caller running the
+    orchestration had no way to the same answer, and it is the only one there
+    is where the property step declines the slot that would hold the name:
+    asked about "Jane works at ExampleCorp", claude-haiku-4-5 chooses
+    ``worksFor`` and ``employee`` on 8 of 8 runs and ``name`` on none of them,
+    which is defensible, since the sentence states an employment relation and
+    not anybody's name.
+    """
+
+    def test_the_plan_step_mention_survives_the_run(self):
+        client = MultiStepClient()
+        result = agent(client).run(request())
+        assert result.mentions == {"e1": "Ada", "e2": "Acme"}
+
+    def test_it_survives_a_property_step_that_declines_the_name(self):
+        client = MultiStepClient(
+            fillable={"fillable": {"e1": ["worksFor"], "e2": []}},
+            answers=[[{"id": "e1", "type": "Person", "worksFor": "e2"}], [{"id": "e2", "type": "Organization"}]],
+        )
+        result = agent(client).run(request())
+        assert all("name" not in entity for entity in result.payload["entities"])
+        assert result.mentions == {"e1": "Ada", "e2": "Acme"}
+
+    def test_a_plan_placing_nothing_still_reports_what_it_read(self):
+        client = MultiStepClient(plan=[{"id": "e1", "candidates": [], "mention": "Ada"}])
+        result = agent(client).run(request())
+        assert result.payload is None
+        assert result.mentions == {"e1": "Ada"}
+
+    def test_the_record_says_it(self):
+        client = MultiStepClient()
+        assert agent(client).run(request()).describe()["mentions"] == {"e1": "Ada", "e2": "Acme"}
+
+
 class TestAskingForWhatTheDocumentDoesNotSay:
     """A required property the property step left out is a question, not a guess."""
 

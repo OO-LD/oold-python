@@ -105,6 +105,20 @@ class ExtractionResult:
     Recorded so a two-step failure can be attributed to a step. Without it,
     the true class never being offered and the fill step choosing wrongly from
     a shortlist that contained it look like the same failure."""
+    mentions: dict[str, str] = field(default_factory=dict)
+    """The words the plan step read each entity from, per entity.
+
+    The same answer :meth:`ExtractionAgent.identify` returns, kept on the
+    result so an orchestration run whole reports it too. It is the only record
+    of what the document called an entity: a later step may decline to fill
+    the property that would carry the name, and "Jane works at ExampleCorp"
+    states an employment relation without stating that Jane's name is Jane, so
+    both ``claude-haiku-4-5`` and ``gpt-5-nano`` choose ``worksFor`` and
+    ``employee`` over ``name``. A caller that wants to show the entity to a
+    reader has this and the local key, and only this one designates anything.
+
+    Empty for an orchestration with no plan step, which has nowhere to read a
+    mention from, rather than filled with a guess."""
     prompt_sha256: str | None = None
     """Hash of the turns actually sent, folding included. Hashing the document
     instead would say two models got the same prompt when one of them had the
@@ -148,6 +162,7 @@ class ExtractionResult:
             "schema_sha256": self.schema_sha256,
             "prompt_sha256": self.prompt_sha256,
             "selected": {k: list(v) for k, v in self.selected.items()},
+            "mentions": dict(self.mentions),
             "properties_chosen": {k: list(v) for k, v in self.properties_chosen.items()},
             "dropped": list(self.dropped),
             "invalid": list(self.invalid),
@@ -478,6 +493,7 @@ class ExtractionAgent:
                 payload=None,
                 calls=log,
                 selected=selected,
+                mentions=dict(self._mentions),
             )
 
         # One call per distinct shortlist, not one per document. Pooling every
@@ -509,10 +525,13 @@ class ExtractionAgent:
             last = outcome
 
         if last is None:
-            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+            return ExtractionResult(
+                text=text, payload=None, calls=log, selected=selected, mentions=dict(self._mentions)
+            )
         last.payload = {"entities": merged} if merged else None
         last.calls = log
         last.selected = selected
+        last.mentions = dict(self._mentions)
         return last
 
     def _fill_instruction(
@@ -565,7 +584,9 @@ class ExtractionAgent:
             if entity.classes:
                 groups.setdefault(entity.classes, []).append(entity.key)
         if not groups:
-            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+            return ExtractionResult(
+                text=text, payload=None, calls=log, selected=selected, mentions=dict(self._mentions)
+            )
 
         merged: list[Any] = []
         unpinned: list[str] = []
@@ -589,11 +610,14 @@ class ExtractionAgent:
             last = outcome
 
         if last is None:
-            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+            return ExtractionResult(
+                text=text, payload=None, calls=log, selected=selected, mentions=dict(self._mentions)
+            )
         links, dangling = _edges_of(merged, request.ranges)
         last.payload = {"entities": merged} if merged else None
         last.calls = log
         last.selected = selected
+        last.mentions = dict(self._mentions)
         last.links = links
         last.dangling = dangling
         last.unpinned = unpinned
@@ -664,7 +688,9 @@ class ExtractionAgent:
         )
         placed = tuple(entity for entity in plan if entity.classes)
         if not placed:
-            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+            return ExtractionResult(
+                text=text, payload=None, calls=log, selected=selected, mentions=dict(self._mentions)
+            )
 
         chosen = self._choose_properties(request, log, placed, self._available_properties(request, placed))
         required = _required_properties(request.schema)
@@ -702,11 +728,14 @@ class ExtractionAgent:
             last = outcome
 
         if last is None:
-            return ExtractionResult(text=text, payload=None, calls=log, selected=selected)
+            return ExtractionResult(
+                text=text, payload=None, calls=log, selected=selected, mentions=dict(self._mentions)
+            )
         links, dangling = _edges_of(merged, request.ranges)
         last.payload = {"entities": merged} if merged else None
         last.calls = log
         last.selected = selected
+        last.mentions = dict(self._mentions)
         last.properties_chosen = chosen
         last.links = links
         last.dangling = dangling

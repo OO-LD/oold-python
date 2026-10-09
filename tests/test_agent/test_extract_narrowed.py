@@ -82,7 +82,9 @@ def request() -> ExtractionRequest:
 
 
 def branch_names(response_format) -> set[str]:
-    return {branch["properties"]["type"]["const"] for branch in response_format["properties"]["entities"]["items"]["anyOf"]}
+    return {
+        branch["properties"]["type"]["const"] for branch in response_format["properties"]["entities"]["items"]["anyOf"]
+    }
 
 
 def branch_properties(response_format, name: str) -> set[str]:
@@ -95,8 +97,10 @@ class TestExtractNarrowed:
     def test_the_union_is_narrowed_to_the_given_class(self):
         client = RecordingClient({"entities": [{"id": "e1", "type": "Person", "name": "Ada"}]})
         result = agent(client).extract_narrowed(
-            request(), plan=(PlannedEntity(key="e1", classes=("Person",), mention="Ada"),),
-            filling=("e1",), classes=("Person",),
+            request(),
+            plan=(PlannedEntity(key="e1", classes=("Person",), mention="Ada"),),
+            filling=("e1",),
+            classes=("Person",),
         )
         assert result.payload is not None
         assert branch_names(client.formats[0]) == {"Person"}
@@ -112,8 +116,10 @@ class TestExtractNarrowed:
     def test_properties_none_keeps_every_property_the_narrowed_class_admits(self):
         client = RecordingClient({"entities": [{"id": "e1", "type": "Person", "name": "Ada", "jobTitle": "Engineer"}]})
         agent(client).extract_narrowed(
-            request(), plan=(PlannedEntity(key="e1", classes=("Person",), mention="Ada"),),
-            filling=("e1",), classes=("Person",),
+            request(),
+            plan=(PlannedEntity(key="e1", classes=("Person",), mention="Ada"),),
+            filling=("e1",),
+            classes=("Person",),
         )
         assert branch_properties(client.formats[0], "Person") >= {"jobTitle", "worksFor", "name"}
 
@@ -135,8 +141,10 @@ class TestExtractNarrowed:
         """Narrowing the class must not cost what `extract()` already pins."""
         client = RecordingClient({"entities": [{"id": "e1", "type": "Person", "name": "Ada"}]})
         agent(client).extract_narrowed(
-            request(), plan=(PlannedEntity(key="e1", classes=("Person",), mention="Ada"),),
-            filling=("e1",), classes=("Person",),
+            request(),
+            plan=(PlannedEntity(key="e1", classes=("Person",), mention="Ada"),),
+            filling=("e1",),
+            classes=("Person",),
         )
         branches = client.formats[0]["properties"]["entities"]["items"]["anyOf"]
         assert all(branch["properties"]["id"]["enum"] == ["e1"] for branch in branches)

@@ -139,10 +139,10 @@ class MultiStepClient:
         )
 
 
-def agent(client, name="schema-dump-catalog-flat-enforced", profile="openai", k=2, **kwargs):
+def agent(client, name="schema-dump-catalog-flat-enforced", profile="openai", k=2, catalogue=CATALOGUE, **kwargs):
     return ExtractionAgent(
         client,
-        arm(name, CATALOGUE),
+        arm(name, catalogue),
         profile_for(profile),
         Orchestration.MULTI_STEP,
         shortlist_k=k,
@@ -1097,3 +1097,249 @@ class TestAnEmbeddedEntityIsConstrainedToo:
             },
         }
         assert len(_entity_shapes(flat)) == 1
+
+
+EMBEDDED_ADDRESS = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string"},
+            "id": {"type": "string"},
+            "streetAddress": {"type": "string"},
+        },
+    },
+}
+"""An embedding: an object with keys to write the entity into.
+
+What `worksFor` and `author` in the fixture above are not. A link is declared
+`{"type": "object"}` and nothing more, which carries the edge and leaves the
+target's own properties to the branch the catalogue holds for its class."""
+
+EMBEDDING_CATALOGUE = (*CATALOGUE, "PostalAddress")
+
+EMBEDDING_BRANCHES = {
+    **BRANCHES,
+    "Person": {**BRANCHES["Person"], "address": EMBEDDED_ADDRESS},
+    "PostalAddress": {"streetAddress": {"type": "string"}},
+}
+
+EMBEDDING_PARENTS = {**PARENTS, "PostalAddress": ("Thing",)}
+
+EMBEDDING_RANGES = {**RANGES, "address": ("PostalAddress",)}
+
+EMBEDDING_SCHEMA = {
+    **SCHEMA,
+    "properties": {
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    **SCHEMA["properties"]["entities"]["items"]["properties"],
+                    "address": EMBEDDED_ADDRESS,
+                },
+                "required": ["type"],
+            },
+        }
+    },
+}
+
+EMBEDDING_DOCUMENT = "Andrea lives at Hauptstrasse 1, Berlin."
+
+EMBEDDING_PLAN = [
+    {"id": "e1", "candidates": ["Person"], "mention": "Andrea"},
+    {"id": "e3", "candidates": ["PostalAddress"], "mention": "Hauptstrasse 1"},
+]
+
+EMBEDDING_ANSWER = [
+    [
+        {
+            "id": "e1",
+            "type": "Person",
+            "name": "Andrea",
+            "address": [{"id": "e3", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
+        }
+    ]
+]
+
+
+def embedding_request():
+    return ExtractionRequest(
+        document=EMBEDDING_DOCUMENT,
+        schema=EMBEDDING_SCHEMA,
+        branches=EMBEDDING_BRANCHES,
+        parents=EMBEDDING_PARENTS,
+        ranges=EMBEDDING_RANGES,
+    )
+
+
+def embedded_in(response_format, name="address"):
+    """The entity shape an embedding slot carries, inside the holder's."""
+    return items_of(response_format)["properties"][name]["items"]
+
+
+class TestAnEmbeddingAbsorbsThePlannedEntity:
+    """Choosing an embedding is choosing not to have that thing as a sibling.
+
+    The property step is offered the object-valued slots beside the link ones
+    and does not take them. On "Andrea lives at Hauptstrasse 1, Berlin" with
+    claude-haiku-4-5 and a catalogue holding `PostalAddress`, the step chooses
+    `homeLocation`, `workLocation` and `worksFor` out of 59 properties and
+    never `address`, because the plan has already made the address an entity
+    with an id of its own and the fill step is told to report every planned
+    entity under the id given. Choosing the embedding would mean reporting the
+    same thing twice. Offered a catalogue in which no separate address can be
+    planned, the same model fills `address` with a nested object first time.
+    """
+
+    def run(self, fillable=None, plan=None, answers=None):
+        client = MultiStepClient(
+            plan=EMBEDDING_PLAN if plan is None else plan,
+            fillable=fillable or {"fillable": {"e1": ["name", "address"], "e3": ["streetAddress"]}},
+            answers=EMBEDDING_ANSWER if answers is None else answers,
+        )
+        result = agent(client, catalogue=EMBEDDING_CATALOGUE).run(embedding_request())
+        return client, result
+
+    def test_an_entity_a_chosen_embedding_absorbs_leaves_the_top_level_plan(self):
+        client, result = self.run()
+        assert result.absorbed == {"e3": "e1"}
+        assert client.calls == 3, "the absorbed entity no longer has an extract call of its own"
+
+    def test_the_holder_is_the_only_entity_the_extract_call_is_asked_to_report(self):
+        client, _ = self.run()
+        assert 'under the id given here: e1 ("Andrea").' in client.messages[2][0].content
+
+    def test_the_absorbed_entity_keeps_the_id_it_was_planned_under(self):
+        """The embedded object carries an id as a top-level one does, and
+        anything may still point at it, so the id slot has to offer it."""
+        client, result = self.run()
+        assert embedded_in(client.formats[2])["properties"]["id"]["enum"] == ["e1", "e3"]
+        assert result.selected["e3"] == ("PostalAddress",)
+        assert result.mentions["e3"] == "Hauptstrasse 1"
+
+    def test_the_call_that_holds_it_is_given_the_properties_it_fills(self):
+        """The trim reaches every shape in the answer, the embedded one
+        included, so a call keeping the holder's properties alone would leave
+        the absorbed entity with a class and an id and nowhere to put its
+        value."""
+        client, _ = self.run()
+        assert "streetAddress" in embedded_in(client.formats[2])["properties"]
+        assert "streetAddress" not in items_of(client.formats[2])["properties"]
+
+    def test_the_absorbed_entity_is_reported_inside_its_holder(self):
+        _, result = self.run()
+        assert [entity["id"] for entity in result.payload["entities"]] == ["e1"]
+        assert result.payload["entities"][0]["address"][0]["id"] == "e3"
+
+    def test_an_entity_no_chosen_embedding_can_absorb_stays_at_the_top_level(self):
+        """The step declining the embedding leaves the plan as it was. What it
+        chose is the measurement, and a pipeline that absorbed on its own
+        behalf would be answering the question the step was asked."""
+        client, result = self.run(
+            fillable={"fillable": {"e1": ["name"], "e3": ["streetAddress"]}},
+            answers=[
+                [{"id": "e1", "type": "Person", "name": "Andrea"}],
+                [{"id": "e3", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
+            ],
+        )
+        assert result.absorbed == {}
+        assert client.calls == 4
+        assert sorted(entity["id"] for entity in result.payload["entities"]) == ["e1", "e3"]
+
+    def test_an_entity_two_holders_could_absorb_stays_at_the_top_level(self):
+        """Which of them the document put it inside is a question the document
+        already answered, and picking one would be inventing an answer."""
+        _, result = self.run(
+            plan=[
+                {"id": "e1", "candidates": ["Person"], "mention": "Andrea"},
+                {"id": "e2", "candidates": ["Person"], "mention": "Bert"},
+                {"id": "e3", "candidates": ["PostalAddress"], "mention": "Hauptstrasse 1"},
+            ],
+            fillable={"fillable": {"e1": ["address"], "e2": ["address"], "e3": ["streetAddress"]}},
+            answers=[
+                [{"id": "e1", "type": "Person"}, {"id": "e2", "type": "Person"}],
+                [{"id": "e3", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
+            ],
+        )
+        assert result.absorbed == {}
+        assert sorted(entity["id"] for entity in result.payload["entities"]) == ["e1", "e2", "e3"]
+
+    def test_two_entities_that_could_absorb_each_other_both_stay(self):
+        """Two embeddings pointing at each other is not a chain. Written out,
+        each would sit inside the other and the answer would have nothing at
+        the top level at all."""
+        from oold.agent.extraction import _absorbed_by
+
+        colleague = {
+            "type": "object",
+            "properties": {"type": {"type": "string"}, "id": {"type": "string"}, "name": {"type": "string"}},
+        }
+        schema = {
+            "type": "object",
+            "properties": {
+                "entities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"type": {"type": "string"}, "id": {"type": "string"}, "colleague": colleague},
+                    },
+                }
+            },
+        }
+        plan = (
+            PlannedEntity(key="e1", classes=("Person",), mention="Ada"),
+            PlannedEntity(key="e2", classes=("Person",), mention="Grace"),
+        )
+        chosen = {"e1": ("colleague",), "e2": ("colleague",)}
+        assert _absorbed_by(schema, plan, chosen, {"colleague": ("Person",)}, PARENTS) == {}
+
+    def test_an_edge_reaching_an_entity_written_inside_another_is_not_dangling(self):
+        """It was reported, under the id it was planned under. Reading the top
+        level alone would count every edge into an absorbed entity a miss."""
+        from oold.agent.extraction import _edges_of
+
+        answered = [
+            {"id": "e1", "type": "Person", "address": [{"id": "e3", "type": "PostalAddress"}]},
+            {"id": "e2", "type": "Person", "worksFor": "e3"},
+        ]
+        links, dangling = _edges_of(answered, {"worksFor": ("PostalAddress",)})
+        assert links == [Edge(source="e2", prop="worksFor", target="e3")]
+        assert dangling == []
+
+    def test_the_record_is_serialisable(self):
+        _, result = self.run()
+        described = result.describe()
+        assert json.dumps(described)
+        assert described["absorbed"] == {"e3": "e1"}
+
+
+class TestASchemaThatOffersNoObjectSlot:
+    """Nothing about the existing behaviour may change where there is no
+    embedding to choose, which is every corpus that declares its node-valued
+    properties as plain links."""
+
+    def test_a_link_declared_as_a_bare_object_is_not_an_embedding(self):
+        """`{"type": "object"}` is what a plain link is declared as. It holds
+        no key to write a value under, so an entity absorbed into it would
+        have nowhere to go."""
+        from oold.agent.extraction import _embedded_properties
+
+        assert _embedded_properties(SCHEMA) == set()
+
+    def test_an_object_with_properties_of_its_own_is_one(self):
+        from oold.agent.extraction import _embedded_properties
+
+        assert _embedded_properties(EMBEDDING_SCHEMA) == {"address"}
+
+    def test_the_run_makes_the_calls_it_made_before_and_absorbs_nothing(self):
+        client = MultiStepClient()
+        result = agent(client).run(request())
+        assert result.absorbed == {}
+        assert client.calls == 4
+        assert items_of(client.formats[2])["properties"]["id"]["enum"] == ["e1"]
+        assert items_of(client.formats[3])["properties"]["id"]["enum"] == ["e2"]
+        assert sorted(entity["id"] for entity in result.payload["entities"]) == ["e1", "e2"]
+        assert result.properties_chosen == {"e1": ("name", "worksFor"), "e2": ("name",)}
+        assert result.links == [Edge(source="e1", prop="worksFor", target="e2")]

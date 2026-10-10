@@ -160,6 +160,15 @@ class ExtractionResult:
     way :attr:`unpinned` records a slot the pin could not reach. It is the
     complement of :attr:`properties_chosen`: a name in one was the step's
     answer, a key in this one was the plan's."""
+    absorbed: dict[str, str] = field(default_factory=dict)
+    """The entities an embedding folded into another, and which one holds each.
+
+    Planned and then written inside something else, which is a different thing
+    from never having been planned and has to be readable as such: the id is in
+    :attr:`selected` and in :attr:`mentions` and nothing at the top level
+    answers under it. Recorded for the reason :attr:`named` and
+    :attr:`unpinned` are, that a rule which moves a slot or an entity against
+    a step's own answer says so rather than acting silently."""
 
     @property
     def parsed(self) -> bool:
@@ -174,6 +183,7 @@ class ExtractionResult:
             "mentions": dict(self.mentions),
             "properties_chosen": {k: list(v) for k, v in self.properties_chosen.items()},
             "named": list(self.named),
+            "absorbed": dict(self.absorbed),
             "dropped": list(self.dropped),
             "invalid": list(self.invalid),
             "repairs": self.repairs,
@@ -706,6 +716,11 @@ class ExtractionAgent:
         step-two failure inside step three. The one slot the plan can put back
         is the name, and it puts it back on its own evidence rather than the
         step's: see :meth:`_filling`.
+
+        Choosing an embedding is choosing not to have that thing as a sibling,
+        so an entity a chosen embedding absorbs is dropped from the groups and
+        the call holding it is given its ids and its properties instead: see
+        :func:`_absorbed_by`.
         """
         log = CallLog()
         self._mentions = {}
@@ -723,25 +738,37 @@ class ExtractionAgent:
         available = self._available_properties(request, placed)
         chosen = self._choose_properties(request, log, placed, available)
         filling, named = self._filling(placed, available, chosen)
+        absorbed = _absorbed_by(request.schema, placed, chosen, request.ranges, request.parents)
+        inside = _inside(absorbed, filling)
         required = _required_properties(request.schema)
 
         # Grouped by shortlist and by the properties the call fills together,
         # where segmented groups by shortlist alone. The extra key is the same
         # argument one step on: entities sharing a call share the schema that
         # call is sent, so two that fill different properties can no more share
-        # one than two that shortlisted different classes.
-        groups: dict[tuple[tuple[str, ...], tuple[str, ...]], list[str]] = {}
+        # one than two that shortlisted different classes. The properties an
+        # absorbed entity brings are a third key for that same reason.
+        groups: dict[tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]], list[str]] = {}
         for entity in placed:
-            groups.setdefault((entity.classes, filling.get(entity.key, ())), []).append(entity.key)
+            if entity.key in absorbed:
+                continue
+            key = (entity.classes, filling.get(entity.key, ()), inside.get(entity.key, ()))
+            groups.setdefault(key, []).append(entity.key)
 
         merged: list[Any] = []
         unpinned: list[str] = []
         last: ExtractionResult | None = None
-        for (classes, kept), keys in groups.items():
+        for (classes, kept, held), keys in groups.items():
             narrowed = self.enforcement.with_catalogue(classes)
             filler = ExtractionAgent(self.client, narrowed, self.profile, attempts=self.attempts)
             wanted = self._ask_for(keys, frozenset(required).difference(kept))
-            keep = set(kept) | required.intersection(wanted)
+            keep = set(kept) | set(held) | required.intersection(wanted)
+            # The ids this call may state, which is the ones it reports plus
+            # the ones it writes inside them. An absorbed entity still answers
+            # under the id it was planned under, so the id slot has to offer it
+            # and the ownership filter has to let it through.
+            owned = set(keys)
+            states = [*keys, *(one for one, holder in absorbed.items() if holder in owned)]
             step = ExtractionRequest(
                 document=request.document,
                 schema=_trim_properties(request.schema, keep) if self.close_properties else request.schema,
@@ -750,10 +777,10 @@ class ExtractionAgent:
                 ranges=request.ranges,
                 instruction=self._extract_instruction(request, plan, keys, kept),
             )
-            outcome = filler._single_shot(step, plan=plan, filling=tuple(keys))
+            outcome = filler._single_shot(step, plan=plan, filling=tuple(states))
             for call in outcome.calls:
                 log.append(replace(call, step="extract"))
-            merged.extend(_owned_by(_entities_of(outcome.payload), keys))
+            merged.extend(_owned_by(_entities_of(outcome.payload), states))
             unpinned.extend(name for name in outcome.unpinned if name not in unpinned)
             last = outcome
 
@@ -768,6 +795,7 @@ class ExtractionAgent:
         last.mentions = dict(self._mentions)
         last.properties_chosen = chosen
         last.named = named
+        last.absorbed = absorbed
         last.links = links
         last.dangling = dangling
         last.unpinned = unpinned
@@ -1241,6 +1269,13 @@ class ExtractionAgent:
         answer surface can lose one legitimately, by a catalogue trim upstream
         or by a provider's optional-property limit, and a slot that is not
         offered is not a slot left open.
+
+        So is a slot the schema declares as an object with properties of its
+        own. That is where an entity is written, not where one is named, and
+        an enum of ids would replace the shape holding it with a string: the
+        same range read as a link. It is not reported as left open either,
+        because a slot that was never a reference is not a reference the pin
+        could not reach.
         """
         if not ranges:
             return schema, []
@@ -1251,7 +1286,11 @@ class ExtractionAgent:
         lineage = {name: tuple(values) for name, values in (parents or {}).items()}
         unpinned: list[str] = []
         for name, admitted in ranges.items():
-            carrying = [shape for shape in shapes if name in (shape.get("properties") or {})]
+            carrying = [
+                shape
+                for shape in shapes
+                if name in (shape.get("properties") or {}) and not _holds_an_object(shape["properties"][name])
+            ]
             if not carrying:
                 continue
             targets = _compatible_ids(plan, admitted, lineage)
@@ -1537,6 +1576,18 @@ def _entity_id(entity: Any) -> str | None:
     return None
 
 
+def _emitted_ids(node: Any) -> set[str]:
+    """Every id the answer states, wherever in it the entity was written."""
+    if isinstance(node, list):
+        return {found for item in node for found in _emitted_ids(item)}
+    if not isinstance(node, dict):
+        return set()
+    found = {stated} if (stated := _entity_id(node)) is not None else set()
+    for value in node.values():
+        found |= _emitted_ids(value)
+    return found
+
+
 def _descends(name: str, admitted: set[str], lineage: dict[str, tuple[str, ...]]) -> bool:
     """Whether a class is one of these or inherits from one."""
     seen: set[str] = set()
@@ -1571,6 +1622,120 @@ def _compatible_ids(
     )
 
 
+def _holds_an_object(slot: Any) -> bool:
+    """Whether a slot is where an entity is written rather than named.
+
+    An object with properties of its own is the one shape a value can be
+    written into. A bare ``{"type": "object"}``, which is how a plain link is
+    declared, carries no key to write anything under, and a string or an IRI
+    names a thing written somewhere else. The array wrapper and a union of
+    shapes are looked through, because a property that takes several values
+    and one that takes one are the same property.
+    """
+    if isinstance(slot, list):
+        return any(_holds_an_object(item) for item in slot)
+    if not isinstance(slot, dict):
+        return False
+    properties = slot.get("properties")
+    if isinstance(properties, dict) and properties:
+        return True
+    return any(_holds_an_object(slot[keyword]) for keyword in ("items", "anyOf", "oneOf") if keyword in slot)
+
+
+def _embedded_properties(schema: Any) -> set[str]:
+    """The slots the answer shape offers as an embedding.
+
+    Read from the shape the call is answering and not from a second input, so
+    a corpus that declares a property as an object gets the embedding rule and
+    one that declares the same property as a link does not, without either
+    having to say which it meant twice.
+    """
+    names: set[str] = set()
+    for shape in _entity_shapes(schema):
+        for name, slot in (shape.get("properties") or {}).items():
+            if name not in _CLASS_KEYS and name not in _ID_KEYS and _holds_an_object(slot):
+                names.add(name)
+    return names
+
+
+def _absorbed_by(
+    schema: Any,
+    plan: tuple[PlannedEntity, ...],
+    chosen: dict[str, tuple[str, ...]],
+    ranges: dict[str, tuple[str, ...]] | None,
+    parents: dict[str, tuple[str, ...]] | None,
+) -> dict[str, str]:
+    """Which planned entities a chosen embedding writes inside another.
+
+    The property step is offered the object-valued slots beside the link ones
+    and does not take them: asked about "Andrea lives at Hauptstrasse 1,
+    Berlin" with a catalogue holding ``PostalAddress``, claude-haiku-4-5
+    chooses ``homeLocation``, ``workLocation`` and ``worksFor`` over
+    ``address``. The plan has already made the address an entity of its own and
+    the fill step is told to report every planned entity under the id given, so
+    choosing ``address`` would mean reporting the same thing twice and the step
+    takes the link. Offered a catalogue in which no separate address can be
+    planned, the same model fills ``address`` with a nested object first time.
+
+    So the choice is made to cost what it says: an entity a chosen embedding
+    can absorb stops being a sibling and is written inside its holder. Which
+    entities a property can absorb is the test :func:`_pin_references` applies
+    to a link, because it is the same question asked of the same ranges, and a
+    second version of that rule would be a second answer to it.
+
+    An entity more than one holder could absorb, or none, stays where the plan
+    put it. So does one whose holder it would itself absorb, which is two
+    properties pointing at each other and not a chain: ``worksFor`` embedding
+    an ``Organization`` while ``employee`` embeds a ``Person`` would otherwise
+    put each inside the other and leave the answer with nothing at the top
+    level. Which of two readings the document meant is a question the document
+    already answered, and the pipeline would be inventing an answer to it.
+    """
+    embedding = _embedded_properties(schema)
+    if not embedding or not ranges:
+        return {}
+    lineage = {name: tuple(values) for name, values in (parents or {}).items()}
+    holders: dict[str, set[str]] = {}
+    for entity in plan:
+        for name in chosen.get(entity.key, ()):
+            if name not in embedding:
+                continue
+            for target in _compatible_ids(plan, ranges.get(name, ()), lineage):
+                if target != entity.key:
+                    holders.setdefault(target, set()).add(entity.key)
+    settled = {key: next(iter(owners)) for key, owners in holders.items() if len(owners) == 1}
+    circular = _circular(settled)
+    return {key: holder for key, holder in settled.items() if key not in circular}
+
+
+def _circular(holders: dict[str, str]) -> set[str]:
+    """The entities whose chain of holders arrives back where it started."""
+    found: set[str] = set()
+    for key in holders:
+        walked: list[str] = []
+        current: str | None = key
+        while current is not None and current not in walked:
+            walked.append(current)
+            current = holders.get(current)
+        if current is not None:
+            found.update(walked[walked.index(current) :])
+    return found
+
+
+def _inside(absorbed: dict[str, str], filling: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """The properties each holder's call fills on the entities it absorbs.
+
+    The trim is applied to every shape in the answer, the embedded one
+    included, so a holder's call that kept only the holder's own properties
+    would leave the absorbed entity with an id and a class and no slot to
+    write its value into, which is the state absorbing it was meant to end.
+    """
+    held: dict[str, tuple[str, ...]] = {}
+    for key, holder in absorbed.items():
+        held[holder] = tuple(dict.fromkeys(held.get(holder, ()) + filling.get(key, ())))
+    return held
+
+
 def _edges_of(
     entities: list[Any],
     ranges: dict[str, tuple[str, ...]] | None,
@@ -1581,10 +1746,15 @@ def _edges_of(
     the plan and its links have no source to hang from; the id slot is
     required and enumerated, so an answer without one is a decode failure
     already and is reported as that rather than twice.
+
+    What counts as emitted includes the ids written inside another entity. An
+    entity an embedding absorbed was reported, under the id it was planned
+    under, and reading the top level alone would call every edge reaching it a
+    miss.
     """
     if not ranges:
         return [], []
-    emitted = {found for entity in entities if (found := _entity_id(entity)) is not None}
+    emitted = _emitted_ids(entities)
     links: list[Edge] = []
     dangling: list[Edge] = []
     for entity in entities:

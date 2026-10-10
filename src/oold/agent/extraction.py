@@ -605,7 +605,7 @@ class ExtractionAgent:
             outcome = filler._single_shot(step, plan=plan, filling=tuple(keys))
             for call in outcome.calls:
                 log.append(replace(call, step="fill"))
-            merged.extend(_entities_of(outcome.payload))
+            merged.extend(_owned_by(_entities_of(outcome.payload), keys))
             unpinned.extend(name for name in outcome.unpinned if name not in unpinned)
             last = outcome
 
@@ -723,7 +723,7 @@ class ExtractionAgent:
             outcome = filler._single_shot(step, plan=plan, filling=tuple(keys))
             for call in outcome.calls:
                 log.append(replace(call, step="extract"))
-            merged.extend(_entities_of(outcome.payload))
+            merged.extend(_owned_by(_entities_of(outcome.payload), keys))
             unpinned.extend(name for name in outcome.unpinned if name not in unpinned)
             last = outcome
 
@@ -1555,6 +1555,35 @@ def _find_property(schema: Any, keys: tuple[str, ...]) -> dict[str, Any] | None:
             if found is not None:
                 return found
     return None
+
+
+def _owned_by(entities: list[Any], keys: list[str]) -> list[Any]:
+    """The entities a grouped call was asked for, out of what it answered.
+
+    A call is given the ids it fills and told the others exist, because an
+    edge needs a name to point at. A model reads both lists and sometimes
+    reports both, so the same entity arrives from the call that owns it and
+    from one that was only told about it, and the two land in the answer as
+    two entities.
+
+    The id decides it, since that is what the plan assigned and what the id
+    slot was pinned to. An entity whose id is not this call's is dropped here
+    and reported by the call that holds it.
+
+    An entity with no id is kept. It is a defect either way, and no call can
+    claim it, so dropping it in every group would lose it from the answer
+    entirely and report the model as having said nothing.
+    """
+    owned = set(keys)
+    kept: list[Any] = []
+    for entity in entities:
+        if not isinstance(entity, dict):
+            kept.append(entity)
+            continue
+        stated = next((entity[name] for name in _ID_KEYS if isinstance(entity.get(name), str)), None)
+        if stated is None or stated in owned:
+            kept.append(entity)
+    return kept
 
 
 def _entities_of(payload: Any) -> list[Any]:

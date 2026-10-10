@@ -867,3 +867,35 @@ class TestAskingForTheWordsThatStateIt:
         one = agent(client)
         one.fillable_properties(request(), plan)
         assert one.fillable_answer["e1"][0] == {"property": "name", "stated": "Ada"}
+
+
+class TestACallReportsOnlyWhatItWasAskedFor:
+    """A grouped call is told which ids it fills and which others exist.
+
+    The others are named so an edge has a name to point at. A model reads
+    both lists and sometimes reports both, and the entity then arrives twice:
+    once from the call that owns it, once from a call that was only told
+    about it. Two entities in the answer where the document holds one.
+    """
+
+    def test_an_entity_another_call_owns_is_dropped(self):
+        from oold.agent.extraction import _owned_by
+
+        answered = [
+            {"id": "e5", "type": "Recipe", "name": "Pancakes"},
+            {"id": "e1", "type": "Person", "name": "Andrea"},
+        ]
+        assert _owned_by(answered, ["e5", "e6"]) == [answered[0]]
+
+    def test_an_entity_with_no_id_is_kept(self):
+        """No call can claim it, so dropping it in every group loses it."""
+        from oold.agent.extraction import _owned_by
+
+        answered = [{"type": "Recipe", "name": "Pancakes"}]
+        assert _owned_by(answered, ["e5"]) == answered
+
+    def test_the_id_is_read_under_any_of_the_names_an_answer_uses(self):
+        from oold.agent.extraction import _owned_by
+
+        assert _owned_by([{"@id": "e9", "type": "Review"}], ["e5"]) == []
+        assert _owned_by([{"entity_id": "e5", "type": "Review"}], ["e5"]) != []

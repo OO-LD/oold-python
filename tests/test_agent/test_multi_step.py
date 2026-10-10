@@ -1028,3 +1028,72 @@ class TestACallReportsOnlyWhatItWasAskedFor:
 
         assert _owned_by([{"@id": "e9", "type": "Review"}], ["e5"]) == []
         assert _owned_by([{"entity_id": "e5", "type": "Review"}], ["e5"]) != []
+
+
+class TestAnEmbeddedEntityIsConstrainedToo:
+    """A schema may put an entity where a value goes.
+
+    That is how a value object is written: the address belongs to the person
+    and is serialised inside it. It carries an id and may point at others, so
+    it needs the same two constraints the top-level shape gets, or its id is
+    one the plan never issued and nothing can be joined to it.
+    """
+
+    def _schema(self):
+        return {
+            "type": "object",
+            "properties": {
+                "entities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string"},
+                            "id": {"type": "string"},
+                            "name": {"type": "string"},
+                            "address": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {"type": "string"},
+                                        "id": {"type": "string"},
+                                        "streetAddress": {"type": "string"},
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }
+            },
+        }
+
+    def test_the_walk_reaches_the_entity_inside_the_entity(self):
+        from oold.agent.extraction import _entity_shapes
+
+        shapes = _entity_shapes(self._schema())
+        assert [sorted(shape["properties"]) for shape in shapes] == [
+            ["address", "id", "name", "type"],
+            ["id", "streetAddress", "type"],
+        ]
+
+    def test_the_holder_is_found_before_the_entity_it_holds(self):
+        """So an embedded entity is pinned after it and never instead of it."""
+        from oold.agent.extraction import _entity_shapes
+
+        shapes = _entity_shapes(self._schema())
+        assert "address" in shapes[0]["properties"]
+
+    def test_a_schema_that_nests_nothing_is_unchanged(self):
+        from oold.agent.extraction import _entity_shapes
+
+        flat = {
+            "type": "object",
+            "properties": {
+                "entities": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {"type": {"type": "string"}, "name": {"type": "string"}}},
+                }
+            },
+        }
+        assert len(_entity_shapes(flat)) == 1

@@ -1342,6 +1342,14 @@ def _entity_shapes(schema: Any) -> list[dict[str, Any]]:
     A union is recognised before the objects inside it, so pinning reaches all
     of its branches. Pinning the first branch alone would constrain one class
     and leave the others open, which reads as a finding about that class.
+
+    An entity shape's own properties are searched too. A schema may put an
+    entity where a value goes, which is how a value object is written: the
+    address belongs to the person and is serialised inside it. That embedded
+    entity carries an id and may point at others, so it needs the same two
+    constraints the top-level shape gets. Stopping at the outermost match
+    would leave its id unpinned and its reference slots open, and an id the
+    plan never issued cannot be joined to anything.
     """
     found: list[dict[str, Any]] = []
 
@@ -1356,9 +1364,16 @@ def _entity_shapes(schema: Any) -> list[dict[str, Any]]:
             branches = node.get(combinator)
             if isinstance(branches, list) and any(_is_entity_shape(branch) for branch in branches):
                 found.extend(branch for branch in branches if _is_entity_shape(branch))
+                for branch in branches:
+                    if _is_entity_shape(branch):
+                        visit(branch.get("properties"))
                 return
         if _is_entity_shape(node):
             found.append(node)
+            # Its properties, because one of them may hold another entity.
+            # The shape itself is recorded first, so an embedded entity is
+            # pinned after the one holding it and never instead of it.
+            visit(node.get("properties"))
             return
         for value in node.values():
             visit(value)

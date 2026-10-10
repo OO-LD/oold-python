@@ -224,6 +224,12 @@ class TestWhatTheFillStepIsGiven:
         agent(client).run(request())
         assert 'e1 ("Ada")' in client.messages[1][0].content
 
+    def test_the_fill_prompt_says_a_property_may_hold_more_than_one_value(self):
+        """The same sentence the extract step reads, because both compose the
+        plan instruction rather than wording the allowance twice."""
+        content = self.sent().messages[1][0].content
+        assert "Where the document states more than one value for a property, give every one of them." in content
+
     def test_a_request_without_ranges_says_nothing_about_links(self):
         client = PlanThenFillClient()
         ExtractionAgent(

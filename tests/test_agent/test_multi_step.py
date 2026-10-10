@@ -176,6 +176,11 @@ def enums_of(response_format):
     return {key: slot["items"]["enum"] for key, slot in offered.items()}
 
 
+def _sentence_about_several_values(content):
+    """The one sentence of an extract prompt that allows several values."""
+    return next(part for part in content.split(". ") if "more than one value" in part)
+
+
 class TestTheCallsItMakes:
     def test_one_detect_one_property_call_and_one_extract_per_group(self):
         client = MultiStepClient()
@@ -363,6 +368,20 @@ class TestWhatTheExtractStepIsGiven:
 
     def test_an_open_condition_still_names_the_properties(self):
         assert "Report only these properties" in self.sent(close_properties=False).messages[2][0].content
+
+    def test_the_prompt_says_a_property_may_hold_more_than_one_value(self):
+        """The answer shape declares every slot as an array, so the shape
+        permits several and only the wording was silent. Told nothing, models
+        answer with the first value alone."""
+        content = self.sent().messages[2][0].content
+        assert "Where the document states more than one value for a property, give every one of them." in content
+
+    def test_it_says_neither_which_property_nor_how_many_values(self):
+        """How many values a document states is part of what is being
+        measured, and a count named for one property would answer it."""
+        sentence = _sentence_about_several_values(self.sent().messages[2][0].content)
+        assert not any(character.isdigit() for character in sentence)
+        assert not any(name in sentence for name in ("name", "worksFor", "jobTitle", "isbn"))
 
 
 class TestTheIdSlot:

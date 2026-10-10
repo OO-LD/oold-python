@@ -640,6 +640,20 @@ class ExtractionAgent:
         work. Without them, a document whose source and target shortlisted
         different classes could never state the edge between them, because the
         call holding the source would not know the target had a name.
+
+        The last sentence says a property may take more than one value. The
+        answer shape already declares every slot as an array, so the shape
+        permits it and only the wording was silent, and models answer with the
+        first value alone: over 60 Wikidata-lead cells at ``claude-haiku-4-5``,
+        8.7 per cent of the expected values are lists and none of those lists
+        came back whole. It sits here rather than in
+        :meth:`_extract_instruction`, which composes this one, so every
+        orchestration that fills a plan reads it in the same words.
+
+        It says that several values may be stated and never how many, for the
+        reason :data:`prompts._SELECT_TASK` gives no count: how many values a
+        document states is part of what is being measured, and naming a number
+        for one property would answer it.
         """
         wanted = set(keys)
         listed = "; ".join(_named(entity) for entity in plan if entity.key in wanted)
@@ -654,6 +668,7 @@ class ExtractionAgent:
             sections.append(
                 "Where a property of an entity points at another of these entities, give that entity's id as the value."
             )
+        sections.append("Where the document states more than one value for a property, give every one of them.")
         return " ".join(sections)
 
     def _multi_step(self, request: ExtractionRequest) -> ExtractionResult:

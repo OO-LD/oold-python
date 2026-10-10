@@ -349,9 +349,12 @@ class TestWhatTheExtractStepIsGiven:
 
     def test_an_entity_the_step_left_empty_is_asked_for_its_class_alone(self):
         """What the step said. Restoring the slots behind its back would hide a
-        step-two failure inside step three."""
+        step-two failure inside step three.
+
+        The plan read no mention for this one, so nothing outside the step has
+        anything to say about the name slot either."""
         client = MultiStepClient(
-            plan=[{"id": "e1", "candidates": ["Person"], "mention": "Ada"}],
+            plan=[{"id": "e1", "candidates": ["Person"], "mention": ""}],
             fillable={"fillable": {"e1": []}},
             answers=[[{"id": "e1", "type": "Person"}]],
         )
@@ -683,6 +686,113 @@ class TestWhatTheDocumentCalledIt:
     def test_the_record_says_it(self):
         client = MultiStepClient()
         assert agent(client).run(request()).describe()["mentions"] == {"e1": "Ada", "e2": "Acme"}
+
+
+class TestTheNameSlotAMentionKeeps:
+    """The property step declines the name and the plan puts the slot back.
+
+    The step is asked which properties the document states, and ``name`` loses
+    that question even where the first clause answers it: over 60
+    Wikidata-lead cells it is the most missed expected property, absent 59
+    times. A mention is the plan saying the document calls the entity
+    something, which is evidence the step's answer does not carry.
+
+    The slot is kept, never filled. Which is the point of keeping it in the
+    schema rather than writing the mention into the answer.
+    """
+
+    DECLINED = {"fillable": {"e1": ["worksFor"], "e2": []}}
+
+    ANSWERS = [[{"id": "e1", "type": "Person", "worksFor": "e2"}], [{"id": "e2", "type": "Organization"}]]
+
+    def sent(self, client=None, **kwargs):
+        client = client or MultiStepClient(fillable=self.DECLINED, answers=self.ANSWERS)
+        agent(client, **kwargs).run(request())
+        return client
+
+    def test_a_mention_keeps_the_slot_the_property_step_left_out(self):
+        assert "name" in items_of(self.sent().formats[2])["properties"]
+
+    def test_it_keeps_nothing_else_the_step_left_out(self):
+        """Closing the property slot is what the arm is measuring, so the rule
+        reaches one slot and the step still decides the rest."""
+        offered = items_of(self.sent().formats[2])["properties"]
+        assert "jobTitle" not in offered
+
+    def test_the_result_names_the_entities_it_kept_it_for(self):
+        """A slot that survives a declared enforcement axis against the step's
+        answer is recorded rather than silent."""
+        result = agent(MultiStepClient(fillable=self.DECLINED, answers=self.ANSWERS)).run(request())
+        assert result.named == ["e1", "e2"]
+
+    def test_the_property_step_s_own_answer_is_reported_as_it_came(self):
+        """The complement of the record above. A name in one was the step's
+        answer, a key in the other was the plan's, and folding the two would
+        report the step as having chosen what it declined."""
+        result = agent(MultiStepClient(fillable=self.DECLINED, answers=self.ANSWERS)).run(request())
+        assert result.properties_chosen == {"e1": ("worksFor",), "e2": ()}
+
+    def test_an_entity_that_chose_the_name_itself_is_not_named_by_the_rule(self):
+        assert agent(MultiStepClient()).run(request()).named == []
+
+    def test_the_plan_reading_no_mention_keeps_nothing(self):
+        """An orchestration with no plan step has nothing to justify it, and
+        neither has a plan entry that designates nothing."""
+        client = MultiStepClient(
+            plan=[{"id": "e1", "candidates": ["Person"], "mention": ""}],
+            fillable={"fillable": {"e1": ["worksFor"]}},
+            answers=[[{"id": "e1", "type": "Person", "worksFor": "e2"}]],
+        )
+        result = agent(client).run(request())
+        assert "name" not in items_of(client.formats[2])["properties"]
+        assert result.named == []
+
+    def test_a_shortlist_that_admits_no_name_keeps_nothing(self):
+        """For the reason the property step drops a name the entity cannot
+        carry: the slot would be one no class on the shortlist declares."""
+        client = MultiStepClient(fillable={"fillable": {"e1": ["worksFor"], "e2": ["legalName"]}})
+        result = agent(client).run(replace(request(), parents=None))
+        assert result.named == []
+
+    def test_the_rule_adds_nothing_to_the_required_list(self):
+        """The slot is kept, not demanded. "Jane works at ExampleCorp" states
+        an employment relation and not that Jane's name is Jane, and a model
+        declining the slot is right."""
+        assert "name" not in items_of(self.sent(profile="anthropic").formats[2])["required"]
+
+    def test_a_subset_that_requires_everything_still_leaves_it_declinable(self):
+        """Where the profile rewrites `required` from `properties`, null is
+        how a model declines, and the kept slot is no worse off than one the
+        step chose."""
+        assert "null" in items_of(self.sent().formats[2])["properties"]["name"]["type"]
+
+    def test_an_answer_that_declines_it_is_kept_as_it_came(self):
+        result = agent(MultiStepClient(fillable=self.DECLINED, answers=self.ANSWERS)).run(request())
+        assert all("name" not in entity for entity in result.payload["entities"])
+
+    def test_the_prompt_names_it_among_the_properties_to_fill(self):
+        """Named as every kept property is, because an arm that shows no
+        schema still has to be told the slot is there."""
+        assert "Report only these properties for them: name, worksFor." in self.sent().messages[2][0].content
+
+    def test_two_entities_the_rule_separates_do_not_share_a_call(self):
+        """Entities sharing a call share the schema that call is sent, so the
+        kept slot splits a group the step alone would have pooled."""
+        client = MultiStepClient(
+            plan=[
+                {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
+                {"id": "e2", "candidates": ["Person"], "mention": ""},
+            ],
+            fillable={"fillable": {"e1": ["jobTitle"], "e2": ["jobTitle"]}},
+            answers=[[{"id": "e1", "type": "Person"}], [{"id": "e2", "type": "Person"}]],
+        )
+        agent(client).run(request())
+        assert client.calls == 4
+
+    def test_the_record_is_serialisable(self):
+        described = agent(MultiStepClient(fillable=self.DECLINED, answers=self.ANSWERS)).run(request()).describe()
+        assert json.dumps(described)
+        assert described["named"] == ["e1", "e2"]
 
 
 class TestAskingForWhatTheDocumentDoesNotSay:

@@ -151,6 +151,15 @@ class ExtractionResult:
     the property slot can fail by never offering the property the document
     states, or by offering it and the extract step leaving it empty, and
     without this the two are the same missing value."""
+    named: list[str] = field(default_factory=list)
+    """The entities whose name slot the plan's mention kept, the step having
+    left it out.
+
+    Closing the property slot is a declared enforcement axis, so a slot that
+    survives it against the step's answer is recorded rather than silent, the
+    way :attr:`unpinned` records a slot the pin could not reach. It is the
+    complement of :attr:`properties_chosen`: a name in one was the step's
+    answer, a key in this one was the plan's."""
 
     @property
     def parsed(self) -> bool:
@@ -164,6 +173,7 @@ class ExtractionResult:
             "selected": {k: list(v) for k, v in self.selected.items()},
             "mentions": dict(self.mentions),
             "properties_chosen": {k: list(v) for k, v in self.properties_chosen.items()},
+            "named": list(self.named),
             "dropped": list(self.dropped),
             "invalid": list(self.invalid),
             "repairs": self.repairs,
@@ -216,9 +226,10 @@ class ExtractionAgent:
         self.close_properties = close_properties
         """Whether the property step's answer removes the slots it left out.
 
-        On, the extract schema carries the chosen properties and the required
-        ones and nothing else, which is the direct analogue of closing the
-        class slot. Off, the chosen properties are named in the extract prompt
+        On, the extract schema carries the chosen properties, the required
+        ones, the name slot of an entity the plan read a mention for, and
+        nothing else, which is the direct analogue of closing the class slot.
+        Off, the chosen properties are named in the extract prompt
         and the schema stays whole, so a property the step missed can still be
         answered. The two are different claims about what closing a slot buys,
         so which one ran is declared rather than assumed."""
@@ -692,7 +703,9 @@ class ExtractionAgent:
         fact about this pipeline. An entity the step leaves with nothing is
         extracted with its class and its id alone, because that is what the
         step said, and restoring the slots behind its back would hide a
-        step-two failure inside step three.
+        step-two failure inside step three. The one slot the plan can put back
+        is the name, and it puts it back on its own evidence rather than the
+        step's: see :meth:`_filling`.
         """
         log = CallLog()
         self._mentions = {}
@@ -707,17 +720,19 @@ class ExtractionAgent:
                 text=text, payload=None, calls=log, selected=selected, mentions=dict(self._mentions)
             )
 
-        chosen = self._choose_properties(request, log, placed, self._available_properties(request, placed))
+        available = self._available_properties(request, placed)
+        chosen = self._choose_properties(request, log, placed, available)
+        filling, named = self._filling(placed, available, chosen)
         required = _required_properties(request.schema)
 
-        # Grouped by shortlist and by chosen properties together, where
-        # segmented groups by shortlist alone. The extra key is the same
+        # Grouped by shortlist and by the properties the call fills together,
+        # where segmented groups by shortlist alone. The extra key is the same
         # argument one step on: entities sharing a call share the schema that
-        # call is sent, so two that chose different properties can no more
-        # share one than two that shortlisted different classes.
+        # call is sent, so two that fill different properties can no more share
+        # one than two that shortlisted different classes.
         groups: dict[tuple[tuple[str, ...], tuple[str, ...]], list[str]] = {}
         for entity in placed:
-            groups.setdefault((entity.classes, chosen.get(entity.key, ())), []).append(entity.key)
+            groups.setdefault((entity.classes, filling.get(entity.key, ())), []).append(entity.key)
 
         merged: list[Any] = []
         unpinned: list[str] = []
@@ -752,10 +767,51 @@ class ExtractionAgent:
         last.selected = selected
         last.mentions = dict(self._mentions)
         last.properties_chosen = chosen
+        last.named = named
         last.links = links
         last.dangling = dangling
         last.unpinned = unpinned
         return last
+
+    def _filling(
+        self,
+        placed: tuple[PlannedEntity, ...],
+        available: dict[str, tuple[str, ...]],
+        chosen: dict[str, tuple[str, ...]],
+    ) -> tuple[dict[str, tuple[str, ...]], list[str]]:
+        """The properties each extract call asks for, and who kept a name.
+
+        The property step's answer, plus the name slot for an entity the plan
+        read a mention for. The step is asked which properties the document
+        states and ``name`` loses that question even where the first clause
+        answers it: over 60 Wikidata-lead cells it is the most missed expected
+        property, absent 59 times. A mention is the plan saying the document
+        calls the entity something, which is evidence the step's own answer
+        does not carry, so it is the plan and not the step that puts the slot
+        back.
+
+        Only where there is a mention to justify it, so an orchestration with
+        no plan step gains nothing here, and only where the shortlist admits
+        the slot at all, for the reason :meth:`_choose_properties` drops a name
+        the entity cannot carry.
+
+        The slot is kept and never filled. Empty stays a legal answer, because
+        "Jane works at ExampleCorp" states an employment relation and not that
+        Jane's name is Jane, and a model declining it is right. The entities it
+        applied to come back beside the properties so the result can say the
+        slot was kept by this rule rather than chosen by the step, the way
+        :attr:`ExtractionResult.unpinned` says which slots ran unconstrained.
+        """
+        filling: dict[str, tuple[str, ...]] = {}
+        named: list[str] = []
+        for entity in placed:
+            offered = available.get(entity.key, ())
+            keep = set(chosen.get(entity.key, ()))
+            if self._mentions.get(entity.key) and _NAME_KEY in offered and _NAME_KEY not in keep:
+                keep.add(_NAME_KEY)
+                named.append(entity.key)
+            filling[entity.key] = tuple(name for name in offered if name in keep)
+        return filling, named
 
     def _available_properties(
         self,
@@ -1263,6 +1319,8 @@ _CLASS_KEYS = ("type", "@type", "class", "class_path", "schema_path", "kind")
 _UNIT_KEYS = ("unit", "units", "unit_symbol", "uom")
 
 _ID_KEYS = ("id", "@id", "entity_id", "key")
+
+_NAME_KEY = "name"
 
 
 def _named(entity: PlannedEntity) -> str:

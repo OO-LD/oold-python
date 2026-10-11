@@ -213,3 +213,50 @@ class TestHashingThePrompt:
     def test_non_ascii_content_does_not_change_between_runs(self):
         german = [Message(role="user", content="Die Molmasse betrug 79,7 Gramm pro Mol.")]
         assert prompt_hash(german) == prompt_hash(german)
+
+
+class TestTheSystemTurnIsMarkedForCaching:
+    """An extraction sends the same catalogue and schema before every call.
+
+    Only the question after them changes, and the prefix is most of the
+    request: one recipe page cost 140,532 input tokens over six calls, of
+    which the document was about 1,700.
+    """
+
+    class _Anthropic:
+        __module__ = "langchain_anthropic.chat_models"
+
+    class _OpenAI:
+        __module__ = "langchain_openai.chat_models.base"
+
+    def _client(self, llm, **kw):
+        from oold.agent.langchain_client import LangChainClient
+
+        return LangChainClient(llm, model="m", **kw)
+
+    def _messages(self):
+        from oold.agent.client import Message
+
+        return [Message(role="system", content="the catalogue"), Message(role="user", content="the document")]
+
+    def test_anthropic_is_told_which_prefix_to_keep(self):
+        turns = self._client(self._Anthropic())._turns(self._messages())
+        assert turns[0] == (
+            "system",
+            [{"type": "text", "text": "the catalogue", "cache_control": {"type": "ephemeral"}}],
+        )
+        assert turns[1] == ("user", "the document")
+
+    def test_a_provider_that_caches_by_itself_is_left_alone(self):
+        turns = self._client(self._OpenAI())._turns(self._messages())
+        assert turns == [("system", "the catalogue"), ("user", "the document")]
+
+    def test_it_can_be_turned_off(self):
+        turns = self._client(self._Anthropic(), cache_prefix=False)._turns(self._messages())
+        assert turns == [("system", "the catalogue"), ("user", "the document")]
+
+    def test_a_folded_system_turn_is_not_marked(self):
+        """There is no system turn left to mark, and the fold exists because
+        the deployment discards one."""
+        turns = self._client(self._Anthropic(), fold_system=True)._turns(self._messages())
+        assert all(not isinstance(content, list) for _, content in turns)

@@ -913,7 +913,12 @@ class TestEachStepAlone:
         client = MultiStepClient(detects=[])
         result = agent(client).extract(request())
         assert result.payload is not None
-        assert _id_slot(client.formats[-1]) is None
+        # An id, required and with no enum: there is no plan to draw
+        # admissible ids from, and an entity that names itself nothing cannot
+        # be pointed at by anything.
+        slot = _id_slot(client.formats[-1])
+        assert slot is not None
+        assert "enum" not in slot
 
 
 def _id_slot(schema):

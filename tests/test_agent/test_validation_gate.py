@@ -35,9 +35,9 @@ SCHEMA = {
     },
 }
 
-WHOLE = {"entities": [{"type": "Length", "value": 1.0, "unit": "meter"}]}
-MISSING = {"entities": [{"type": "Length"}]}
-WRONG_TYPE = {"entities": [{"type": "Length", "value": "one", "unit": "meter"}]}
+WHOLE = {"entities": [{"id": "e1", "type": "Length", "value": 1.0, "unit": "meter"}]}
+MISSING = {"entities": [{"id": "e1", "type": "Length"}]}
+WRONG_TYPE = {"entities": [{"id": "e1", "type": "Length", "value": "one", "unit": "meter"}]}
 
 
 class ScriptedClient:
@@ -192,7 +192,7 @@ def test_the_gate_and_the_validator_catch_different_things():
     """The point of the whole file. A class outside the catalogue is a gate
     failure; a missing required property is a validation failure; neither
     catches the other."""
-    gate_only = run(ScriptedClient({"entities": [{"type": "Nonesuch", "value": 1.0, "unit": "m"}]}))
+    gate_only = run(ScriptedClient({"entities": [{"id": "e1", "type": "Nonesuch", "value": 1.0, "unit": "m"}]}))
     assert gate_only.dropped == ["Nonesuch"]
     assert gate_only.invalid == []
 

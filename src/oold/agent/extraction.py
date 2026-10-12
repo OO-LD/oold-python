@@ -1101,16 +1101,25 @@ class ExtractionAgent:
             prepared = self._pin_units(prepared)
 
         unpinned: list[str] = []
-        if plan:
-            # The id slot goes in whatever the decode constraint is, because it
-            # belongs to the orchestration and not to the enforcement: an answer
-            # stating no id cannot be joined back to the plan, and an arm that
-            # only shows its schema still has to ask for one. The reference
-            # enums go in where the decoder is engaged and nowhere else, so the
-            # decode axis keeps meaning what it means everywhere else.
+        # The id slot goes in whatever the decode constraint is, because it
+        # belongs to the orchestration and not to the enforcement: an answer
+        # stating no id cannot be joined back to the plan, and an arm that
+        # only shows its schema still has to ask for one.
+        #
+        # Asked for with no plan as well, without an enum because there are no
+        # planned keys to offer. An answer that names nothing cannot point at
+        # anything, so a run with no plan could assert a class and a value and
+        # never an edge: one recipe page came back from a single call with 43
+        # entities, every one of them correctly typed, not one carrying an id
+        # and not a single link between them. An id the schema leaves optional
+        # is an id a long answer drops.
+        if plan or _entity_shapes(prepared):
             prepared = self._pin_identity(prepared, filling)
-            if self.enforcement.decode_constraint is not DecodeConstraint.NONE:
-                prepared, unpinned = self._pin_references(prepared, plan, request.ranges, request.parents)
+        # The reference enums go in where the decoder is engaged and nowhere
+        # else, so the decode axis keeps meaning what it means everywhere else,
+        # and they need a plan to draw the admissible ids from.
+        if plan and self.enforcement.decode_constraint is not DecodeConstraint.NONE:
+            prepared, unpinned = self._pin_references(prepared, plan, request.ranges, request.parents)
         return prepared, degradation, schema_hash(prepared), unpinned
 
     def _pin_class(self, schema: dict[str, Any]) -> dict[str, Any]:
@@ -1213,13 +1222,19 @@ class ExtractionAgent:
         return schema
 
     def _pin_identity(self, schema: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
-        """Give the answer a slot for the id the plan assigned.
+        """Give the answer a slot for the id, required, enumerated where it can be.
 
         Pinned to the ids this call is for, so one call cannot answer with an
         entity another call is responsible for and have it counted twice. An id
         the model states, rather than one attached afterwards by position, is
         also the only form in which the question of whether two mentions are
         one entity is ever put to the model.
+
+        ``keys`` empty asks for an id and offers no enum, which is the case
+        with no plan to draw admissible ids from. Required all the same: an
+        entity that names itself nothing cannot be pointed at, so an answer
+        could carry a class and a value for everything and an edge for
+        nothing.
 
         Fails loudly when there is no entity shape to carry it, the way
         :meth:`_pin_class` does. A plan that cannot be joined to the answer
@@ -1233,7 +1248,12 @@ class ExtractionAgent:
             name = next((key for key in _ID_KEYS if key in properties), _ID_KEYS[0])
             slot = dict(properties.get(name) or {})
             slot["type"] = "string"
-            slot.setdefault("description", "The id this entity was planned under.")
+            told = (
+                "The id this entity was planned under."
+                if keys
+                else "A short identifier for this entity, so another entity can point at it."
+            )
+            slot.setdefault("description", told)
             if keys:
                 slot["enum"] = list(keys)
             properties[name] = slot

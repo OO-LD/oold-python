@@ -218,3 +218,44 @@ class TestClosingTheUnitSlot:
 
     def test_no_unit_enumeration_reports_zero(self):
         assert arm("schema-dump-catalog-flat-enforced", ("Length",)).describe()["unit_catalogue_size"] == 0
+
+
+class TestNarrowingTheCatalogue:
+    """The entries describe the classes, so the two narrow together.
+
+    `catalogue_text[i]` describes `catalogue[i]`, which is the pairing
+    `with_catalogue_text` refuses to let drift. An extract call for one group
+    was sent all 63 entries beside an enum of three, six times over a single
+    document.
+    """
+
+    def _condition(self):
+        from oold.agent.enforcement import ARMS
+
+        base = ARMS["schema-dump-catalog-flat-enforced"]
+        return base.with_catalogue(("Recipe", "Person", "Product")).with_catalogue_text((
+            "- Recipe",
+            "- Person",
+            "- Product",
+        ))
+
+    def test_the_entries_follow_the_classes(self):
+        narrowed = self._condition().with_catalogue(("Recipe",))
+        assert narrowed.catalogue == ("Recipe",)
+        assert narrowed.catalogue_text == ("- Recipe",)
+
+    def test_an_entry_still_describes_its_own_class(self):
+        narrowed = self._condition().with_catalogue(("Product", "Recipe"))
+        assert narrowed.catalogue_text == ("- Product", "- Recipe")
+
+    def test_a_catalogue_with_no_entries_narrows_as_it_did(self):
+        from oold.agent.enforcement import ARMS
+
+        base = ARMS["schema-dump-catalog-flat-enforced"].with_catalogue(("Recipe", "Person"))
+        assert base.catalogue_text is None
+        assert base.with_catalogue(("Recipe",)).catalogue == ("Recipe",)
+
+    def test_offering_everything_leaves_the_entries_alone(self):
+        whole = self._condition().with_catalogue(None)
+        assert whole.catalogue is None
+        assert whole.catalogue_text == ("- Recipe", "- Person", "- Product")

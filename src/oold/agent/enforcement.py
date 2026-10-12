@@ -224,8 +224,20 @@ class Enforcement:
 
         This is the one knob a catalogue-weight sweep moves, so it gets a
         method instead of being reconstructed by hand at each size.
+
+        The rendered entries are narrowed with it. ``catalogue_text[i]``
+        describes ``catalogue[i]``, which is the pairing
+        :meth:`with_catalogue_text` refuses to let drift, and a narrowing that
+        moved one without the other would describe a class as another or
+        describe classes the enum no longer admits. An extract call for one
+        group was sent all 63 entries beside an enum of three, six times over
+        a single document.
         """
-        return replace(self, catalogue=paths)
+        if paths is None or self.catalogue is None or self.catalogue_text is None:
+            return replace(self, catalogue=paths)
+        described = dict(zip(self.catalogue, self.catalogue_text, strict=False))
+        kept = tuple(described[path] for path in paths if path in described)
+        return replace(self, catalogue=paths, catalogue_text=kept or None)
 
     def with_units(self, units: tuple[str, ...] | None) -> Enforcement:
         """The same condition over a different unit enumeration."""

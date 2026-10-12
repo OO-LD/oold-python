@@ -67,10 +67,11 @@ class PlannedEntity:
     key: str
     """The id both steps use for this entity.
 
-    Invented by the model in the plan step and offered back to it in the fill
-    step. An id attached afterwards by position never puts the question of
-    whether two mentions are one entity to the model at all, which is why the
-    predecessor could not ask it."""
+    Assigned by the plan step from the position of the entity in its answer,
+    and offered back to the model in the fill step, where it is the name an
+    edge points at. Whether two mentions are one entity is put to the model as
+    the plan's own question, by asking it for one line per entity, rather than
+    through a key it mints and may reuse."""
     classes: tuple[str, ...]
     """The shortlist, most likely first. Empty when the plan placed the entity
     in no class, which leaves it out of the fill step."""
@@ -563,8 +564,8 @@ class ExtractionAgent:
     ) -> str:
         """Which entities this call is for, when a document holds several.
 
-        Named by the words the select step read them from, because an
-        identifier it invented means nothing to a model reading the document
+        Named by the words the select step read them from, because the key the
+        pipeline files them under means nothing to a model reading the document
         again. Omitted entirely when there is one group, so the single-entity
         case sends the same prompt the single-shot arm does.
         """
@@ -983,6 +984,15 @@ class ExtractionAgent:
         ``step`` names the call in the log. Two orchestrations ask this same
         question and spend different amounts on what follows, so their first
         calls are attributed apart rather than pooled under one name.
+
+        The key each entity is filed under is assigned here, in the order the
+        answer lists them, and the step is not asked for one. It is how the
+        later steps name an entity to each other and nothing the model decides:
+        a key it mints can arrive twice, so two entities collapse into one, and
+        the pipeline checks for none of that. What the answer is read for is the
+        classes and the mention, which are tied together by the item holding
+        them. An item that is not an object is passed over and takes no key, so
+        a key is never issued for something no later step can fill.
         """
         catalogue = self.enforcement.catalogue or ()
         if not catalogue:
@@ -1012,10 +1022,10 @@ class ExtractionAgent:
             )
         allowed = set(catalogue)
         selected: dict[str, tuple[str, ...]] = {}
-        for index, entity in enumerate(_entities_of(payload), start=1):
+        for entity in _entities_of(payload):
             if not isinstance(entity, dict):
                 continue
-            key = str(entity.get("id") or f"e{index}")
+            key = f"e{len(selected) + 1}"
             names = [n for n in entity.get("candidates") or () if n in allowed]
             selected[key] = tuple(dict.fromkeys(names))[: self.shortlist_k]
             mention = entity.get("mention")
@@ -1225,10 +1235,10 @@ class ExtractionAgent:
         """Give the answer a slot for the id, required, enumerated where it can be.
 
         Pinned to the ids this call is for, so one call cannot answer with an
-        entity another call is responsible for and have it counted twice. An id
-        the model states, rather than one attached afterwards by position, is
-        also the only form in which the question of whether two mentions are
-        one entity is ever put to the model.
+        entity another call is responsible for and have it counted twice. The
+        ids are the plan's, so the answer states which planned entity it is
+        filling rather than leaving that to be guessed from the order it
+        happened to report them in.
 
         ``keys`` empty asks for an id and offers no enum, which is the case
         with no plan to draw admissible ids from. Required all the same: an

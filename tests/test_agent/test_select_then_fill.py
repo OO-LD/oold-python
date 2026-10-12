@@ -59,7 +59,7 @@ class TwoStepClient:
         self.formats.append(response_format)
         self.messages.append(list(messages))
         if self.calls == 1:
-            payload = {"entities": [{"id": "e1", "candidates": self.candidates, "mention": "1.0 meter"}]}
+            payload = {"entities": [{"candidates": self.candidates, "mention": "1.0 meter"}]}
         else:
             payload = {"entities": [{"type": self.answer, "value": 1.0, "unit": "meter"}]}
         return ChatResponse(text=json.dumps(payload), parsed=None)
@@ -95,6 +95,21 @@ class TestTheSelectionSchema:
         built = selection_schema(CATALOGUE, 2)
         assert "mention" in built["properties"]["entities"]["items"]["properties"]
 
+    def test_no_id_is_asked_for(self):
+        """The item already holds the candidates beside the mention, so the
+        two need no key to tie them, and nothing in this call points from one
+        entity at another."""
+        items = selection_schema(CATALOGUE, 2)["properties"]["entities"]["items"]
+        assert "id" not in items["properties"]
+        assert items["required"] == ["candidates", "mention"]
+
+    def test_the_select_prompt_does_not_ask_for_an_id_either(self):
+        """An arm that shows no schema is asked the same question as one that
+        does, so the wording cannot ask for what the shape no longer carries."""
+        content = build_selection_messages(request(), arm("schema-dump-catalog-enforced", CATALOGUE), 2)[0].content
+        assert "For each entity give the classes it could belong to" in content
+        assert "short id" not in content
+
     def test_the_select_prompt_shows_the_same_catalogue(self):
         """The orchestrations differ in what is asked, not in what is shown."""
         content = build_selection_messages(request(), arm("schema-dump-catalog-enforced", CATALOGUE), 2)[0].content
@@ -103,6 +118,66 @@ class TestTheSelectionSchema:
     def test_the_select_prompt_carries_the_document_alone(self):
         messages = build_selection_messages(request(), arm("schema-dump-catalog-enforced", CATALOGUE), 2)
         assert messages[1].content == "The reading was 1.0 meter."
+
+
+class PlanningClient:
+    """Answers the plan step with a given entity list and nothing after it."""
+
+    model = "planner"
+
+    def __init__(self, entities) -> None:
+        self.entities = list(entities)
+        self.calls = 0
+
+    def invoke(self, messages, *, response_format=None, strict=False) -> ChatResponse:
+        self.calls += 1
+        return ChatResponse(text=json.dumps({"entities": self.entities}), parsed=None)
+
+
+class TestThePlanAssignsTheKeys:
+    """The key is the pipeline's bookkeeping, so the pipeline issues it.
+
+    A key the model mints carries nothing it needs to answer the question it
+    was asked, and it can arrive twice, which silently merges two entities,
+    or in a form a later step never offered.
+    """
+
+    def plan(self, entities):
+        return agent(PlanningClient(entities)).identify(request())
+
+    def test_a_key_is_assigned_by_position_in_the_answer(self):
+        selected, mentions = self.plan([
+            {"candidates": ["Mass"], "mention": "2.0 gram"},
+            {"candidates": ["Length"], "mention": "1.0 meter"},
+        ])
+        assert selected == {"e1": ("Mass",), "e2": ("Length",)}
+        assert mentions == {"e1": "2.0 gram", "e2": "1.0 meter"}
+
+    def test_an_id_the_model_states_anyway_is_not_read(self):
+        """The answer shape forbids it, and a model that states one regardless
+        must not be able to choose the key a later step pins its slot to."""
+        selected, _ = self.plan([{"id": "x7", "candidates": ["Length"], "mention": "1.0 meter"}])
+        assert selected == {"e1": ("Length",)}
+
+    def test_two_entities_the_model_describes_identically_get_distinct_keys(self):
+        """Two lines are two entities. Merging them here would decide a
+        question the plan step was asked and answered."""
+        selected, mentions = self.plan([
+            {"candidates": ["Length"], "mention": "1.0 meter"},
+            {"candidates": ["Length"], "mention": "1.0 meter"},
+        ])
+        assert list(selected) == ["e1", "e2"]
+        assert mentions == {"e1": "1.0 meter", "e2": "1.0 meter"}
+
+    def test_an_answer_naming_no_entity_takes_no_key(self):
+        assert self.plan([]) == ({}, {})
+
+    def test_an_item_that_is_not_an_entity_takes_no_key(self):
+        """It is passed over, and the entities around it are keyed as though
+        it had never been there, so a key is never issued for something no
+        later step can fill."""
+        selected, _ = self.plan(["noise", {"candidates": ["Length"], "mention": "1.0 meter"}])
+        assert selected == {"e1": ("Length",)}
 
 
 class TestTheTwoSteps:
@@ -218,8 +293,8 @@ class MultiEntityClient:
         if self.calls == 1:
             payload = {
                 "entities": [
-                    {"id": "e1", "candidates": self.first, "mention": "1.0 meter"},
-                    {"id": "e2", "candidates": self.second, "mention": "2.0 gram"},
+                    {"candidates": self.first, "mention": "1.0 meter"},
+                    {"candidates": self.second, "mention": "2.0 gram"},
                 ]
             }
         else:
@@ -308,8 +383,8 @@ class TestTheAnswerWrapperAModelChooses:
         assert _entities_of(payload) == [{"id": "e1"}]
 
     def test_a_lone_key_holding_objects_is_the_wrapper(self):
-        payload = {"EntityCandidates": [{"id": "e1", "candidates": ["Seat"]}]}
-        assert _entities_of(payload) == [{"id": "e1", "candidates": ["Seat"]}]
+        payload = {"EntityCandidates": [{"candidates": ["Seat"]}]}
+        assert _entities_of(payload) == [{"candidates": ["Seat"]}]
 
     def test_an_echoed_schema_is_not_an_answer(self):
         """The other failure mode, and it must stay a failure.

@@ -59,13 +59,19 @@ answer, and the step is being asked to find it.
 """
 
 _SELECT_FORM = (
-    "Answer with JSON only. For each entity give a short id, the classes it could "
+    "Answer with JSON only. For each entity give the classes it could "
     "belong to, most likely first, and the words that identify it in the document."
 )
 """How to answer.
 
 "The words that identify it" rather than the earlier "the words in the document
 you read it from", which asked for a span and so invited one entry per span.
+
+No id is asked for. The key an entity is carried under is bookkeeping between
+the steps, and nothing in this call refers to one entity from another, so there
+is no question here the model needs it to answer. A model that mints one can
+reuse a key for two entities or state the same key twice, which silently merges
+them.
 """
 
 _SELECT_SHORTLIST = (
@@ -213,6 +219,12 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
     is the question this step is asked, and capping it would answer it. The
     over-segmentation the cap would hide is addressed in the wording instead,
     at :data:`_SELECT_TASK`.
+
+    No slot for an id. Each item already holds its own candidates beside its own
+    mention, so the two are tied by the object carrying them and the key the
+    pipeline files them under is its position in the list. Asking for the key
+    instead buys nothing here, where no entity refers to another, and admits an
+    answer that reuses one key for two entities or skips one entirely.
     """
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -225,10 +237,6 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": {
-                            "type": "string",
-                            "description": "A short identifier for this entity, e.g. e1.",
-                        },
                         "candidates": {
                             "type": "array",
                             "maxItems": k,
@@ -243,7 +251,7 @@ def selection_schema(catalogue: tuple[str, ...], k: int) -> dict[str, Any]:
                             ),
                         },
                     },
-                    "required": ["id", "candidates", "mention"],
+                    "required": ["candidates", "mention"],
                     "additionalProperties": False,
                 },
             }

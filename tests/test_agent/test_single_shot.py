@@ -47,6 +47,18 @@ class TestAnAnswerWithNoPlanStillNamesItsEntities:
         assert "enum" not in shape["properties"]["id"]
         assert shape["properties"]["id"]["type"] == "string"
 
+    def test_the_model_is_asked_for_the_id_the_plan_step_is_not_asked_for(self):
+        """There is no plan step here to assign one from, and an entity still
+        has to name itself before another can point at it. The plan step is
+        asked for neither, because it issues the keys itself."""
+        from oold.agent.enforcement import Orchestration
+        from oold.agent.prompts import selection_schema
+
+        shape = self._prepared(Orchestration.SINGLE_SHOT)
+        planned = selection_schema(("Person",), 3)["properties"]["entities"]["items"]
+        assert shape["properties"]["id"]["description"]
+        assert "id" not in planned["properties"]
+
 
 class _Silent:
     model = "silent"

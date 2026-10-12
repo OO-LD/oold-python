@@ -66,8 +66,8 @@ SCHEMA = {
 DOCUMENT = "Ada works for Acme. Acme is a company. The Ada Book was written by Ada."
 
 PLAN = [
-    {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
-    {"id": "e2", "candidates": ["Organization"], "mention": "Acme"},
+    {"candidates": ["Person"], "mention": "Ada"},
+    {"candidates": ["Organization"], "mention": "Acme"},
 ]
 
 LINKED = [
@@ -76,8 +76,8 @@ LINKED = [
 ]
 
 UNION_PLAN = [
-    {"id": "e1", "candidates": ["Person", "Book"], "mention": "Ada"},
-    {"id": "e2", "candidates": ["Organization", "LocalBusiness"], "mention": "Acme"},
+    {"candidates": ["Person", "Book"], "mention": "Ada"},
+    {"candidates": ["Organization", "LocalBusiness"], "mention": "Acme"},
 ]
 """Two classes per entity, so every fill call is sent a union of two branches
 and a profile that refuses ``anyOf`` has something to lose. A shortlist of one
@@ -164,8 +164,8 @@ class TestTheCallsItMakes:
     def test_entities_that_shortlist_the_same_classes_share_a_fill_call(self):
         client = PlanThenFillClient(
             plan=[
-                {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
-                {"id": "e2", "candidates": ["Person"], "mention": "Grace"},
+                {"candidates": ["Person"], "mention": "Ada"},
+                {"candidates": ["Person"], "mention": "Grace"},
             ],
             answers=[[{"id": "e1", "type": "Person"}, {"id": "e2", "type": "Person"}]],
         )
@@ -183,7 +183,7 @@ class TestTheCallsItMakes:
         assert result.selected == {"e1": ("Person",), "e2": ("Organization",)}
 
     def test_a_plan_that_placed_nothing_stops_before_the_fill_call(self):
-        client = PlanThenFillClient(plan=[{"id": "e1", "candidates": [], "mention": "Ada"}])
+        client = PlanThenFillClient(plan=[{"candidates": [], "mention": "Ada"}])
         result = agent(client).run(request())
         assert client.calls == 1
         assert result.payload is None
@@ -218,7 +218,7 @@ class TestWhatTheFillStepIsGiven:
         unchanged instruction for a single group because the id is only an
         internal label there."""
         client = PlanThenFillClient(
-            plan=[{"id": "e1", "candidates": ["Person"], "mention": "Ada"}],
+            plan=[{"candidates": ["Person"], "mention": "Ada"}],
             answers=[[{"id": "e1", "type": "Person"}]],
         )
         agent(client).run(request())
@@ -249,9 +249,9 @@ class TestTheIdSlot:
         return client
 
     def test_the_answer_shape_carries_a_slot_for_the_planned_id(self):
-        """An id the model states is what makes two mentions being one entity
-        a question the model is asked. Attached afterwards by position, as the
-        predecessor did, it never is."""
+        """The key the plan filed the entity under is what joins the fill
+        step's answer back to it, and what an edge points at. An answer
+        stating none leaves both to be guessed from the order it reported."""
         assert "id" in items_of(self.sent().formats[1])["properties"]
 
     def test_a_fill_call_is_pinned_to_the_ids_it_is_for(self):
@@ -335,7 +335,7 @@ class TestPinningAReference:
         """An arm that ran unconstrained on a slot and never said so would be
         reported as a finding about constrained links."""
         client = PlanThenFillClient(
-            plan=[{"id": "e1", "candidates": ["Person"], "mention": "Ada"}],
+            plan=[{"candidates": ["Person"], "mention": "Ada"}],
             answers=[[{"id": "e1", "type": "Person"}]],
         )
         result = agent(client).run(request())
@@ -480,7 +480,7 @@ class TestWhatItShares:
 
     def test_a_candidate_outside_the_catalogue_is_dropped(self):
         client = PlanThenFillClient(
-            plan=[{"id": "e1", "candidates": ["Invented", "Person"], "mention": "Ada"}],
+            plan=[{"candidates": ["Invented", "Person"], "mention": "Ada"}],
             answers=[[{"id": "e1", "type": "Person"}]],
         )
         result = agent(client).run(request())

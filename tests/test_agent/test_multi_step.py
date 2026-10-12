@@ -70,8 +70,8 @@ SCHEMA = {
 DOCUMENT = "Ada works for Acme. Acme is a company. The Ada Book was written by Ada."
 
 PLAN = [
-    {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
-    {"id": "e2", "candidates": ["Organization"], "mention": "Acme"},
+    {"candidates": ["Person"], "mention": "Ada"},
+    {"candidates": ["Organization"], "mention": "Acme"},
 ]
 
 FILLABLE = {
@@ -100,8 +100,8 @@ SCHEMA_ECHO = {
 for, rather than an instance of it."""
 
 UNION_PLAN = [
-    {"id": "e1", "candidates": ["Person", "Book"], "mention": "Ada"},
-    {"id": "e2", "candidates": ["Organization", "LocalBusiness"], "mention": "Acme"},
+    {"candidates": ["Person", "Book"], "mention": "Ada"},
+    {"candidates": ["Organization", "LocalBusiness"], "mention": "Acme"},
 ]
 """Two classes per entity, so every extract call is sent a union of two
 branches and a profile that refuses ``anyOf`` has something to lose."""
@@ -207,8 +207,8 @@ class TestTheCallsItMakes:
     def test_entities_that_agree_on_class_and_properties_share_an_extract_call(self):
         client = MultiStepClient(
             plan=[
-                {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
-                {"id": "e2", "candidates": ["Person"], "mention": "Grace"},
+                {"candidates": ["Person"], "mention": "Ada"},
+                {"candidates": ["Person"], "mention": "Grace"},
             ],
             fillable={"fillable": {"e1": ["name"], "e2": ["name"]}},
             answers=[[{"id": "e1", "type": "Person"}, {"id": "e2", "type": "Person"}]],
@@ -222,8 +222,8 @@ class TestTheCallsItMakes:
         shortlisted different classes."""
         client = MultiStepClient(
             plan=[
-                {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
-                {"id": "e2", "candidates": ["Person"], "mention": "Grace"},
+                {"candidates": ["Person"], "mention": "Ada"},
+                {"candidates": ["Person"], "mention": "Grace"},
             ],
             fillable={"fillable": {"e1": ["name"], "e2": ["name", "jobTitle"]}},
             answers=[[{"id": "e1", "type": "Person"}], [{"id": "e2", "type": "Person"}]],
@@ -232,7 +232,7 @@ class TestTheCallsItMakes:
         assert client.calls == 4
 
     def test_a_plan_that_placed_nothing_stops_before_the_property_call(self):
-        client = MultiStepClient(plan=[{"id": "e1", "candidates": [], "mention": "Ada"}])
+        client = MultiStepClient(plan=[{"candidates": [], "mention": "Ada"}])
         result = agent(client).run(request())
         assert client.calls == 1
         assert result.payload is None
@@ -354,7 +354,7 @@ class TestWhatTheExtractStepIsGiven:
         The plan read no mention for this one, so nothing outside the step has
         anything to say about the name slot either."""
         client = MultiStepClient(
-            plan=[{"id": "e1", "candidates": ["Person"], "mention": ""}],
+            plan=[{"candidates": ["Person"], "mention": ""}],
             fillable={"fillable": {"e1": []}},
             answers=[[{"id": "e1", "type": "Person"}]],
         )
@@ -430,7 +430,7 @@ class TestPinningAReference:
 
     def test_a_range_no_planned_entity_fits_is_recorded_as_left_open(self):
         client = MultiStepClient(
-            plan=[{"id": "e1", "candidates": ["Person"], "mention": "Ada"}],
+            plan=[{"candidates": ["Person"], "mention": "Ada"}],
             fillable={"fillable": {"e1": ["name", "worksFor"]}},
             answers=[[{"id": "e1", "type": "Person", "name": "Ada"}]],
         )
@@ -638,7 +638,7 @@ class TestWhatItShares:
 
     def test_a_candidate_outside_the_catalogue_is_dropped(self):
         client = MultiStepClient(
-            plan=[{"id": "e1", "candidates": ["Invented", "Person"], "mention": "Ada"}],
+            plan=[{"candidates": ["Invented", "Person"], "mention": "Ada"}],
             fillable={"fillable": {"e1": ["name"]}},
             answers=[[{"id": "e1", "type": "Person"}]],
         )
@@ -678,7 +678,7 @@ class TestWhatTheDocumentCalledIt:
         assert result.mentions == {"e1": "Ada", "e2": "Acme"}
 
     def test_a_plan_placing_nothing_still_reports_what_it_read(self):
-        client = MultiStepClient(plan=[{"id": "e1", "candidates": [], "mention": "Ada"}])
+        client = MultiStepClient(plan=[{"candidates": [], "mention": "Ada"}])
         result = agent(client).run(request())
         assert result.payload is None
         assert result.mentions == {"e1": "Ada"}
@@ -739,7 +739,7 @@ class TestTheNameSlotAMentionKeeps:
         """An orchestration with no plan step has nothing to justify it, and
         neither has a plan entry that designates nothing."""
         client = MultiStepClient(
-            plan=[{"id": "e1", "candidates": ["Person"], "mention": ""}],
+            plan=[{"candidates": ["Person"], "mention": ""}],
             fillable={"fillable": {"e1": ["worksFor"]}},
             answers=[[{"id": "e1", "type": "Person", "worksFor": "e2"}]],
         )
@@ -780,8 +780,8 @@ class TestTheNameSlotAMentionKeeps:
         kept slot splits a group the step alone would have pooled."""
         client = MultiStepClient(
             plan=[
-                {"id": "e1", "candidates": ["Person"], "mention": "Ada"},
-                {"id": "e2", "candidates": ["Person"], "mention": ""},
+                {"candidates": ["Person"], "mention": "Ada"},
+                {"candidates": ["Person"], "mention": ""},
             ],
             fillable={"fillable": {"e1": ["jobTitle"], "e2": ["jobTitle"]}},
             answers=[[{"id": "e1", "type": "Person"}], [{"id": "e2", "type": "Person"}]],
@@ -877,11 +877,9 @@ class TestEachStepAlone:
         mention read from the one before."""
         one = agent(MultiStepClient())
         one.identify(request())
-        one.client = MultiStepClient(
-            detects=[{"entities": [{"id": "e9", "candidates": ["Book"], "mention": "Ulysses"}]}]
-        )
+        one.client = MultiStepClient(detects=[{"entities": [{"candidates": ["Book"], "mention": "Ulysses"}]}])
         _, mentions = one.identify(request())
-        assert mentions == {"e9": "Ulysses"}
+        assert mentions == {"e1": "Ulysses"}
 
     def test_fillable_properties_takes_the_plan_it_is_given(self):
         client = MultiStepClient(detects=[])
@@ -1153,8 +1151,8 @@ EMBEDDING_SCHEMA = {
 EMBEDDING_DOCUMENT = "Andrea lives at Hauptstrasse 1, Berlin."
 
 EMBEDDING_PLAN = [
-    {"id": "e1", "candidates": ["Person"], "mention": "Andrea"},
-    {"id": "e3", "candidates": ["PostalAddress"], "mention": "Hauptstrasse 1"},
+    {"candidates": ["Person"], "mention": "Andrea"},
+    {"candidates": ["PostalAddress"], "mention": "Hauptstrasse 1"},
 ]
 
 EMBEDDING_ANSWER = [
@@ -1163,7 +1161,7 @@ EMBEDDING_ANSWER = [
             "id": "e1",
             "type": "Person",
             "name": "Andrea",
-            "address": [{"id": "e3", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
+            "address": [{"id": "e2", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
         }
     ]
 ]
@@ -1201,7 +1199,7 @@ class TestAnEmbeddingAbsorbsThePlannedEntity:
     def run(self, fillable=None, plan=None, answers=None):
         client = MultiStepClient(
             plan=EMBEDDING_PLAN if plan is None else plan,
-            fillable=fillable or {"fillable": {"e1": ["name", "address"], "e3": ["streetAddress"]}},
+            fillable=fillable or {"fillable": {"e1": ["name", "address"], "e2": ["streetAddress"]}},
             answers=EMBEDDING_ANSWER if answers is None else answers,
         )
         result = agent(client, catalogue=EMBEDDING_CATALOGUE).run(embedding_request())
@@ -1209,7 +1207,7 @@ class TestAnEmbeddingAbsorbsThePlannedEntity:
 
     def test_an_entity_a_chosen_embedding_absorbs_leaves_the_top_level_plan(self):
         client, result = self.run()
-        assert result.absorbed == {"e3": "e1"}
+        assert result.absorbed == {"e2": "e1"}
         assert client.calls == 3, "the absorbed entity no longer has an extract call of its own"
 
     def test_the_holder_is_the_only_entity_the_extract_call_is_asked_to_report(self):
@@ -1220,9 +1218,9 @@ class TestAnEmbeddingAbsorbsThePlannedEntity:
         """The embedded object carries an id as a top-level one does, and
         anything may still point at it, so the id slot has to offer it."""
         client, result = self.run()
-        assert embedded_in(client.formats[2])["properties"]["id"]["enum"] == ["e1", "e3"]
-        assert result.selected["e3"] == ("PostalAddress",)
-        assert result.mentions["e3"] == "Hauptstrasse 1"
+        assert embedded_in(client.formats[2])["properties"]["id"]["enum"] == ["e1", "e2"]
+        assert result.selected["e2"] == ("PostalAddress",)
+        assert result.mentions["e2"] == "Hauptstrasse 1"
 
     def test_the_call_that_holds_it_is_given_the_properties_it_fills(self):
         """The trim reaches every shape in the answer, the embedded one
@@ -1236,31 +1234,31 @@ class TestAnEmbeddingAbsorbsThePlannedEntity:
     def test_the_absorbed_entity_is_reported_inside_its_holder(self):
         _, result = self.run()
         assert [entity["id"] for entity in result.payload["entities"]] == ["e1"]
-        assert result.payload["entities"][0]["address"][0]["id"] == "e3"
+        assert result.payload["entities"][0]["address"][0]["id"] == "e2"
 
     def test_an_entity_no_chosen_embedding_can_absorb_stays_at_the_top_level(self):
         """The step declining the embedding leaves the plan as it was. What it
         chose is the measurement, and a pipeline that absorbed on its own
         behalf would be answering the question the step was asked."""
         client, result = self.run(
-            fillable={"fillable": {"e1": ["name"], "e3": ["streetAddress"]}},
+            fillable={"fillable": {"e1": ["name"], "e2": ["streetAddress"]}},
             answers=[
                 [{"id": "e1", "type": "Person", "name": "Andrea"}],
-                [{"id": "e3", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
+                [{"id": "e2", "type": "PostalAddress", "streetAddress": "Hauptstrasse 1"}],
             ],
         )
         assert result.absorbed == {}
         assert client.calls == 4
-        assert sorted(entity["id"] for entity in result.payload["entities"]) == ["e1", "e3"]
+        assert sorted(entity["id"] for entity in result.payload["entities"]) == ["e1", "e2"]
 
     def test_an_entity_two_holders_could_absorb_stays_at_the_top_level(self):
         """Which of them the document put it inside is a question the document
         already answered, and picking one would be inventing an answer."""
         _, result = self.run(
             plan=[
-                {"id": "e1", "candidates": ["Person"], "mention": "Andrea"},
-                {"id": "e2", "candidates": ["Person"], "mention": "Bert"},
-                {"id": "e3", "candidates": ["PostalAddress"], "mention": "Hauptstrasse 1"},
+                {"candidates": ["Person"], "mention": "Andrea"},
+                {"candidates": ["Person"], "mention": "Bert"},
+                {"candidates": ["PostalAddress"], "mention": "Hauptstrasse 1"},
             ],
             fillable={"fillable": {"e1": ["address"], "e2": ["address"], "e3": ["streetAddress"]}},
             answers=[
@@ -1317,7 +1315,7 @@ class TestAnEmbeddingAbsorbsThePlannedEntity:
         _, result = self.run()
         described = result.describe()
         assert json.dumps(described)
-        assert described["absorbed"] == {"e3": "e1"}
+        assert described["absorbed"] == {"e2": "e1"}
 
 
 class TestASchemaThatOffersNoObjectSlot:

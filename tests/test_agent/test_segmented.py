@@ -485,3 +485,54 @@ class TestWhatItShares:
         )
         result = agent(client).run(request())
         assert result.selected == {"e1": ("Person",)}
+
+
+class TestPinningAnArrayValuedReference:
+    """A property that takes several ids is narrowed inside its array.
+
+    Replacing the whole slot with a scalar leaves a model that answers a list
+    unconstrained by the enum and in breach of the declared type at once: one
+    recipe filled an array-valued `recipeIngredient` with seventeen ids, none
+    of them in the enum the slot had been narrowed to.
+    """
+
+    def _pinned(self, declared):
+        from oold.agent.enforcement import ARMS
+        from oold.agent.extraction import ExtractionAgent, PlannedEntity
+        from oold.agent.provider import profile_for
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "entities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"type": {"type": "string"}, "holds": declared},
+                    },
+                }
+            },
+        }
+        agent = ExtractionAgent(_Quiet(), ARMS["schema-dump-catalog-flat-enforced"], profile_for("openai"))
+        plan = (PlannedEntity(key="e1", classes=("Thing",), mention="a"),)
+        pinned, _ = agent._pin_references(schema, plan, {"holds": ("Thing",)}, {"Thing": ()})
+        return pinned["properties"]["entities"]["items"]["properties"]["holds"]
+
+    def test_an_array_keeps_its_array_and_the_enum_goes_on_the_items(self):
+        slot = self._pinned({"type": "array", "items": {"type": "string"}})
+        assert slot["type"] == "array"
+        assert slot["items"]["enum"] == ["e1"]
+
+    def test_a_scalar_slot_is_replaced_as_it_was(self):
+        slot = self._pinned({"type": "string"})
+        assert slot["type"] == "string"
+        assert slot["enum"] == ["e1"]
+
+
+class _Quiet:
+    model = "quiet"
+
+    def invoke(self, messages, *, response_format=None, strict=False):
+        from oold.agent.client import ChatResponse
+
+        return ChatResponse(text="{}", parsed={}, usage=None, raw=None)

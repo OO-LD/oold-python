@@ -1330,11 +1330,22 @@ class ExtractionAgent:
                 else:
                     kind = "string"
                 described = declared.get("description") if isinstance(declared, dict) else None
-                properties[name] = {
+                pinned: dict[str, Any] = {
                     "type": kind,
                     "enum": values,
                     "description": described or f"The id of the entity {name} points at.",
                 }
+                # Inside the array where the property takes several values.
+                # Replacing the whole slot with a scalar leaves a model that
+                # answers a list unconstrained by the enum and in breach of
+                # the declared type at once: one recipe filled an array-valued
+                # `recipeIngredient` with seventeen ids, none of them in the
+                # enum the slot had been narrowed to, and the decode
+                # constraint never engaged.
+                if isinstance(declared, dict) and declared.get("type") == "array":
+                    properties[name] = {**declared, "items": pinned}
+                else:
+                    properties[name] = pinned
         return schema, unpinned
 
     def _gate(self, payload: Any) -> tuple[Any, list[str]]:

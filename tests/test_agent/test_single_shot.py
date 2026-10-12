@@ -1,5 +1,3 @@
-
-
 class TestAnAnswerWithNoPlanStillNamesItsEntities:
     """An entity that names itself nothing cannot be pointed at.
 

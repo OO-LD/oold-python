@@ -44,7 +44,9 @@ _SELECT_TASK = (
     "An entity is a thing the document describes, not a statement about one. "
     "A document that gives four properties of one thing describes one entity, not four, "
     "so list a thing once however many times the document mentions it, and do not list "
-    "a property, a value or a field name as an entity of its own."
+    "a property, a value or a field name as an entity of its own. "
+    "Where more than one class fits an entity, choose the one that can be attached to "
+    "another entity in the document."
 )
 """What to detect.
 
@@ -53,6 +55,18 @@ step returns roughly one entity per property mention. Over 120 two-entity
 documents haiku planned 7.6 entities per document and gpt-5-nano 3.9, and a
 traced case returned four ``LodgingBusiness`` for the four fields stated about
 one hotel and three ``Rating`` for the three stated about one rating.
+
+The last sentence decides between classes that fit, which is a choice the step
+makes silently and a later step cannot revisit. A class nothing in the
+catalogue points at leaves the entity standing on its own however well it
+describes it: on one recipe page the step typed 17 ingredients ``Product``, no
+offered property ranges over ``Product``, and all 17 arrived as isolated nodes.
+Reading the same page in one call, the model chose ``HowToSupply`` 20 times,
+which ``Recipe.supply`` holds.
+
+It is a claim about which class, not about how many relations to assert. The
+relations are what the later steps answer and what a graph is scored on, so a
+step told to maximise them would be answering the question being asked of it.
 
 It says what an entity is and never how many there are. A count would be the
 answer, and the step is being asked to find it.

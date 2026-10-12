@@ -419,3 +419,23 @@ def test_the_select_prompt_says_what_one_entity_is():
     assert "one entity, not four" in system
     for leak in ("two entities", "2 entities", "exactly two"):
         assert leak not in system.lower()
+
+
+def test_the_select_prompt_breaks_a_tie_towards_the_class_that_can_be_attached():
+    """A class nothing in the catalogue points at leaves the entity on its own.
+
+    Measured on one recipe page: the step typed 17 ingredients into a class no
+    offered property ranges over and all 17 arrived as isolated nodes, where
+    the same page read in one call was typed into a class another entity holds.
+
+    The sentence names no class, no property and no corpus, or it would tune
+    the step to the page it was written on, and it asks for neither more
+    relations nor more entities, which are what the steps after it answer.
+    """
+    request = ExtractionRequest(document="anything", schema=None)
+    system = build_selection_messages(request, arm("schema-dump-catalog-flat-enforced", CATALOGUE), 3)[0].content
+
+    assert "Where more than one class fits an entity" in system
+    assert "attached to another entity in the document" in system
+    for leak in ("as many", "maximis", "maximiz", "relation", "product", "recipe", "ingredient"):
+        assert leak not in system.lower()

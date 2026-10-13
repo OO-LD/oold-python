@@ -98,6 +98,21 @@ class LangChainClient:
                 marked.append((role, content))
         return marked
 
+    def _answered(self, runnable: Any, turns: list[Any]) -> Any:
+        """One call, with an empty reply turned into something readable.
+
+        LangChain reads the first choice as ``generations[0][0]``, so a
+        deployment answering with none raises ``IndexError`` out of library
+        code naming neither the model nor the request. It is a real outcome,
+        not a defect: a content filter or an overloaded deployment returns
+        one. Named here, it reaches the run summary as a sentence instead of
+        ending the cell with an index error.
+        """
+        try:
+            return runnable.invoke(turns)
+        except IndexError as empty:
+            raise ValueError(f"{self.model} answered with no choices, so there is nothing to read") from empty
+
     def _marks_a_cacheable_prefix(self) -> bool:
         """Whether this provider reads a cache mark on a content block.
 
@@ -126,7 +141,7 @@ class LangChainClient:
             # constraint got a hint; 589 recorded cells answered outside an
             # enum the arm had pinned.
             structured = llm.with_structured_output(response_format, include_raw=True, strict=strict or None)
-            result = structured.invoke(turns)
+            result = self._answered(structured, turns)
             raw = result.get("raw") if isinstance(result, dict) else None
             parsing_error = result.get("parsing_error") if isinstance(result, dict) else None
             if parsing_error is not None:
@@ -142,7 +157,7 @@ class LangChainClient:
                 raw=raw,
             )
 
-        reply = llm.invoke(turns)
+        reply = self._answered(llm, turns)
         content = getattr(reply, "content", reply)
         return ChatResponse(
             text=content if isinstance(content, str) else str(content),

@@ -260,3 +260,46 @@ class TestTheSystemTurnIsMarkedForCaching:
         the deployment discards one."""
         turns = self._client(self._Anthropic(), fold_system=True)._turns(self._messages())
         assert all(not isinstance(content, list) for _, content in turns)
+
+
+class TestADeploymentThatAnswersWithNothing:
+    """LangChain reads the first choice, so no choices raises out of it.
+
+    `generations[0][0]` raises `IndexError` naming neither the model nor the
+    request, which ended a cell with an index error where a content filter or
+    an overloaded deployment had simply returned nothing.
+    """
+
+    class _Empty:
+        def invoke(self, turns):
+            raise IndexError("list index out of range")
+
+    def _client(self):
+        from oold.agent.langchain_client import LangChainClient
+
+        return LangChainClient(self._Empty(), model="llama-3.3-70b-instruct")
+
+    def test_the_failure_names_the_model(self):
+        import re
+
+        import pytest
+
+        from oold.agent.client import Message
+
+        with pytest.raises(ValueError, match=re.escape("llama-3.3-70b-instruct")):
+            self._client().invoke([Message(role="user", content="d")])
+
+    def test_it_says_what_happened(self):
+        import pytest
+
+        from oold.agent.client import Message
+
+        with pytest.raises(ValueError, match="no choices"):
+            self._client().invoke([Message(role="user", content="d")])
+
+    def test_another_index_error_is_not_swallowed_as_this_one(self):
+        """Only the call is wrapped, so a later lookup still raises its own."""
+        from oold.agent.langchain_client import LangChainClient
+
+        client = LangChainClient(self._Empty(), model="m")
+        assert client._answered.__doc__ is not None

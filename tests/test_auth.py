@@ -16,6 +16,7 @@ from oold.backend.auth import (
     dump_credentials,
     get_credential,
     load_credentials,
+    registered_credentials,
     set_credential,
 )
 
@@ -36,6 +37,21 @@ def test_set_credential_with_token():
     cred = get_credential("api.example.com")
     assert isinstance(cred, TokenCredential)
     assert cred.token.get_secret_value() == "tok_abc"
+
+
+def test_registered_credentials_lists_what_is_on_offer():
+    set_credential(TokenCredential(iri="one.example.com", token=SecretStr("a")))
+    set_credential(TokenCredential(iri="two.example.com", token=SecretStr("b")))
+    registered = registered_credentials()
+    assert {"one.example.com", "two.example.com"} <= set(registered)
+    assert registered["one.example.com"].token.get_secret_value() == "a"
+
+
+def test_registered_credentials_is_a_copy():
+    set_credential(TokenCredential(iri="three.example.com", token=SecretStr("c")))
+    registered = registered_credentials()
+    registered.clear()
+    assert get_credential("three.example.com") is not None
 
 
 def test_get_credential_missing_raises():

@@ -107,8 +107,106 @@ class FieldProxy:
 _types: dict[str, pydantic.main._model_construction.ModelMetaclass] = {}
 _controller_types: dict[str, list] = {}
 
+_logger = logging.getLogger(__name__)
 
 M = TypeVar("M", bound="_LinkedBaseModelLegacy")
+
+
+def _cls_name(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _usable_iris(cls: type, iri) -> list[str]:
+    """The IRIs to register ``cls`` under, flattened and validated.
+
+    ``get_cls_iri()`` returns a bare string or a list, and the list may hold
+    the default of the type field, which is a list again. Flattening here is
+    what keeps the public API in step with the metaclass; silently skipping a
+    nested or empty shape left a class unregistered and unreachable by type.
+    """
+    if iri is None:
+        iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
+    if iri is None:
+        raise ValueError(f"{_cls_name(cls)} has no type IRI: pass iri= or define get_cls_iri()")
+    # filter before sorting: get_cls_iri() may return the default of a required
+    # type field, which is PydanticUndefined, and sorting that against a string
+    # raises - throwing away the usable IRI next to it
+    usable = {value for value in _iri_set(iri) if isinstance(value, str) and value.strip()}
+    if not usable:
+        raise ValueError(f"{_cls_name(cls)}: no usable type IRI in {iri!r}")
+    return sorted(usable)
+
+
+def registers_itself(cls: type) -> bool:
+    """Whether a class wants to be in the registries.
+
+    A class opts out with ``__oold_register__ = False``. The case for it is a
+    controller that reuses another model without being the handler for it - an
+    in-memory buffer over a local-file model, say: it is asked for by name and
+    constructed from the model, so having it compete for the model's type IRI
+    only makes resolution ambiguous.
+
+    The flag is a plain class attribute, so it is **inherited**: a subclass of
+    an opted-out class stays out too, unless it sets ``__oold_register__ =
+    True`` itself.
+    """
+    return bool(getattr(cls, "__oold_register__", True))
+
+
+def _put_type(iri: str, cls: type, registry: dict | None = None) -> None:
+    """Write one model registration, reporting what it replaces.
+
+    ``registry`` selects the pydantic layer; it defaults to the v2 one. The two
+    layers keep separate registries, and a class of the wrong flavour handed to
+    deserialization does not validate.
+    """
+    registry = _types if registry is None else registry
+    previous = registry.get(iri)
+    if previous is cls:
+        return
+    if previous is None:
+        _logger.info("Type %s: %s", iri, _cls_name(cls))
+    elif _cls_name(previous) == _cls_name(cls):
+        # the same class from a reloaded module: not an override, and saying
+        # "X replaces X" for every class of a regenerated model module is noise
+        _logger.debug("Type %s: %s re-registered", iri, _cls_name(cls))
+    else:
+        _logger.warning(
+            "Type %s: %s replaces %s",
+            iri,
+            _cls_name(cls),
+            _cls_name(previous),
+        )
+    registry[iri] = cls
+
+
+def _put_controller(iri: str, cls: type, registry: dict | None = None) -> None:
+    """Append one controller registration, reporting what it takes over from.
+
+    A class registered again - re-imported, or defined by a reloaded module -
+    moves to the front rather than piling up: resolution takes the last entry,
+    so a stale copy left behind would only ever be dead weight.
+    """
+    registry = _controller_types if registry is None else registry
+    entries = registry.setdefault(iri, [])
+    if entries and entries[-1] is cls:
+        return
+    name = _cls_name(cls)
+    superseded = [c for c in entries if c is cls or _cls_name(c) == name]
+    for stale in superseded:
+        entries.remove(stale)
+    if entries:
+        _logger.warning(
+            "Controller %s: %s takes precedence over %s",
+            iri,
+            name,
+            ", ".join(_cls_name(c) for c in entries),
+        )
+    elif superseded:
+        _logger.debug("Controller %s: %s re-registered", iri, name)
+    else:
+        _logger.info("Controller %s: %s", iri, name)
+    entries.append(cls)
 
 
 def register_type(cls: type, iri: str | list[str] | None = None) -> None:
@@ -122,6 +220,11 @@ def register_type(cls: type, iri: str | list[str] | None = None) -> None:
     Without it callers reach for the private ``_types`` mapping and write into
     it directly, which couples them to an internal and offers no validation.
 
+    A class may only claim the IRIs it introduces itself: a subclass that
+    merely narrows a field reports its parent's IRI, and registering it would
+    make every parent document deserialize as the subclass. Pass ``iri``
+    explicitly to override that.
+
     Parameters
     ----------
     cls
@@ -129,13 +232,18 @@ def register_type(cls: type, iri: str | list[str] | None = None) -> None:
     iri
         The IRI(s) to register under. Defaults to ``cls.get_cls_iri()``.
     """
-    if iri is None:
-        iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
-    if iri is None:
-        raise ValueError(f"{cls.__name__} has no type IRI: pass iri= or define get_cls_iri()")
-    for value in iri if isinstance(iri, list) else [iri]:
-        if isinstance(value, str):
-            _types[value] = cls
+    explicit = iri is not None
+    iris = _usable_iris(cls, iri)
+    inherited = frozenset() if explicit else _inherited_cls_iris(cls)
+    for value in iris:
+        if value in inherited:
+            _logger.info(
+                "%s: %s is inherited, not registering it. Pass iri= to claim it anyway.",
+                _cls_name(cls),
+                value,
+            )
+            continue
+        _put_type(value, cls)
 
 
 def get_registered_type(iri: str) -> type | None:
@@ -152,7 +260,69 @@ def registered_types() -> dict:
     return _types
 
 
-_logger = logging.getLogger(__name__)
+def register_controller_type(cls: type, iri: str | list[str] | None = None) -> None:
+    """Register a controller class under the type IRI(s) it can act on.
+
+    Controller subclasses register themselves on creation, so this is only
+    needed for controllers built dynamically or registered under an extra IRI.
+    Several controllers may answer to the same IRI; the one registered last
+    wins, so a package imported later overrides an implementation.
+
+    Parameters
+    ----------
+    cls
+        The controller class to register.
+    iri
+        The IRI(s) to register under. Defaults to ``cls.get_cls_iri()``.
+    """
+    for value in _usable_iris(cls, iri):
+        _put_controller(value, cls)
+
+
+def get_registered_controller_types(iri: str) -> list:
+    """The controller classes registered for a type IRI, last registered first.
+
+    The order resolution uses: :func:`find_controller_type` and
+    :func:`~oold.static.resolve_type` both take the most recent registration.
+    """
+    return list(reversed(_controller_types.get(iri, [])))
+
+
+def registered_controller_types() -> dict:
+    """The live controller registry.
+
+    Prefer :func:`register_controller_type` over writing to it directly.
+    """
+    return _controller_types
+
+
+def find_controller_type(type_iris, base: type | None = None) -> type | None:
+    """A registered controller for any of ``type_iris``.
+
+    Lets a caller act on an entity without knowing which concrete controller
+    implements it: pass the entity's type IRIs and, optionally, the interface
+    the controller has to provide. The IRIs are tried in order; within one IRI
+    the most recently registered controller wins, so a downstream package can
+    override an implementation by importing its own.
+
+    Parameters
+    ----------
+    type_iris
+        A type IRI or a list of them, tried in order.
+    base
+        If given, only controllers that are a subclass of it are considered.
+
+    Returns
+    -------
+        The controller class, or ``None`` if nothing matches.
+    """
+    if isinstance(type_iris, str):
+        type_iris = [type_iris]
+    for iri in type_iris or []:
+        for cls in reversed(_controller_types.get(iri, [])):
+            if base is None or issubclass(cls, base):
+                return cls
+    return None
 
 
 def _iri_set(value) -> frozenset:
@@ -214,7 +384,7 @@ class _LinkedBaseModelMetaClassLegacy(pydantic.main._model_construction.ModelMet
         # (they extend data models but should not replace them in
         # the type lookup table).
         _is_ctrl = any(b.__module__ == "oold.model" and b.__name__ == "BaseController" for b in cls.__mro__)
-        if hasattr(cls, "get_cls_iri"):
+        if hasattr(cls, "get_cls_iri") and registers_itself(cls):
             iri = cls.get_cls_iri()
             if iri is not None:
                 iris = iri if isinstance(iri, list) else [iri]
@@ -224,10 +394,12 @@ class _LinkedBaseModelMetaClassLegacy(pydantic.main._model_construction.ModelMet
                 # IRIs it introduces itself.
                 inherited = frozenset() if _is_ctrl else _inherited_cls_iris(cls)
                 for i in iris:
+                    if not isinstance(i, str):
+                        continue
                     if _is_ctrl:
-                        _controller_types.setdefault(i, []).append(cls)
+                        _put_controller(i, cls)
                     elif i not in inherited:
-                        _types[i] = cls
+                        _put_type(i, cls)
         return cls
 
     # override operators, see https://docs.python.org/3/library/operator.html
@@ -1039,7 +1211,7 @@ class _LinkedBaseModelLegacy(BaseModel, GenericLinkedBaseModel, metaclass=_Linke
     @classmethod
     def from_jsonld(cls, jsonld: dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON-LD representation."""
-        return import_jsonld(BaseModel, _LinkedBaseModelLegacy, cls, jsonld, _types)
+        return import_jsonld(BaseModel, _LinkedBaseModelLegacy, cls, jsonld, _types, _controller_types)
 
     def to_json(self, exclude_defaults: bool = False) -> dict:
         """Return the JSON representation of the object.
@@ -1071,7 +1243,7 @@ class _LinkedBaseModelLegacy(BaseModel, GenericLinkedBaseModel, metaclass=_Linke
     @classmethod
     def from_json(cls, data: dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON representation."""
-        return import_json(BaseModel, _LinkedBaseModelLegacy, cls, data, _types)
+        return import_json(BaseModel, _LinkedBaseModelLegacy, cls, data, _types, _controller_types)
 
     # @classmethod
     # def model_json_schema(

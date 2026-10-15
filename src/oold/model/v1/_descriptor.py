@@ -75,10 +75,15 @@ def _register_class_v1(cls: type) -> None:
     IRIs it introduces itself - a subclass that merely narrows a field reports
     its parent's IRI and would otherwise replace it.
     """
-    from oold.model import _inherited_cls_iris
+    from oold.model import (
+        _inherited_cls_iris,
+        _put_controller,
+        _put_type,
+        registers_itself,
+    )
 
     iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
-    if iri is None:
+    if iri is None or not registers_itself(cls):
         return
     is_ctrl = any(b.__name__ == "BaseController" for b in cls.__mro__)
     inherited = frozenset() if is_ctrl else _inherited_cls_iris(cls)
@@ -86,9 +91,9 @@ def _register_class_v1(cls: type) -> None:
         if not isinstance(value, str):
             continue
         if is_ctrl:
-            _CONTROLLER_REGISTRY.setdefault(value, []).append(cls)
+            _put_controller(value, cls, _CONTROLLER_REGISTRY)
         elif value not in inherited:
-            _TYPE_REGISTRY[value] = cls
+            _put_type(value, cls, _TYPE_REGISTRY)
 
 
 def _neutralise_field(field: Any) -> Any:
@@ -363,7 +368,7 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     def from_json(cls, data: dict[str, Any]) -> Any:
         from oold.static import import_json
 
-        return import_json(BaseModel, LinkedBaseModel, cls, data, _TYPE_REGISTRY)
+        return import_json(BaseModel, LinkedBaseModel, cls, data, _TYPE_REGISTRY, _CONTROLLER_REGISTRY)
 
     def to_jsonld(self) -> dict[str, Any]:
         from oold.static import export_jsonld
@@ -374,4 +379,4 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
     def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
         from oold.static import import_jsonld
 
-        return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _TYPE_REGISTRY)
+        return import_jsonld(BaseModel, LinkedBaseModel, cls, jsonld, _TYPE_REGISTRY, _CONTROLLER_REGISTRY)

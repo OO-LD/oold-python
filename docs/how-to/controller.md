@@ -74,7 +74,33 @@ print(ctrl.to_json())
 
 ## Type registry behavior
 
-`BaseController` excludes itself from the `_types` lookup. When the backend resolves `"ex:robot-1"`, it returns a plain `Robot` instance, not a `RobotController`. This prevents controller logic from leaking into resolved data objects.
+A controller is kept out of `_types`, the data model registry, and collected in `_controller_types` instead. The data model therefore stays the class a type IRI maps to, and `to_json()` keeps producing controller-free documents.
+
+Resolution still hands out the controller: `from_json()`, `from_jsonld()` and anything else going through `resolve_type()` return `RobotController` for `"ex:robot-1"`, so behaviour is available wherever a model is read back. Pass `prefer_controller=False` to `resolve_type()` to get the pure `Robot` class.
+
+When several controllers answer to the same IRI, the one registered **last** wins - a package imported later overrides an implementation without the earlier one knowing about it. Every registration is logged at `INFO` under the `oold.model` logger, and an override at `WARNING`, so an unexpected winner is visible:
+
+```python
+import logging
+logging.getLogger("oold.model").setLevel(logging.INFO)
+```
+
+Resolution never crosses pydantic versions: `oold.model` and `oold.model.v1` keep separate registries, and a lookup is answered from the one the model registry belongs to.
+
+To pick a controller explicitly, construct it from the data model:
+
+```python
+ctrl = RobotController(robot, connection_url="tcp://192.168.1.10:5000")
+```
+
+A controller that reuses a model without being the handler for it - a simulator over `Robot`, an in-memory buffer over a local file - sets `__oold_register__ = False` and stays out of the lookup. It is still constructed from the model as above:
+
+```python
+class SimulatedRobot(BaseController, Robot):
+    __oold_register__ = False
+```
+
+The flag is inherited, so a subclass of `SimulatedRobot` stays out of the registries too; set `__oold_register__ = True` on it to opt back in. `register_controller_type()` registers an opted-out class regardless - the flag governs the automatic registration on class creation, not an explicit request.
 
 ---
 

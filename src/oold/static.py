@@ -446,16 +446,43 @@ def normalize_iri(iri: str, model_cls, expand: bool) -> str:
         return compacted_iri
 
 
+def matching_controller_registry(_types: dict) -> dict:
+    """The controller registry of the same pydantic layer as ``_types``.
+
+    The two layers keep separate registries and a v2 class handed to v1
+    deserialisation does not validate, so a caller that only knows the model
+    registry must not be answered from the other one.
+    """
+    try:
+        from oold.model.v1 import _controller_types as _v1_controllers
+        from oold.model.v1 import _types as _v1_types
+
+        if _types is _v1_types:
+            return _v1_controllers
+    except ImportError:  # pragma: no cover
+        pass
+    try:
+        from oold.model import _controller_types as _v2_controllers
+    except ImportError:  # pragma: no cover
+        return {}
+    return _v2_controllers
+
+
 def resolve_type(
     type_iri,
     _types: dict[str, type],
     prefer_controller: bool = True,
+    _controller_types: dict[str, list] | None = None,
 ):
     """Resolve a type IRI to a class.
 
-    If prefer_controller is True and exactly one controller is registered
-    for the type IRI, returns the controller class. Otherwise returns the
+    If prefer_controller is True and a controller is registered for the type
+    IRI, returns the controller class - the most recently registered one, so a
+    package imported later overrides an implementation. Otherwise returns the
     pure data model class.
+
+    ``_controller_types`` defaults to the registry of the same pydantic layer
+    as ``_types``; pass it to keep resolution within one layer explicitly.
 
     Returns the resolved class or None.
     """
@@ -465,25 +492,24 @@ def resolve_type(
         type_iri = type_iri.get("@id")
     if type_iri is None:
         return None
-    # Prefer controller if exactly one is registered
     if prefer_controller:
-        try:
-            from oold.model import _controller_types
-
-            ctrls = _controller_types.get(type_iri, [])
-            if len(ctrls) == 1:
-                return ctrls[0]
-            elif len(ctrls) > 1:
-                names = [c.__module__ + "." + c.__name__ for c in ctrls]
-                _logger.info(
-                    "Multiple controllers for %s: %s. "
-                    "Falling back to pure model. To use a specific "
-                    "controller: ctrl = ControllerClass(model_instance)",
-                    type_iri,
-                    names,
-                )
-        except ImportError:
-            pass
+        if _controller_types is None:
+            _controller_types = matching_controller_registry(_types)
+        ctrls = _controller_types.get(type_iri, [])
+        if len(ctrls) > 1:
+            # debug, not warning: registration already warned once about the
+            # override, and this runs per resolved document
+            names = [c.__module__ + "." + c.__name__ for c in ctrls]
+            _logger.debug(
+                "Multiple controllers for %s: %s. Using the last registered "
+                "one, %s. To use a specific controller: "
+                "ctrl = ControllerClass(model_instance)",
+                type_iri,
+                names,
+                names[-1],
+            )
+        if ctrls:
+            return ctrls[-1]
     return _types.get(type_iri)
 
 
@@ -493,6 +519,7 @@ def import_jsonld(
     model_cls: GenericLinkedBaseModel,
     jsonld_dict: dict,
     _types: dict[str, type],
+    _controller_types: dict[str, list] | None = None,
 ) -> GenericLinkedBaseModel:
     """Return the object instance from the JSON-LD representation."""
     # ToDo: apply jsonld frame with @id restriction
@@ -509,7 +536,7 @@ def import_jsonld(
                 f"and no type IRI found in JSON-LD dict: {jsonld_dict}"
             )
     else:
-        model_cls = resolve_type(type_iri, _types)
+        model_cls = resolve_type(type_iri, _types, _controller_types=_controller_types)
         if model_cls is None:
             raise ValueError(f"Unknown model type IRI: {type_iri}")
     if model_type == BaseModel:
@@ -547,6 +574,7 @@ def import_json(
     model_cls: GenericLinkedBaseModel,
     json_dict: dict,
     _types: dict[str, type],
+    _controller_types: dict[str, list] | None = None,
 ) -> GenericLinkedBaseModel:
     """Return the object instance from the JSON representation."""
     # get the type from the json_dict
@@ -562,7 +590,7 @@ def import_json(
                 f"and no type IRI found in JSON dict: {json_dict}"
             )
     else:
-        model_cls = resolve_type(type_iri, _types)
+        model_cls = resolve_type(type_iri, _types, _controller_types=_controller_types)
         if model_cls is None:
             raise ValueError(f"Unknown model type IRI: {type_iri}")
     try:

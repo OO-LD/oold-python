@@ -7,6 +7,31 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.3.0 (2026-10-15)
+
+### Bug Fixes
+
+- One precedence rule for controllers, isolated per pydantic layer
+  ([`2b3f70d`](https://github.com/OO-LD/oold-python/commit/2b3f70dc27d42a508a90ebaa4eeca1dae0fd16a2))
+
+- Quieter registry logging, and controllers for inline documents
+  ([`37c578e`](https://github.com/OO-LD/oold-python/commit/37c578e7b81f91075e5c6ef2ce9ed993ad0e4dda))
+
+### Features
+
+- Let a class opt out of the type registries
+  ([`e501f01`](https://github.com/OO-LD/oold-python/commit/e501f0103e488d2354cd3b34a0561e1fd146c125))
+
+- Public lookup for the controller type registry
+  ([`e777b70`](https://github.com/OO-LD/oold-python/commit/e777b7091484f6aad4edbe3cc3e0419deccc23df))
+
+- Public registry lookup for the pydantic v1 models
+  ([`84b76cb`](https://github.com/OO-LD/oold-python/commit/84b76cb003e9560dc1c6c2d2262c0e363dfcc85b))
+
+- **auth**: Expose the registered credentials
+  ([`12e979b`](https://github.com/OO-LD/oold-python/commit/12e979b65e2acfe1a5342c0118df6ef6206108b2))
+
+
 ## v2.2.0 (2026-09-27)
 
 ### Features

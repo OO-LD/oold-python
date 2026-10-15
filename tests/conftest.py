@@ -50,12 +50,27 @@ def _restore_global_registries():
 
     Classes registered at *module import* are left alone: they are set up before
     this fixture runs, so the snapshot already contains them.
-    """
-    from oold.model import _descriptor, _types
-    from oold.model.v1 import _descriptor as _descriptor_v1
 
-    registries = [interface._resolvers, _types, _descriptor._TYPE_REGISTRY, _descriptor_v1._TYPE_REGISTRY]
-    saved = [dict(r) for r in registries]
+    The controller registries hold a *list* per IRI, so the snapshot copies
+    those lists too - a shallow copy of the mapping shares them, and the
+    appends of one test then pile up in the next.
+    """
+    from oold.model import _controller_types, _descriptor, _types
+    from oold.model.v1 import _controller_types as _controller_types_v1
+    from oold.model.v1 import _descriptor as _descriptor_v1
+    from oold.model.v1 import _types as _types_v1
+
+    registries = [
+        interface._resolvers,
+        _types,
+        _types_v1,
+        _controller_types,
+        _controller_types_v1,
+        _descriptor._TYPE_REGISTRY,
+        _descriptor_v1._TYPE_REGISTRY,
+        _descriptor_v1._CONTROLLER_REGISTRY,
+    ]
+    saved = [{k: list(v) if isinstance(v, list) else v for k, v in r.items()} for r in registries]
     yield
     for registry, snapshot in zip(registries, saved, strict=True):
         registry.clear()

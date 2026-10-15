@@ -270,21 +270,23 @@ class LinkedApiMixin(GenericLinkedBaseModel):
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Any:
+        from oold.model import _controller_types
         from oold.model._descriptor import _TYPE_REGISTRY
 
         # root must be the binding base: import_json only falls back to the
         # given class when the two differ, which is how a payload without a
         # type IRI still constructs.
-        return import_json(BaseModel, cls._root_cls(), cls, data, _TYPE_REGISTRY)
+        return import_json(BaseModel, cls._root_cls(), cls, data, _TYPE_REGISTRY, _controller_types)
 
     def to_jsonld(self) -> dict[str, Any]:
         return export_jsonld(self, BaseModel)
 
     @classmethod
     def from_jsonld(cls, jsonld: dict[str, Any]) -> Any:
+        from oold.model import _controller_types
         from oold.model._descriptor import _TYPE_REGISTRY
 
-        return import_jsonld(BaseModel, cls._root_cls(), cls, jsonld, _TYPE_REGISTRY)
+        return import_jsonld(BaseModel, cls._root_cls(), cls, jsonld, _TYPE_REGISTRY, _controller_types)
 
     def store_jsonld(self) -> None:
         from oold.backend.interface import GetBackendParam, StoreParam, get_backend

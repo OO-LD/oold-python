@@ -930,7 +930,12 @@ def _register_class(cls: type) -> None:
     only claim the IRIs it introduces itself - a subclass that merely narrows a
     field reports its parent's IRI and would otherwise replace it.
     """
-    from oold.model import _controller_types, _inherited_cls_iris
+    from oold.model import (
+        _controller_types,
+        _inherited_cls_iris,
+        _put_controller,
+        _put_type,
+    )
 
     iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
     if iri is None:
@@ -941,9 +946,9 @@ def _register_class(cls: type) -> None:
         if not isinstance(value, str):
             continue
         if is_ctrl:
-            _controller_types.setdefault(value, []).append(cls)
+            _put_controller(value, cls, _controller_types)
         elif value not in inherited:
-            _TYPE_REGISTRY[value] = cls
+            _put_type(value, cls, _TYPE_REGISTRY)
 
 
 class _AutoLink:

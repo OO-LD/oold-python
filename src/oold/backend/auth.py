@@ -105,6 +105,16 @@ def set_credential(credential: BaseCredential):
     _credentials.set(creds)
 
 
+def registered_credentials() -> dict[str, BaseCredential]:
+    """The credentials registered in this context, keyed by IRI.
+
+    A caller that has to build a connection without being told which one - a
+    file controller that was handed no session - needs to see what is on offer
+    before it can pick, or report that the choice is ambiguous.
+    """
+    return dict(_credentials.get())
+
+
 def get_credential(iri: str, exact: bool = False) -> BaseCredential:
     """Retrieve the credential for the given IRI from the global store.
 

@@ -176,3 +176,36 @@ def test_v1_register_type_skips_an_inherited_iri():
 
     register_type_v1(V1Child)
     assert _types_v1[v1_iri] is V1Parent
+
+
+# -- opting out of the registries --
+
+
+def test_a_class_can_opt_out_of_registration():
+    """``InMemoryController`` over a local-file model is the case for it."""
+    iri = "Category:OSWOptOut"
+
+    class OptOutModel(LinkedBaseModel):
+        model_config = ConfigDict(json_schema_extra={"title": "OptOutModel"})
+        type: list[str] | None = [iri]
+
+    class OptOutController(BaseController, OptOutModel):
+        __oold_register__ = False
+
+    assert get_registered_controller_types(iri) == []
+    assert resolve_type(iri, _types) is OptOutModel
+    assert OptOutController(OptOutModel()).type == [iri]
+
+
+def test_opting_out_still_allows_an_explicit_registration():
+    iri = "Category:OSWOptOutExplicit"
+
+    class ExplicitModel(LinkedBaseModel):
+        model_config = ConfigDict(json_schema_extra={"title": "ExplicitModel"})
+        type: list[str] | None = [iri]
+
+    class ExplicitController(BaseController, ExplicitModel):
+        __oold_register__ = False
+
+    register_controller_type(ExplicitController, iri)
+    assert resolve_type(iri, _types) is ExplicitController

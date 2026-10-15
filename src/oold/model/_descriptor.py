@@ -935,10 +935,11 @@ def _register_class(cls: type) -> None:
         _inherited_cls_iris,
         _put_controller,
         _put_type,
+        registers_itself,
     )
 
     iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
-    if iri is None:
+    if iri is None or not registers_itself(cls):
         return
     is_ctrl = any(b.__module__ == "oold.model" and b.__name__ == "BaseController" for b in cls.__mro__)
     inherited = frozenset() if is_ctrl else _inherited_cls_iris(cls)

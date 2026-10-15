@@ -238,10 +238,15 @@ class _LinkedBaseModelMetaClassLegacy(pydantic.v1.main.ModelMetaclass):
         # Register type IRI mapping. Controllers go to _controller_types
         # (they extend data models but should not replace them in
         # the type lookup table).
-        from oold.model import _inherited_cls_iris, _put_controller, _put_type
+        from oold.model import (
+            _inherited_cls_iris,
+            _put_controller,
+            _put_type,
+            registers_itself,
+        )
 
         _is_ctrl = any(b.__module__ == "oold.model" and b.__name__ == "BaseController" for b in cls.__mro__)
-        if hasattr(cls, "get_cls_iri"):
+        if hasattr(cls, "get_cls_iri") and registers_itself(cls):
             iri = cls.get_cls_iri()
             if iri is not None:
                 iris = iri if isinstance(iri, list) else [iri]

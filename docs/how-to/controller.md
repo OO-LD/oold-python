@@ -93,6 +93,13 @@ To pick a controller explicitly, construct it from the data model:
 ctrl = RobotController(robot, connection_url="tcp://192.168.1.10:5000")
 ```
 
+A controller that reuses a model without being the handler for it - a simulator over `Robot`, an in-memory buffer over a local file - sets `__oold_register__ = False` and stays out of the lookup. It is still constructed from the model as above:
+
+```python
+class SimulatedRobot(BaseController, Robot):
+    __oold_register__ = False
+```
+
 ---
 
 ## Multi-model controller

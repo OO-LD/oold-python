@@ -139,6 +139,18 @@ def _usable_iris(cls: type, iri) -> list[str]:
     return out
 
 
+def registers_itself(cls: type) -> bool:
+    """Whether a class wants to be in the registries.
+
+    A class opts out with ``__oold_register__ = False``. The case for it is a
+    controller that reuses another model without being the handler for it - an
+    in-memory buffer over a local-file model, say: it is asked for by name and
+    constructed from the model, so having it compete for the model's type IRI
+    only makes resolution ambiguous.
+    """
+    return bool(getattr(cls, "__oold_register__", True))
+
+
 def _put_type(iri: str, cls: type, registry: dict | None = None) -> None:
     """Write one model registration, reporting what it replaces.
 
@@ -354,7 +366,7 @@ class _LinkedBaseModelMetaClassLegacy(pydantic.main._model_construction.ModelMet
         # (they extend data models but should not replace them in
         # the type lookup table).
         _is_ctrl = any(b.__module__ == "oold.model" and b.__name__ == "BaseController" for b in cls.__mro__)
-        if hasattr(cls, "get_cls_iri"):
+        if hasattr(cls, "get_cls_iri") and registers_itself(cls):
             iri = cls.get_cls_iri()
             if iri is not None:
                 iris = iri if isinstance(iri, list) else [iri]

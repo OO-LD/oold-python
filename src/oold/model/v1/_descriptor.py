@@ -75,10 +75,15 @@ def _register_class_v1(cls: type) -> None:
     IRIs it introduces itself - a subclass that merely narrows a field reports
     its parent's IRI and would otherwise replace it.
     """
-    from oold.model import _inherited_cls_iris, _put_controller, _put_type
+    from oold.model import (
+        _inherited_cls_iris,
+        _put_controller,
+        _put_type,
+        registers_itself,
+    )
 
     iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
-    if iri is None:
+    if iri is None or not registers_itself(cls):
         return
     is_ctrl = any(b.__name__ == "BaseController" for b in cls.__mro__)
     inherited = frozenset() if is_ctrl else _inherited_cls_iris(cls)

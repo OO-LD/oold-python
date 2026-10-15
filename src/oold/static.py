@@ -497,8 +497,10 @@ def resolve_type(
             _controller_types = matching_controller_registry(_types)
         ctrls = _controller_types.get(type_iri, [])
         if len(ctrls) > 1:
+            # debug, not warning: registration already warned once about the
+            # override, and this runs per resolved document
             names = [c.__module__ + "." + c.__name__ for c in ctrls]
-            _logger.warning(
+            _logger.debug(
                 "Multiple controllers for %s: %s. Using the last registered "
                 "one, %s. To use a specific controller: "
                 "ctrl = ControllerClass(model_instance)",

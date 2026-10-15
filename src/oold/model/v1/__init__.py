@@ -140,7 +140,11 @@ def register_type(cls: type, iri=None) -> None:
     inherited = frozenset() if explicit else _inherited_cls_iris(cls)
     for value in iris:
         if value in inherited:
-            _logger.debug("%s: not registering inherited type IRI %s", cls.__name__, value)
+            _logger.info(
+                "%s: %s is inherited, not registering it. Pass iri= to claim it anyway.",
+                cls.__name__,
+                value,
+            )
             continue
         _put_type(value, cls, _types)
 

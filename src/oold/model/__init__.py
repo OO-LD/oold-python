@@ -128,15 +128,13 @@ def _usable_iris(cls: type, iri) -> list[str]:
         iri = cls.get_cls_iri() if hasattr(cls, "get_cls_iri") else None
     if iri is None:
         raise ValueError(f"{_cls_name(cls)} has no type IRI: pass iri= or define get_cls_iri()")
-    out: list[str] = []
-    for value in sorted(_iri_set(iri)):
-        if not isinstance(value, str) or not value.strip():
-            continue
-        if value not in out:
-            out.append(value)
-    if not out:
+    # filter before sorting: get_cls_iri() may return the default of a required
+    # type field, which is PydanticUndefined, and sorting that against a string
+    # raises - throwing away the usable IRI next to it
+    usable = {value for value in _iri_set(iri) if isinstance(value, str) and value.strip()}
+    if not usable:
         raise ValueError(f"{_cls_name(cls)}: no usable type IRI in {iri!r}")
-    return out
+    return sorted(usable)
 
 
 def registers_itself(cls: type) -> bool:
@@ -147,6 +145,10 @@ def registers_itself(cls: type) -> bool:
     in-memory buffer over a local-file model, say: it is asked for by name and
     constructed from the model, so having it compete for the model's type IRI
     only makes resolution ambiguous.
+
+    The flag is a plain class attribute, so it is **inherited**: a subclass of
+    an opted-out class stays out too, unless it sets ``__oold_register__ =
+    True`` itself.
     """
     return bool(getattr(cls, "__oold_register__", True))
 
@@ -162,36 +164,48 @@ def _put_type(iri: str, cls: type, registry: dict | None = None) -> None:
     previous = registry.get(iri)
     if previous is cls:
         return
-    if previous is not None:
+    if previous is None:
+        _logger.info("Type %s: %s", iri, _cls_name(cls))
+    elif _cls_name(previous) == _cls_name(cls):
+        # the same class from a reloaded module: not an override, and saying
+        # "X replaces X" for every class of a regenerated model module is noise
+        _logger.debug("Type %s: %s re-registered", iri, _cls_name(cls))
+    else:
         _logger.warning(
             "Type %s: %s replaces %s",
             iri,
             _cls_name(cls),
             _cls_name(previous),
         )
-    else:
-        _logger.info("Type %s: %s", iri, _cls_name(cls))
     registry[iri] = cls
 
 
 def _put_controller(iri: str, cls: type, registry: dict | None = None) -> None:
-    """Append one controller registration, reporting what it takes over from."""
+    """Append one controller registration, reporting what it takes over from.
+
+    A class registered again - re-imported, or defined by a reloaded module -
+    moves to the front rather than piling up: resolution takes the last entry,
+    so a stale copy left behind would only ever be dead weight.
+    """
     registry = _controller_types if registry is None else registry
     entries = registry.setdefault(iri, [])
     if entries and entries[-1] is cls:
         return
-    if cls in entries:
-        # re-registered under the same IRI: move it to the front of resolution
-        entries.remove(cls)
+    name = _cls_name(cls)
+    superseded = [c for c in entries if c is cls or _cls_name(c) == name]
+    for stale in superseded:
+        entries.remove(stale)
     if entries:
         _logger.warning(
             "Controller %s: %s takes precedence over %s",
             iri,
-            _cls_name(cls),
+            name,
             ", ".join(_cls_name(c) for c in entries),
         )
+    elif superseded:
+        _logger.debug("Controller %s: %s re-registered", iri, name)
     else:
-        _logger.info("Controller %s: %s", iri, _cls_name(cls))
+        _logger.info("Controller %s: %s", iri, name)
     entries.append(cls)
 
 
@@ -223,7 +237,11 @@ def register_type(cls: type, iri: str | list[str] | None = None) -> None:
     inherited = frozenset() if explicit else _inherited_cls_iris(cls)
     for value in iris:
         if value in inherited:
-            _logger.debug("%s: not registering inherited type IRI %s", _cls_name(cls), value)
+            _logger.info(
+                "%s: %s is inherited, not registering it. Pass iri= to claim it anyway.",
+                _cls_name(cls),
+                value,
+            )
             continue
         _put_type(value, cls)
 

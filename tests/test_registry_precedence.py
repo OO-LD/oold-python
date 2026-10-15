@@ -209,3 +209,94 @@ def test_opting_out_still_allows_an_explicit_registration():
 
     register_controller_type(ExplicitController, iri)
     assert resolve_type(iri, _types) is ExplicitController
+
+
+# -- the v1 layer answers the same way ----------------------------------------
+
+
+def _v1_controller(iri):
+    """A v1 model with a controller on it, registered under ``iri``."""
+    from oold.model.v1 import BaseController as BaseControllerV1
+    from oold.model.v1 import LinkedBaseModel as LinkedBaseModelV1
+
+    class Model(LinkedBaseModelV1):
+        class Config:
+            schema_extra = {"title": "V1PrecedenceModel"}
+
+        type: list = [iri]
+
+    class First(BaseControllerV1, Model):
+        pass
+
+    class Second(BaseControllerV1, Model):
+        pass
+
+    return Model, First, Second
+
+
+def test_v1_accessors_agree_on_the_last_registration():
+    from oold.model.v1 import _types as _types_v1
+    from oold.model.v1 import find_controller_type as find_v1
+    from oold.model.v1 import get_registered_controller_types as registered_v1
+
+    iri = "Category:OSWV1Precedence"
+    model, _first, second = _v1_controller(iri)
+
+    assert registered_v1(iri)[0] is second
+    assert find_v1(iri) is second
+    assert resolve_type(iri, _types_v1) is second
+    assert resolve_type(iri, _types_v1, prefer_controller=False) is model
+
+
+def test_v1_class_can_opt_out_of_registration():
+    from oold.model.v1 import BaseController as BaseControllerV1
+    from oold.model.v1 import LinkedBaseModel as LinkedBaseModelV1
+    from oold.model.v1 import _types as _types_v1
+    from oold.model.v1 import get_registered_controller_types as registered_v1
+
+    iri = "Category:OSWV1OptOut"
+
+    class Model(LinkedBaseModelV1):
+        class Config:
+            schema_extra = {"title": "V1OptOutModel"}
+
+        type: list = [iri]
+
+    class OptedOut(BaseControllerV1, Model):
+        __oold_register__ = False
+
+    assert registered_v1(iri) == []
+    assert resolve_type(iri, _types_v1) is Model
+    assert OptedOut(Model()).type == [iri]
+
+
+# -- a reloaded module is not an override -------------------------------------
+
+
+def test_re_registering_the_same_class_does_not_pile_up(caplog):
+    """A regenerated model module re-runs every class body."""
+    iri = "Category:OSWReloaded"
+
+    def make():
+        class ReloadedModel(LinkedBaseModel):
+            model_config = ConfigDict(json_schema_extra={"title": "ReloadedModel"})
+            type: list[str] | None = [iri]
+
+        class ReloadedController(BaseController, ReloadedModel):
+            pass
+
+        return ReloadedController
+
+    make()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="oold.model"):
+        make()
+    assert len(get_registered_controller_types(iri)) == 1
+    assert not caplog.records
+
+
+def test_an_unusable_iri_next_to_a_usable_one_does_not_break_registration():
+    """get_cls_iri() may return the default of a required field."""
+    dyn = type("MixedIriModel", (PrecedenceModel,), {})
+    register_type(dyn, ["Category:OSWMixedUsable", object()])
+    assert _types["Category:OSWMixedUsable"] is dyn

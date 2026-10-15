@@ -100,6 +100,8 @@ class SimulatedRobot(BaseController, Robot):
     __oold_register__ = False
 ```
 
+The flag is inherited, so a subclass of `SimulatedRobot` stays out of the registries too; set `__oold_register__ = True` on it to opt back in. `register_controller_type()` registers an opted-out class regardless - the flag governs the automatic registration on class creation, not an explicit request.
+
 ---
 
 ## Multi-model controller

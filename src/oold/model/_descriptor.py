@@ -40,6 +40,7 @@ behaviour off entirely and leaves plain pydantic.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import sys
 import types
@@ -649,6 +650,8 @@ def _is_link_annotation(annotation: Any) -> bool:
     return False
 
 
+_logger = logging.getLogger(__name__)
+
 _TYPE_REGISTRY: dict[str, type] = {}
 """Maps a ``type`` field default (the class IRI) to its model class.
 
@@ -675,15 +678,59 @@ def use_type_registry(registry: dict) -> None:
 
 
 def _resolve_cls(data: dict[str, Any], target: Any) -> Any:
-    """Pick the most specific class for a document, by its type IRI."""
+    """Pick the most specific class for a document, by its type IRI.
+
+    A registered controller wins over the pure model, the same way
+    ``from_json`` resolves it - otherwise the same document would come back as
+    a controller when the link carries an IRI and as a plain model when it is
+    inlined.
+    """
+    from oold.model import _controller_types
+
     type_iri = data.get("type")
     if isinstance(type_iri, list):
         type_iri = type_iri[0] if type_iri else None
     if isinstance(type_iri, str):
+        controllers = _controller_types.get(type_iri)
+        if controllers:
+            return controllers[-1]
         found = _TYPE_REGISTRY.get(type_iri)
         if found is not None:
             return found
     return target
+
+
+def _pure_cls(data: dict[str, Any]) -> Any:
+    """The data model for a document's type IRI, ignoring controllers."""
+    type_iri = data.get("type")
+    if isinstance(type_iri, list):
+        type_iri = type_iri[0] if type_iri else None
+    return _TYPE_REGISTRY.get(type_iri) if isinstance(type_iri, str) else None
+
+
+def _construct_resolved(data: dict[str, Any], target: Any) -> Any:
+    """Build a linked document, falling back to its pure model.
+
+    A controller may declare fields the document does not carry. Resolution
+    prefers it, so without this a document that used to build as a plain model
+    would start raising; ``import_json`` makes the same trade.
+    """
+    cls = _resolve_cls(data, target)
+    if cls is None:
+        raise ValueError(f"Cannot construct link from {data!r}: unknown target")
+    try:
+        return _construct(cls, data)
+    except Exception:
+        pure = _pure_cls(data)
+        if pure is None or pure is cls:
+            raise
+        _logger.warning(
+            "Controller %s could not be built from a linked document "
+            "(e.g. missing mandatory fields), falling back to %s",
+            cls.__name__,
+            pure.__name__,
+        )
+        return _construct(pure, data)
 
 
 class LinkResultList(list[T]):
@@ -896,9 +943,7 @@ def _batch_resolve(refs: list[Ref | None], target: Any) -> list[Any]:
             # a second request whose result was then built against the declared
             # target, losing the original error and silently mis-constructing.
             fetched = resolver.resolve_iris(iris)
-            nodes = {
-                iri: (_construct(_resolve_cls(d, target), d) if d is not None else None) for iri, d in fetched.items()
-            }
+            nodes = {iri: (_construct_resolved(d, target) if d is not None else None) for iri, d in fetched.items()}
         for r in group:
             r._obj = nodes.get(r.iri)
     return [None if r is None else r._obj for r in refs]
@@ -915,10 +960,7 @@ def _to_ref(value: Any, target: Any) -> Ref | None:
         return Ref(iri=value, target=target)
     if isinstance(value, dict):
         # construct through the model so the linked object is validated
-        cls = _resolve_cls(value, target)
-        if cls is None:
-            raise ValueError(f"Cannot construct link from {value!r}: unknown target")
-        return Ref(obj=_construct(cls, value), target=target)
+        return Ref(obj=_construct_resolved(value, target), target=target)
     return Ref(obj=value, target=target)
 
 

@@ -147,6 +147,8 @@ This is useful for checkpointing state (e.g. saving `joint_count` after a calibr
 
 ## Guidelines
 
+- Name controller members for what they *do*: `connect()`, `download()`, `store()`, not `connection`, `url`, `storage`. A controller extends a model whose field names come from a schema, and a noun-named method or property competes with a field that the schema may gain at any regeneration - it shadows the field, or the field shadows it, and the two are hard to tell apart because both answer to attribute access. A verb is almost never a field name.
+- The risk is worst for a property: it reads like data, so callers reach for it with `getattr()`, and anything it does on the way - opening a session, touching the filesystem - surfaces where a plain attribute read was expected. If a controller has to expose derived data, give it a method.
 - Prefix controller-only attributes with `_` to make the distinction explicit
 - Keep `__init__` arguments limited to data model fields - controllers should be constructed from data, not from runtime handles
 - If a controller needs runtime resources (sockets, threads), initialize them in a dedicated `connect()` / `start()` method, not in `__init__`

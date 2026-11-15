@@ -27,6 +27,11 @@ from oold.utils.mappings import ScopeSource, declared_context, inline_scoped, ma
 #: Where a canonical blank node label is parked while the graph is built. Blank nodes have to
 #: become IRIs for the labels to survive parsing, and this is the IRI space reserved for exactly
 #: that (RDF 1.1, skolemisation).
+#:
+#: A skolem IRI is minted under the authority that publishes the document, so a generator with a
+#: site of its own passes ``genid=`` rather than taking this. The default is deliberately not any
+#: one publisher's host: a reading rendered here and a reading rendered by a site generator are
+#: byte-identical only when both mint under the same authority.
 DEFAULT_GENID = "https://oo-ld.org/.well-known/genid/"
 
 #: Pointer segments that carry no meaning of their own, dropped when a namespace is named after

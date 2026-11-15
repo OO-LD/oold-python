@@ -16,6 +16,7 @@ Requires the ``validation`` extra::
 
 from __future__ import annotations
 
+from .effective_views import View, effective_context, effective_views, view_checks
 from .meta_store import (
     MetaBundle,
     MetaSchemaError,
@@ -43,7 +44,10 @@ __all__ = [
     "Report",
     "Resolver",
     "SchemaResolutionError",
+    "View",
     "describe_store",
+    "effective_context",
+    "effective_views",
     "failure_reasons",
     "fetch_remote",
     "latest_version",
@@ -53,4 +57,5 @@ __all__ = [
     "validate_directory",
     "validate_instance",
     "validate_schema",
+    "view_checks",
 ]

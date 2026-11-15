@@ -5,7 +5,7 @@ from __future__ import annotations
 from jsonschema import Draft202012Validator
 
 from oold.validation.formats import FORMAT_SAMPLES, OOLD_FORMAT_CHECKER
-from oold.validation.generate import collect_variants, generate
+from oold.validation.generate import DEFAULT_INSTANCE_ID, collect_variants, generate, synth_instance
 from oold.validation.resolve import bound_schema
 
 
@@ -157,3 +157,63 @@ def test_each_variant_generates_a_valid_instance(resolver, data_dir):
         assert produced.ok, f"{variant.label}: {produced.error}"
         errors = list(validator.iter_errors(produced.instance))
         assert not errors, f"{variant.label}: {errors[0].message}"
+
+
+# ------------------------------------------------------------- authored instances
+
+
+def test_synth_instance_prefers_a_root_level_example():
+    """A root-level `examples` entry is a whole example instance, which is what this wants."""
+    schema = {"examples": [{"value": 20.1, "unit": "mm"}], "properties": {"value": {"default": 0}}}
+    assert synth_instance(schema) == {"@id": DEFAULT_INSTANCE_ID, "value": 20.1, "unit": "mm"}
+
+
+def test_synth_instance_takes_the_most_derived_example():
+    base = {"examples": [{"from": "base"}]}
+    derived = {"examples": [{"from": "derived"}]}
+    assert synth_instance(derived, [base, derived])["from"] == "derived"
+
+
+def test_synth_instance_falls_back_to_per_property_examples_defaults_and_enums():
+    schema = {
+        "properties": {
+            "a": {"examples": ["from example"]},
+            "b": {"default": "from default"},
+            "c": {"enum": ["from enum", "other"]},
+            "d": {"type": "string"},
+        }
+    }
+    built = synth_instance(schema)
+    assert built["a"] == "from example"
+    assert built["b"] == "from default"
+    assert built["c"] == "from enum"
+    assert "d" not in built
+
+
+def test_synth_instance_yields_nothing_when_a_required_property_cannot_be_filled():
+    """An instance that does not validate is worse than no instance."""
+    schema = {"required": ["needed"], "properties": {"other": {"default": 1}, "needed": {"type": "string"}}}
+    assert synth_instance(schema) is None
+
+
+def test_synth_instance_yields_nothing_when_no_value_was_authored():
+    assert synth_instance({"properties": {"a": {"type": "string"}}}) is None
+    assert synth_instance({}) is None
+
+
+def test_synth_instance_reads_required_and_properties_across_the_chain():
+    base = {"required": ["name"], "properties": {"name": {"default": "x"}}}
+    derived = {"properties": {"size": {"default": 1}}}
+    assert synth_instance(derived, [base, derived]) == {"@id": DEFAULT_INSTANCE_ID, "name": "x", "size": 1}
+
+
+def test_synth_instance_writes_the_schema_reference_where_one_is_given():
+    schema = {"properties": {"a": {"default": 1}}}
+    built = synth_instance(schema, None, "Thing.schema.json")
+    assert built["$schema"] == "Thing.schema.json"
+    assert built["@context"] == "Thing.schema.json"
+
+
+def test_synth_instance_omits_the_identity_when_asked():
+    built = synth_instance({"properties": {"a": {"default": 1}}}, instance_id=None)
+    assert built == {"a": 1}

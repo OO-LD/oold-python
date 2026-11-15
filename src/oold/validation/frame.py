@@ -165,6 +165,22 @@ def _is_reference_term(definition: Any) -> bool:
     return definition.get("@type") == "@id" or "@reverse" in definition
 
 
+def reverse_predicates(schema: dict[str, Any]) -> dict[str, list[str]]:
+    """The reverse IRI each reverse-mapped property compacts to, keyed by that IRI.
+
+    Several terms may share one reverse IRI, since nothing stops a schema from naming the same
+    relation twice. The IRI is taken as the term writes it, compact or absolute: the frame
+    resolves it against the same context the term was read from.
+    """
+    properties = collect_composed_properties(schema)
+    grouped: dict[str, list[str]] = {}
+    for name, definition in context_terms(schema.get("@context")).items():
+        predicate = definition.get("@reverse")
+        if name in properties and isinstance(predicate, str):
+            grouped.setdefault(predicate, []).append(name)
+    return grouped
+
+
 def reference_properties(schema: dict[str, Any]) -> list[str]:
     """Properties whose value is a reference, so framing must leave it an IRI.
 
@@ -218,14 +234,31 @@ def schema_to_frame(schema: dict[str, Any], context_ref: Any = _UNSET) -> dict[s
 
     The reference subframes are written before the embedded ones, so a property both lists claim
     keeps the ``{}`` that preserves its nested keys.
+
+    A reverse-mapped property is written under ``@reverse``, by its reverse IRI rather than by its
+    term name. Term names expand, so two terms sharing one reverse IRI would otherwise produce two
+    subframes under that IRI; a frame must be a single object, and a processor rejects the pair.
     """
     frame: dict[str, Any] = {"@embed": "@once"}
     frame["@context"] = schema.get("@context") if context_ref is _UNSET else context_ref
     types = instance_rdf_types(schema)
     if types:
         frame["@type"] = types[0] if len(types) == 1 else types
+
+    predicate_of = {name: predicate for predicate, names in reverse_predicates(schema).items() for name in names}
+    grouped: dict[str, dict[str, Any]] = {}
+
+    def place(name: str, subframe: dict[str, Any]) -> None:
+        predicate = predicate_of.get(name)
+        if predicate is None:
+            frame[name] = subframe
+        else:
+            grouped[predicate] = subframe
+
     for name in reference_properties(schema):
-        frame[name] = {"@embed": "@never"}
+        place(name, {"@embed": "@never"})
     for name in embedded_properties(schema):
-        frame[name] = {}
+        place(name, {})
+    if grouped:
+        frame["@reverse"] = grouped
     return frame

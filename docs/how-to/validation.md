@@ -185,6 +185,7 @@ which resolves every mapping against the current upstream catalog.
 | `variants` | Each `oneOf`/`anyOf` branch is generated and round-tripped in turn. |
 | `instance.schema` | A committed instance validates against its schema, with `format` asserted. |
 | `roundtrip.instance` | It round-trips through RDF unchanged. |
+| `roundtrip.mapping_set` | It round-trips unchanged under each mapping set its schemas declare, not only under the declared context. Emitted by `oold.validation.effective_views`, which a caller invokes directly; the pipeline and the CLI do not run it. |
 | `compliance.*`, `coverage.vocab` | Fixture suites with exact expected outcomes, plus a cross-check that every meta-schema keyword has a test. |
 | `coverage.rules` | *(warning)* Which checkable rules no check enforces yet. |
 | `rule.checks` | *(skip)* Recorded when the selected meta version ships no catalogue, so the per-rule checks did not run. |

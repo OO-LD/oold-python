@@ -8,10 +8,12 @@ for the design these four tests implement.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from oold.validation import Options, run_compliance, validate_directory, validate_instance
 from oold.validation.check_registry import CHECKS
+from oold.validation.effective_views import effective_views, view_checks
 from oold.validation.meta_store import load_tracked, tracked_versions
 from oold.validation.report import SKIP
 
@@ -32,10 +34,25 @@ _CORPUS_META = ("0.7.0", tracked_versions()[-1])
 _ONLY_ON_FAILURE_PATHS = frozenset({"meta.self-check", "compliance.suite"})
 
 
+def _mapping_set_ids(data_dir: Path) -> set[str]:
+    """Ids from `effective_views`, which a caller invokes directly rather than via the pipeline.
+
+    Counted as part of the corpus because the registry describes check ids this package can
+    emit, not only the ones `oold validate` happens to reach. Leaving it out would have forced
+    an exemption, and an exemption is how a registered id stops being held to anything.
+    """
+    instance_path = data_dir / "PersonWithPet.instance.json"
+    schema_path = data_dir / "PersonWithPet.schema.json"
+    instance = json.loads(instance_path.read_text(encoding="utf-8"))
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    views = effective_views(instance, [schema])
+    return {check.id for check in view_checks(instance_path.name, views)}
+
+
 def _emitted_ids(data_dir: Path, broken_dir: Path, compliance_dir: Path) -> set[str]:
     """Every check id the validator emits across the whole fixture corpus."""
     opts = Options(meta=_CORPUS_META, offline=True)
-    ids: set[str] = set()
+    ids: set[str] = set(_mapping_set_ids(data_dir))
     for report in (
         validate_directory(data_dir, opts),
         run_compliance(compliance_dir, opts),

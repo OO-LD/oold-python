@@ -99,6 +99,61 @@ def test_instance_rdf_types_is_most_derived_wins():
     assert instance_rdf_types({"type": "object"}) is None
 
 
+def test_a_type_pinned_as_a_default_anchors_the_frame():
+    """OO-LD/oold-python#177.
+
+    Without an anchor the root is only the frame root while every edge runs forward; the first
+    backwards edge leaves nothing matched and framing returns a bare ``@graph``.
+    """
+    context = {
+        "ex": "https://example.org/",
+        "obo": "http://purl.obolibrary.org/obo/",
+        "id": "@id",
+        "type": {"@id": "@type", "@container": "@set"},
+        "Material": "ex:Material",
+        "components": "ex:components",
+        "chemical_composition": {"@reverse": "obo:RO_0000080"},
+    }
+    schema = {
+        "type": "object",
+        "@context": context,
+        "properties": {
+            "type": {"type": "array", "items": {"type": "string"}, "default": ["Material"]},
+            "chemical_composition": {"type": "object", "properties": {"components": {}}},
+        },
+    }
+    assert instance_rdf_types(schema) == ["Material"]
+    frame = schema_to_frame(schema)
+    assert frame["@type"] == "Material"
+
+    rdf_type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"
+    nq = "\n".join([
+        f"<https://example.org/m1> {rdf_type} <https://example.org/Material> .",
+        f"_:c {rdf_type} <https://example.org/ChemicalComposition> .",
+        "_:c <http://purl.obolibrary.org/obo/RO_0000080> <https://example.org/m1> .",
+        '_:c <https://example.org/components> "Fe" .',
+        "",
+    ])
+    graph = jsonld.from_rdf(nq, {"format": "application/n-quads", "useNativeTypes": True})
+    framed = jsonld.frame(graph, frame, {"omitDefault": True})
+
+    assert "@graph" not in framed
+    assert framed["chemical_composition"]["components"] == "Fe"
+
+
+def test_the_keyword_wins_over_a_type_pinned_as_a_default():
+    schema = {
+        "x-oold-instance-rdf-type": ["ex:B"],
+        "properties": {"type": {"default": ["ex:A"]}},
+    }
+    assert instance_rdf_types(schema) == ["ex:B"]
+    # A schema's own default is nearer than a type inherited through allOf.
+    assert instance_rdf_types({
+        "allOf": [{"x-oold-instance-rdf-type": ["ex:A"]}],
+        "properties": {"type": {"default": ["ex:B"]}},
+    }) == ["ex:B"]
+
+
 def test_schema_to_frame_carries_type_context_and_subframes():
     schema = {
         "x-oold-instance-rdf-type": ["schema:Person"],

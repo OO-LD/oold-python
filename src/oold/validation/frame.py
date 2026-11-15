@@ -100,6 +100,25 @@ def embedded_properties(schema: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys([*structural, *scoped]))
 
 
+def pinned_type_default(schema: Any) -> list[str] | None:
+    """The instance type a schema pins through ``properties.type.default``.
+
+    ``OOLD-INS-4b5c`` only fires where ``x-oold-instance-rdf-type`` is declared, so pinning the
+    type as a default on the ``@type``-aliased property is a permitted spelling, and the frame
+    needs that anchor as much as it needs the keyword's.
+    """
+    if not isinstance(schema, dict):
+        return None
+    properties = schema.get("properties")
+    declaration = properties.get("type") if isinstance(properties, dict) else None
+    default = declaration.get("default") if isinstance(declaration, dict) else None
+    if isinstance(default, str):
+        return [default]
+    if isinstance(default, list) and default and all(isinstance(entry, str) for entry in default):
+        return list(default)
+    return None
+
+
 def instance_rdf_types(schema: Any) -> list[str] | None:
     """The instance ``rdf:type``(s) a schema declares, most-derived-wins.
 
@@ -108,12 +127,18 @@ def instance_rdf_types(schema: Any) -> list[str] | None:
     inference rather than being materialised. A subclass that wants supertypes in the data lists
     them explicitly. After dereferencing the most-derived value sits at the top level; the
     ``allOf`` walk is the fallback for a subclass that omits its own declaration.
+
+    ``properties.type.default`` is read where the keyword is absent, and it is read before the
+    ``allOf`` walk, because a schema's own spelling of its type is nearer than an inherited one.
     """
     if not isinstance(schema, dict):
         return None
     own = schema.get("x-oold-instance-rdf-type")
     if isinstance(own, list) and own:
         return own
+    pinned = pinned_type_default(schema)
+    if pinned:
+        return pinned
     if isinstance(schema.get("allOf"), list):
         for sub in schema["allOf"]:
             types = instance_rdf_types(sub)

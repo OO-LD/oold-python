@@ -23,7 +23,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "pydantic>=2.0.0",
+    # 2.13 routes ModelPrivateAttr.get_default through resolve_default_value,
+    # which calls inspect.signature on the factory twice per private attribute
+    # per construction, uncached. LinkedBaseModel declares two, so every model
+    # in the stack costs ~40 us extra to build. Fixed upstream in 2.14.
+    "pydantic>=2.0.0,!=2.13.*",
     "datamodel-code-generator>=0.51.0,<0.55.0",
     "typing_extensions",
     "pyld",

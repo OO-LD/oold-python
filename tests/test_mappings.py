@@ -11,6 +11,7 @@ from oold.utils.mappings import (
     chain,
     context_of,
     declared_context,
+    inline_scoped,
     is_exact_match,
     mapping_sets,
     promote,
@@ -187,3 +188,82 @@ def test_promote_keeps_a_scoped_context_under_a_synonym_that_carries_coercion():
     promoted = promote(declared_context([schema]), [schema], SET_A)
 
     assert promoted["part"] == {"@id": "other:part", "@context": "Leaf.schema.json", "@type": "@id"}
+
+
+class _Source:
+    """A :class:`~oold.utils.mappings.ScopeSource` over a dict of documents.
+
+    Stands in for a working tree, which is the point of the protocol: nothing in
+    ``inline_scoped`` knows where a schema is kept.
+    """
+
+    def __init__(self, documents, chains=None):
+        self.documents = documents
+        self.chains = chains or {}
+
+    def locate(self, target, origin=None):
+        return target if target in self.documents else None
+
+    def read(self, key):
+        return self.documents[key]
+
+    def term_chain(self, key):
+        return self.chains.get(key, [key])
+
+
+def test_inline_scoped_replaces_a_reference_by_the_context_it_names():
+    source = _Source({"Leaf.schema.json": _schema({"leaf": "ex:leaf"})})
+    context = {"part": {"@id": "ex:part", "@context": "Leaf.schema.json"}}
+
+    result = inline_scoped(context, "Root.schema.json", source)
+
+    assert result == {"part": {"@id": "ex:part", "@context": {"leaf": "ex:leaf"}}}
+
+
+def test_inline_scoped_promotes_inside_the_scope_too():
+    """A community reads the whole document, so an embedded object speaks the same vocabulary."""
+    leaf = _schema(
+        {"leaf": "ex:leaf"},
+        {"leaf": {"other:leaf": {"x-oold-sssom": {"mapping_set_id": SET_A}}}},
+    )
+    source = _Source({"Leaf.schema.json": leaf})
+    context = {"part": {"@id": "ex:part", "@context": "Leaf.schema.json"}}
+
+    result = inline_scoped(context, "Root.schema.json", source, SET_A)
+
+    assert result["part"]["@context"] == {"leaf": "other:leaf"}
+
+
+def test_inline_scoped_reads_the_whole_chain_of_the_scoped_schema():
+    base = _schema({"shared": "ex:shared"})
+    leaf = _schema({"leaf": "ex:leaf"})
+    source = _Source(
+        {"Base.schema.json": base, "Leaf.schema.json": leaf},
+        {"Leaf.schema.json": ["Base.schema.json", "Leaf.schema.json"]},
+    )
+    context = {"part": {"@context": "Leaf.schema.json"}}
+
+    result = inline_scoped(context, "Root.schema.json", source)
+
+    assert result["part"]["@context"] == {"shared": "ex:shared", "leaf": "ex:leaf"}
+
+
+def test_inline_scoped_leaves_an_unreachable_reference_as_written():
+    """It is the consumer's to dereference; rewriting it would invent a context."""
+    context = {"part": {"@context": "https://elsewhere.example/Leaf.schema.json"}}
+    assert inline_scoped(context, "Root.schema.json", _Source({})) == context
+
+
+def test_inline_scoped_drops_the_scoping_on_a_cycle():
+    """The scoped document's terms are already active, so flattening says the same thing."""
+    source = _Source({"Root.schema.json": _schema({"a": "ex:a"})})
+    context = {"part": {"@id": "ex:part", "@context": "Root.schema.json"}}
+
+    result = inline_scoped(context, "Root.schema.json", source)
+
+    assert result == {"part": {"@id": "ex:part"}}
+
+
+def test_inline_scoped_leaves_a_term_with_no_scoped_context_alone():
+    context = {"plain": "ex:plain", "typed": {"@id": "ex:typed", "@type": "@id"}}
+    assert inline_scoped(context, None, _Source({})) == context

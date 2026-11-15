@@ -22,7 +22,7 @@ Semantics follow the OO-LD 1.0.0-rc.2 meta-schema: ``x-oold-sssom.predicate_id``
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, Protocol
 
 #: The SKOS predicate that makes a synonym interchangeable with the primary term. Other
 #: predicates (``closeMatch``, ``broadMatch``, ...) record a weaker relation and are never
@@ -206,4 +206,69 @@ def chain(
         out.append(node)
 
     walk(schema)
+    return out
+
+
+class ScopeSource(Protocol):
+    """What :func:`inline_scoped` needs in order to follow a scoped ``@context``.
+
+    A scoped ``@context`` names another schema, and resolving that name is the only part of
+    the operation that knows where schemas live. Stating it as a protocol keeps this module
+    free of any layout: :class:`oold.utils.locator.Locator` implements it over a working tree,
+    and a consumer serving schemas from a store or a browser implements it over that instead.
+
+    ``locate`` returns an opaque key identifying a document, or ``None`` for a reference it
+    cannot reach. Keys are compared for identity, so a document reached two ways must yield
+    one key, which is what makes a cycle detectable.
+    """
+
+    def locate(self, target: str, origin: str | None = None) -> str | None: ...
+
+    def read(self, key: str) -> dict[str, Any]: ...
+
+    def term_chain(self, key: str) -> list[str]: ...
+
+
+def inline_scoped(
+    context: dict[str, Any],
+    origin: str | None,
+    source: ScopeSource,
+    set_id: str | None = None,
+    seen: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Replace a term's scoped ``@context`` reference by the context it names.
+
+    A scoped ``@context`` names another schema. Left as a name it has to be dereferenced by
+    whoever reads the document, which a processor can only do over the network; resolved here
+    against the same source the rest of the build reads, the result is self-contained and the
+    version being edited is the one that applies.
+
+    The mapping set applies inside the scope as well. A community reads the whole document and
+    not just the root object of it, so a scoped context left on the consensus terms would make
+    an embedded object speak a different vocabulary than the tree it hangs in.
+
+    A reference the source cannot reach is left as written, for the consumer to dereference.
+    A reference that closes a cycle drops the scoping instead: the terms of a document already
+    being read are active anyway, so flattening onto the enclosing context says the same thing
+    and terminates.
+    """
+    out: dict[str, Any] = {}
+    for term, definition in context.items():
+        target = definition.get("@context") if isinstance(definition, dict) else None
+        if not isinstance(target, str):
+            out[term] = definition
+            continue
+        key = source.locate(target, origin)
+        if key is None:
+            out[term] = definition
+            continue
+        if key in seen or key == origin:
+            out[term] = {k: v for k, v in definition.items() if k != "@context"}
+            continue
+        schemas = [source.read(member) for member in source.term_chain(key)]
+        nested = promote(declared_context(schemas), schemas, set_id)
+        out[term] = {
+            **definition,
+            "@context": inline_scoped(nested, key, source, set_id, (*seen, key)),
+        }
     return out

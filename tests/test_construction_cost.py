@@ -1,8 +1,9 @@
 """The descriptor binding's construction cost, measured as a ratio.
 
 An absolute threshold cannot hold here: CI runners and this machine drift by
-tens of percent between runs. The ratio against plain pydantic does - repeated
-runs give 3.38x to 3.53x while the absolute numbers move by 20%.
+tens of percent between runs, and the absolutes differ by more than 2x between
+runners. The ratio against plain pydantic is stable within one machine, 3.38x to
+3.53x across repeated local runs, and stays under 9x across the whole CI matrix.
 
 What it guards: pydantic 2.13 called ``inspect.signature`` on a private-attr
 factory twice per attribute per construction, without caching. LinkedBaseModel
@@ -22,8 +23,14 @@ from pydantic import BaseModel, ConfigDict
 
 from oold.model._descriptor import LinkedBaseModel
 
-MAX_RATIO = 8.0
-"""Measured 3.4x on pydantic 2.14, 17.8x on the 2.13 series. Halfway, in the gap."""
+MAX_RATIO = 15.0
+"""Healthy runs measure 3.4x locally and up to 9.0x on CI; the 2.13 series
+measures 17.8x locally and projects above 40x on the slower runners, because the
+cost it adds is a fixed ~40 us per instance rather than a multiple. The spread
+across runners is wider than it looks: plain pydantic construction is mostly
+pydantic-core, which is fast everywhere, while the binding adds Python-level work
+whose relative cost follows the interpreter. So the budget sits well above the
+healthy ceiling rather than halfway."""
 
 ROUNDS = 25
 LOOPS = 500

@@ -8,12 +8,18 @@ document changing. Nothing here rewrites an instance; it only decides what the t
 Ported from the generators in `OO-LD/oold-reference-schemas
 <https://github.com/OO-LD/oold-reference-schemas>`_ (``scripts/_shared.py`` and
 ``scripts/build_docs.py``), whose own note says that code was written to move into the OO-LD
-core unchanged. Two deliberate differences from that source:
+core unchanged. Three deliberate differences from that source, and this list is the only one:
 
 * ``mapping_set_id`` may be a list. The specification allows an entry to belong to several
-  sets; the upstream copy only ever saw the string form.
+  sets, and the upstream copy only ever saw the string form.
 * ``chain`` takes a resolver callable rather than doing ``Path`` arithmetic, so a remote
   ``$ref`` and a browser (Pyodide) environment work the same as a local directory.
+* a promoted ``@reverse`` takes the synonym IRI from the entry's key, not from the value the
+  fragment writes. ``OOLD-EXT-4966`` has promotion write ``{"@id": <synonym IRI>, ...fragment}``
+  and ``OOLD-EXT-7c5d`` has a processor read the synonym IRI, which is the key. A reverse term
+  cannot carry ``@id``, so ``@reverse`` is where that IRI goes, and a fragment naming a
+  different predicate there contradicts the key it is filed under. The source took the
+  fragment's value, which agrees with the key in every mapping written so far.
 
 Semantics follow the OO-LD 1.0.0-rc.2 meta-schema: ``x-oold-sssom.predicate_id`` defaults to
 ``skos:exactMatch``, and only ``exactMatch`` entries are co-emitted.
@@ -184,6 +190,13 @@ def chain(
     ``resolve`` turns a ``$ref`` into a schema document and may return ``None`` for one it
     cannot reach, in which case that branch is skipped rather than raising - a playground is
     expected to hold half-written input.
+
+    This is what ``build_docs.inherited`` does in the reference generators, with two limits
+    worth knowing. A base reached twice through a diamond ``allOf`` appears once here and twice
+    there, since membership is kept on node identity. And an ``allOf`` branch written inline,
+    with no ``$ref``, contributes its terms here and is skipped there. Neither case occurs in
+    the reference corpus the two were compared on, so the equivalence measured there does not
+    cover them.
     """
     out: list[dict[str, Any]] = []
     seen: set[int] = set()
@@ -251,6 +264,13 @@ def inline_scoped(
     A reference that closes a cycle drops the scoping instead: the terms of a document already
     being read are active anyway, so flattening onto the enclosing context says the same thing
     and terminates.
+
+    A scoped ``@context`` has two valid spellings, both mirroring the ``$ref`` beside it: it
+    names the same schema document as a remote context IRI, or it is inlined as a context
+    object. A fragment-only reference such as ``"#/$defs/Leaf"`` is neither, and raises. It is
+    not a shape worth normalising, because a JSON-LD processor does not read it as one: the
+    fragment is ignored and the referenced document's *top-level* ``@context`` is applied, so
+    the embedded object silently speaks the enclosing vocabulary instead of its own.
     """
     out: dict[str, Any] = {}
     for term, definition in context.items():
@@ -258,6 +278,13 @@ def inline_scoped(
         if not isinstance(target, str):
             out[term] = definition
             continue
+        if not target.partition("#")[0]:
+            raise ValueError(
+                f"{term}: a scoped @context must name a schema document or be inlined as a "
+                f"context object, but {target!r} is a fragment alone. A processor ignores the "
+                f"fragment and applies the named document's top-level @context, so the "
+                f"embedded object would take the enclosing vocabulary rather than its own."
+            )
         key = source.locate(target, origin)
         if key is None:
             out[term] = definition

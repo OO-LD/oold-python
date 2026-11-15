@@ -267,3 +267,40 @@ def test_inline_scoped_drops_the_scoping_on_a_cycle():
 def test_inline_scoped_leaves_a_term_with_no_scoped_context_alone():
     context = {"plain": "ex:plain", "typed": {"@id": "ex:typed", "@type": "@id"}}
     assert inline_scoped(context, None, _Source({})) == context
+
+
+def test_inline_scoped_rejects_a_fragment_only_scoped_context():
+    """A processor ignores the fragment and applies the referenced document's top-level context.
+
+    So an embedded object silently takes the outer vocabulary. Normalising the reference away
+    would hide that, and passing it through would ship it.
+    """
+    source = _Source({"Root.schema.json": _schema({"a": "ex:a"})})
+    context = {"part": {"@id": "ex:part", "@context": "#/$defs/Leaf"}}
+
+    with pytest.raises(ValueError, match="part"):
+        inline_scoped(context, "Root.schema.json", source)
+
+
+def test_inline_scoped_still_drops_the_scoping_for_a_document_naming_itself():
+    """A real self-reference is a cycle, not the fragment-only spelling, and still flattens."""
+    source = _Source({"Root.schema.json": _schema({"a": "ex:a"})})
+    context = {"part": {"@id": "ex:part", "@context": "Root.schema.json"}}
+
+    assert inline_scoped(context, "Root.schema.json", source) == {"part": {"@id": "ex:part"}}
+
+
+def test_chain_visits_a_diamond_base_once():
+    """Membership is node identity, so a base reached two ways contributes its terms once.
+
+    `build_docs.inherited` re-reads the file per branch and lists it twice. Harmless for a
+    merged context, and the reason the docstring records the difference rather than the
+    corpus, which has no diamond.
+    """
+    base = {"title": "Base", "@context": {"a": "ex:a"}}
+    left = {"title": "Left", "allOf": [{"$ref": "Base.schema.json"}]}
+    right = {"title": "Right", "allOf": [{"$ref": "Base.schema.json"}]}
+    documents = {"Base.schema.json": base, "Left.schema.json": left, "Right.schema.json": right}
+    derived = {"title": "Derived", "allOf": [{"$ref": "Left.schema.json"}, {"$ref": "Right.schema.json"}]}
+
+    assert [s["title"] for s in chain(derived, documents.get)] == ["Base", "Left", "Right", "Derived"]

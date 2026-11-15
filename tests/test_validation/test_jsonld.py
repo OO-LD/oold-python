@@ -175,6 +175,35 @@ def test_embedding_wins_where_a_property_carries_both_signals():
     assert reference_properties(schema) == []
 
 
+def test_a_ref_valued_embed_keeps_its_subframe_before_dereferencing():
+    """OO-LD/oold-python#175.
+
+    ``$ref`` is the only trace of the embed while the schema is undereferenced, and the
+    ``"@type": "@id"`` that OO-LD requires on such a term makes it look reference-valued at the
+    same time. With both lists claiming it, ``{}`` was overwritten by ``@embed: @never`` and the
+    framed node came back empty.
+    """
+    schema = {
+        "type": "object",
+        "@context": {
+            "type": {"@id": "@type", "@container": "@set"},
+            "chemical_composition": {
+                "@id": "https://example.org/chemical_composition",
+                "@type": "@id",
+                "@context": "ChemicalComposition.schema.json",
+            },
+        },
+        "properties": {
+            "type": {"type": "array", "items": {"type": "string"}, "default": ["Material"]},
+            "chemical_composition": {"$ref": "ChemicalComposition.schema.json"},
+        },
+    }
+    assert is_embed({"$ref": "ChemicalComposition.schema.json"})
+    assert embedded_properties(schema) == ["chemical_composition"]
+    assert reference_properties(schema) == []
+    assert schema_to_frame(schema, "Material.schema.json")["chemical_composition"] == {}
+
+
 def test_a_bare_reverse_term_is_reference_valued():
     """A reverse term's values are node references by definition (JSON-LD 1.1 4.1.10).
 

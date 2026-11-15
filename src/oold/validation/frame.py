@@ -41,13 +41,16 @@ IRI_FORMATS = frozenset({"iri", "iri-reference", "uri", "uri-reference"})
 def is_embed(node: Any) -> bool:
     """True when a property's schema describes an embedded *object* value.
 
-    A ``$ref`` alone is not enough: it may point at a scalar DataType leaf, which is a literal
-    rather than an embed. After dereferencing, a real embed is inlined as an object with its own
-    properties anyway, so the object shape is the reliable signal.
+    After dereferencing an embed is inlined as an object with its own properties, so the object
+    shape is the primary signal. On an undereferenced schema it is a ``$ref``, which therefore
+    counts too. A ``$ref`` pointing at a scalar DataType leaf is a literal rather than an embed,
+    but it costs only an empty subframe, and framing leaves a literal value alone.
     """
     if not isinstance(node, dict):
         return False
     if node.get("type") == "object" and node.get("properties"):
+        return True
+    if isinstance(node.get("$ref"), str):
         return True
     if node.get("items") is not None:
         return is_embed(node["items"])
@@ -173,8 +176,9 @@ def reference_properties(schema: dict[str, Any]) -> list[str]:
     (JSON-LD 1.1 4.1.10), so ``"@type": "@id"`` beside it is redundant and authors omit it;
     keying only on ``@type`` misses the idiomatic spelling and embeds the targets.
 
-    Embedding takes precedence where a property carries both: a property shaped like an object
-    is an embed whatever its term says.
+    Embedding takes precedence where a property carries both, and the test is membership in
+    :func:`embedded_properties` rather than the shape alone, so the two lists cannot both claim a
+    property that embeds through a scoped ``@context``.
     """
 
     def is_reference(node: Any) -> bool:
@@ -195,11 +199,12 @@ def reference_properties(schema: dict[str, Any]) -> list[str]:
     properties = collect_composed_properties(schema)
     terms = context_terms(schema.get("@context"))
     aliases = keyword_alias_keys(schema)
+    embedded = set(embedded_properties(schema))
     return [
         name
         for name, prop in properties.items()
         if name not in aliases
-        and not is_embed(prop)
+        and name not in embedded
         and (is_reference(prop) or _is_reference_term(terms.get(name, {})))
     ]
 
@@ -210,14 +215,17 @@ def schema_to_frame(schema: dict[str, Any], context_ref: Any = _UNSET) -> dict[s
     ``context_ref``, when given, is used as the frame's ``@context`` in place of the schema's
     inline one. Pass the schema's URL so the document loader resolves inherited and scoped
     contexts rather than losing them.
+
+    The reference subframes are written before the embedded ones, so a property both lists claim
+    keeps the ``{}`` that preserves its nested keys.
     """
     frame: dict[str, Any] = {"@embed": "@once"}
     frame["@context"] = schema.get("@context") if context_ref is _UNSET else context_ref
     types = instance_rdf_types(schema)
     if types:
         frame["@type"] = types[0] if len(types) == 1 else types
-    for name in embedded_properties(schema):
-        frame[name] = {}
     for name in reference_properties(schema):
         frame[name] = {"@embed": "@never"}
+    for name in embedded_properties(schema):
+        frame[name] = {}
     return frame

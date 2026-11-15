@@ -123,3 +123,68 @@ def test_a_document_is_read_once(tree):
     key = str((tree / "materials" / "Base.schema.json").resolve())
     first = locator.read(key)
     assert locator.read(key) is first
+
+
+def test_a_relative_reference_cannot_escape_the_root(tree):
+    """A reference is attacker-controlled input to a library, not a path typed by the author."""
+    outside = tree.parent / "secret.json"
+    write(outside, {"@context": {"secret": "ex:secret"}})
+    locator = Locator(tree, [RULE])
+    origin = str((tree / "materials" / "Material.schema.json").resolve())
+    assert locator.locate("../../secret.json", origin) is None
+
+
+def test_a_dot_segment_inside_an_iri_cannot_escape_the_root(tree):
+    outside = tree.parent / "secret.json"
+    write(outside, {"@context": {}})
+    locator = Locator(tree, [RULE])
+    assert locator.locate(f"{BASE}../0.1/secret.json") is None
+
+
+def test_without_a_root_a_reference_cannot_leave_the_referring_directory(tmp_path):
+    root = tmp_path / "modules"
+    origin = write(root / "m" / "Root.schema.json", {})
+    write(tmp_path / "secret.json", {})
+    assert Locator().locate("../../secret.json", origin) is None
+    assert Locator().locate("Root.schema.json", origin) == origin
+
+
+def test_a_malformed_document_in_the_chain_is_raised_not_skipped(tmp_path):
+    """A dropped document shortens the chain, so fewer terms are inlined and the run stays green."""
+    root = tmp_path / "modules"
+    broken = root / "m" / "Leaf.schema.json"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.write_text("{ not json", encoding="utf-8")
+    key = write(root / "m" / "Root.schema.json", {"properties": {"part": {"$ref": "Leaf.schema.json"}}})
+    with pytest.raises(json.JSONDecodeError):
+        Locator(root).term_chain(key)
+
+
+def test_a_target_that_is_not_a_reference_resolves_to_nothing(tree):
+    locator = Locator(tree, [RULE])
+    assert locator.locate("") is None
+    assert locator.locate(None) is None
+    assert locator.locate(123) is None
+
+
+def test_a_template_that_names_a_segment_the_iri_does_not_have_is_not_applied(tree):
+    """Without this the rule would raise instead of declining, on input it simply does not cover."""
+    rule = MirrorRule(BASE, "{0}/{7}", None)
+    assert Locator(tree, [rule]).locate(f"{BASE}quantities/0.2/Length.schema.json") is None
+
+
+def test_term_chain_follows_a_schema_named_as_a_string_context(tmp_path):
+    """A schema may name another as its whole `@context`, which is how a base lends its terms."""
+    root = tmp_path / "modules"
+    base = write(root / "m" / "Base.schema.json", {"@context": {"name": "ex:name"}})
+    key = write(root / "m" / "Derived.schema.json", {"@context": ["Base.schema.json", {"size": "ex:size"}]})
+    assert Locator(root).term_chain(key) == [base, key]
+
+
+def test_a_rule_whose_path_escapes_the_root_falls_through_to_the_relative_branch(tree):
+    """The rule declines, and resolution continues rather than stopping at the escape."""
+    escaping = MirrorRule(BASE, "../{0}", 1)
+    locator = Locator(tree, [escaping, RULE])
+    assert locator.locate(f"{BASE}quantities/0.2/Length.schema.json") == str(
+        (tree / "quantities" / "Length.schema.json").resolve()
+    )

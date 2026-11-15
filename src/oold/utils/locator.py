@@ -44,7 +44,12 @@ class MirrorRule:
     segments: int | None = None
 
     def path_under(self, root: Path, iri: str) -> Path | None:
-        """Where ``iri`` would sit under ``root``, or ``None`` when the rule does not apply."""
+        """Where ``iri`` would sit under ``root``, or ``None`` when the rule does not apply.
+
+        The result is not guaranteed to stay under ``root``: an IRI segment may contain ``..``,
+        and formatting it into the template walks back out of the tree. :meth:`Locator.locate`
+        is what rejects that, so a caller using a rule directly has to check it as well.
+        """
         if not iri.startswith(self.prefix):
             return None
         parts = iri[len(self.prefix) :].split("/")
@@ -63,6 +68,11 @@ class Locator:
     A *key* is this class's name for a located document: an absolute path as a string. Keys are
     compared for identity, which is what lets a caller detect a cycle, so a document reached two
     ways is one key.
+
+    Resolution is confined to a boundary. A reference is input, not a path an author typed here,
+    so ``../../secret.json`` and a ``..`` buried in an IRI segment both have to be refused rather
+    than followed. The boundary is ``root`` where one is given, and otherwise the directory of
+    the document that made the reference, which is the widest guess that cannot be wrong.
     """
 
     def __init__(
@@ -71,13 +81,25 @@ class Locator:
         rules: Sequence[MirrorRule] = (),
         encoding: str = "utf-8",
     ) -> None:
-        self.root = Path(root) if root is not None else None
+        self.root = Path(root).resolve() if root is not None else None
         self.rules = tuple(rules)
         self.encoding = encoding
         self._documents: dict[str, dict[str, Any]] = {}
 
+    def _within(self, candidate: Path, boundary: Path) -> str | None:
+        """``candidate`` as a key, or ``None`` when it is outside ``boundary`` or absent."""
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(boundary):
+            return None
+        return str(resolved) if resolved.is_file() else None
+
     def locate(self, target: str, origin: str | None = None) -> str | None:
         """The key of the document ``target`` names, or ``None`` when the tree has no such file.
+
+        ``None`` also covers a reference that resolves outside the boundary, so a caller cannot
+        tell an absent document from a refused one. That is deliberate: the two are the same
+        answer to "is this document available here", and distinguishing them would report
+        whether a path exists outside the tree.
 
         A fragment is dropped first: it selects a part of a document and says nothing about
         which document that is.
@@ -90,12 +112,14 @@ class Locator:
         if self.root is not None:
             for rule in self.rules:
                 candidate = rule.path_under(self.root, path)
-                if candidate is not None and candidate.is_file():
-                    return str(candidate.resolve())
+                if candidate is not None:
+                    key = self._within(candidate, self.root)
+                    if key is not None:
+                        return key
         if origin is None:
             return None
-        candidate = Path(origin).parent / path
-        return str(candidate.resolve()) if candidate.is_file() else None
+        boundary = self.root if self.root is not None else Path(origin).parent.resolve()
+        return self._within(Path(origin).parent / path, boundary)
 
     def read(self, key: str) -> dict[str, Any]:
         """The document at ``key``, parsed once and kept, since a chain revisits a base."""
@@ -152,10 +176,10 @@ class Locator:
             if current in entered:
                 return
             entered.add(current)
-            try:
-                schema = self.read(current)
-            except (OSError, ValueError):
-                return
+            # A document that cannot be read is raised, not skipped. Skipping it shortens the
+            # chain, so fewer terms are inlined and fewer triples are emitted, and the run
+            # reports success over a reading that quietly lost data.
+            schema = self.read(current)
             context = schema.get("@context")
             for entry in context if isinstance(context, list) else [context]:
                 if isinstance(entry, str):

@@ -123,15 +123,22 @@ def promote(
                 if set_id not in _set_ids(fragment):
                     continue
                 rest = {k: v for k, v in fragment.items() if k != "x-oold-sssom"}
+                primary = ctx.get(term)
+                # What a term scopes is a property of the shape, not of the vocabulary: the
+                # embedded object has the same keys whichever IRI the edge to it carries, and
+                # whichever direction it is stated in. So a scoped ``@context`` survives
+                # promotion, and the synonym may still override it by carrying its own.
+                scoped = (
+                    {"@context": primary["@context"]} if isinstance(primary, dict) and "@context" in primary else {}
+                )
                 if "@reverse" in rest:
                     # The entry is keyed by its IRI either way, but a reverse term carries it
                     # in ``@reverse``; adding ``@id`` as well would not be a valid term
                     # definition.
-                    ctx[term] = {**rest, "@reverse": iri}
+                    ctx[term] = {**scoped, **rest, "@reverse": iri}
                 elif rest:
-                    ctx[term] = {"@id": iri, **rest}
+                    ctx[term] = {"@id": iri, **scoped, **rest}
                 else:
-                    primary = ctx.get(term)
                     if isinstance(primary, dict):
                         # Keep the primary's type coercion and container; only the IRI moves.
                         inherited = {k: v for k, v in primary.items() if k != "@id"}

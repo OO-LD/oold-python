@@ -164,3 +164,26 @@ def test_chain_skips_a_reference_it_cannot_resolve():
 def test_chain_reads_an_inline_allof_branch():
     derived = {"title": "Derived", "allOf": [{"@context": {"b": "ex:b"}}]}
     assert declared_context(chain(derived, None)) == {"b": "ex:b"}
+
+
+def test_promote_keeps_a_scoped_context_under_a_reverse_synonym():
+    """The direction of an edge does not change which terms the object at its end may use."""
+    schema = _schema(
+        {"part": {"@id": "ex:part", "@context": "Leaf.schema.json"}},
+        {"part": {"other:hasPart": {"@reverse": "other:hasPart", "x-oold-sssom": {"mapping_set_id": SET_A}}}},
+    )
+
+    promoted = promote(declared_context([schema]), [schema], SET_A)
+
+    assert promoted["part"] == {"@context": "Leaf.schema.json", "@reverse": "other:hasPart"}
+
+
+def test_promote_keeps_a_scoped_context_under_a_synonym_that_carries_coercion():
+    schema = _schema(
+        {"part": {"@id": "ex:part", "@type": "@id", "@context": "Leaf.schema.json"}},
+        {"part": {"other:part": {"@type": "@id", "x-oold-sssom": {"mapping_set_id": SET_A}}}},
+    )
+
+    promoted = promote(declared_context([schema]), [schema], SET_A)
+
+    assert promoted["part"] == {"@id": "other:part", "@context": "Leaf.schema.json", "@type": "@id"}

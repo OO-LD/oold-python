@@ -136,3 +136,47 @@ def test_view_checks_report_one_record_per_reading():
     assert {check.id for check in checks} == {CHECK_ID}
     assert checks[0].detail["triples"] == 3
     assert checks[1].detail["set"] == SET_A
+
+
+def test_a_context_that_cannot_be_assembled_is_reported_as_a_failed_reading():
+    """The context is built before anything is read, so its failure has its own path."""
+
+    class Source:
+        def locate(self, target, origin=None):
+            raise AssertionError("not reached: the fragment is refused first")
+
+        def read(self, key):
+            raise AssertionError("not reached")
+
+        def term_chain(self, key):
+            raise AssertionError("not reached")
+
+    schema = {"@context": {"part": {"@id": "ex:part", "@context": "#/$defs/Leaf"}}}
+    view = effective_views({"part": {}}, [schema], "Root.schema.json", Source(), set_ids=[None])[0]
+
+    assert not view.lossless
+    assert "part" in view.error
+    assert view.context == {}
+
+
+def test_undefined_terms_looks_inside_a_list_of_nodes():
+    assert undefined_terms({"items": [{"a": 1}, {"b": 2}]}, {"items": "ex:items", "a": "ex:a"}) == {"b"}
+
+
+def test_view_checks_spell_out_each_outcome():
+    checks = view_checks(
+        "Thing.instance.json",
+        [
+            View(set_id=None, label="consensus", lossless=True, triples=3),
+            View(set_id=SET_A, label="a", lossless=False, error="boom"),
+            View(set_id=SET_B, label="b", lossless=False, undefined=["unmapped"]),
+            View(set_id=SET_A, label="c", lossless=False, triples=2),
+        ],
+    )
+    messages = [check.message for check in checks]
+    assert messages[0] == "consensus: lossless round-trip, 3 triples"
+    assert messages[1] == "a: could not be read (boom)"
+    assert messages[2] == "b: terms not defined in the context: unmapped"
+    assert messages[3] == "c: lossy round-trip, 2 triples"
+    assert checks[1].detail["error"] == "boom"
+    assert checks[2].detail["undefined_terms"] == ["unmapped"]

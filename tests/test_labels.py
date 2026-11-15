@@ -4,6 +4,7 @@ What matters here is which terms are wanted and which document gets to name them
 that imports another carries its labels too, so namespace alone decides it wrongly.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from oold.utils.labels import (
     mapped_iris,
     ontology_files,
     owns,
+    resolve_missing,
 )
 
 EMMO = "https://w3id.org/emmo#EMMO_c1c8ac3c"
@@ -145,3 +147,61 @@ def test_label_map_does_not_report_the_libraries_own_placeholders_as_missing():
     own = "https://w3id.org/oo-ld/schemas/materials/0.2/Thing.schema.json"
     _, missing = label_map({}, {own, UO}, skip_prefix="https://w3id.org/oo-ld/schemas/")
     assert missing == [UO]
+
+
+class _Response:
+    """Minimal stand-in for what urlopen returns, so the lookup is exercised without a network."""
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    def read(self):
+        return json.dumps(self.payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_resolve_missing_reads_the_label_a_lookup_service_returns(monkeypatch):
+    seen = []
+
+    def urlopen(url, timeout=None):
+        seen.append(url)
+        return _Response({"_embedded": {"terms": [{"label": "metre"}]}})
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+
+    found = resolve_missing([UO], endpoint="https://lookup.example/terms?iri=")
+
+    assert found == {UO: {"label": "metre", "source": "ols4"}}
+    assert seen == ["https://lookup.example/terms?iri=http%3A%2F%2Fpurl.obolibrary.org%2Fobo%2FUO_0000010"]
+
+
+def test_resolve_missing_reports_an_iri_the_service_does_not_know(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=None: _Response({"_embedded": {"terms": []}}))
+    seen = []
+
+    assert resolve_missing([UO], on_error=lambda iri, exc: seen.append((iri, exc))) == {}
+    assert seen == [(UO, None)]
+
+
+def test_resolve_missing_reports_an_unreachable_service_rather_than_raising(monkeypatch):
+    def urlopen(url, timeout=None):
+        raise OSError("no route to host")
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    seen = []
+
+    assert resolve_missing([UO, EMMO], on_error=lambda iri, exc: seen.append(iri)) == {}
+    assert seen == sorted([UO, EMMO])
+
+
+def test_ontology_iri_is_empty_for_a_document_that_declares_none(tmp_path):
+    path = tmp_path / "terms.ttl"
+    path.write_text('<http://x.example/a> <http://www.w3.org/2000/01/rdf-schema#label> "a" .\n', encoding="utf-8")
+    found, ontology = harvest(path)
+    assert ontology == ""
+    assert found["http://x.example/a"] == "a"

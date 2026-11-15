@@ -180,3 +180,81 @@ def test_bind_namespaces_binds_the_declared_prefixes_and_names_the_rest():
 @pytest.mark.parametrize("fmt", ["turtle", "longturtle"])
 def test_the_turtle_flavour_is_the_callers_choice(fmt):
     assert readings(INSTANCE, [SCHEMA], turtle_format=fmt)[0].turtle.strip()
+
+
+def test_the_genid_authority_is_the_callers_and_shows_in_the_output():
+    """A skolem IRI is minted under whoever publishes the document, so it is a parameter."""
+    instance = {"type": "ex:Thing", "part": {"name": "nested"}}
+    default = readings(instance, [SCHEMA])[0].turtle
+    mine = readings(instance, [SCHEMA], genid="https://schemas.example.org/.well-known/genid/")[0].turtle
+    assert DEFAULT_GENID in default
+    assert DEFAULT_GENID not in mine
+    assert "https://schemas.example.org/.well-known/genid/" in mine
+
+
+def test_readings_resolves_a_scoped_context_when_a_source_is_given():
+    """Without the source the term keeps a bare reference, and the embedded keys reach no triple."""
+
+    class Source:
+        def locate(self, target, origin=None):
+            return target if target == "Leaf.schema.json" else None
+
+        def read(self, key):
+            return {"@context": {"leaf": "https://vocab.example/leaf"}}
+
+        def term_chain(self, key):
+            return [key]
+
+    schema = {
+        "@context": {
+            "ex": "https://example.org/",
+            "id": "@id",
+            "part": {"@id": "ex:part", "@context": "Leaf.schema.json"},
+        }
+    }
+    instance = {"@id": "https://example.org/thing", "part": {"leaf": "a value"}}
+
+    without = readings(instance, [schema])[0]
+    with_source = readings(instance, [schema], origin="Root.schema.json", source=Source())[0]
+
+    assert with_source.context["part"]["@context"] == {"leaf": "https://vocab.example/leaf"}
+    assert "a value" in with_source.turtle
+    assert "a value" not in without.turtle
+
+
+def test_a_schemas_own_term_names_stand_in_as_labels_under_the_given_prefix():
+    """A placeholder of this library has no ontology label, so its term name is the only one."""
+    own_base = "https://w3id.org/oo-ld/schemas/materials/0.1/"
+    schema = {
+        "@context": {
+            "own": {"@id": own_base, "@prefix": True},
+            "id": "@id",
+            "ChemicalComponent": "own:EMMO_1234",
+            "part": {"@id": "own:EMMO_5678", "@type": "@id"},
+        }
+    }
+    instance = {"@id": "https://example.org/x", "@type": "own:EMMO_1234", "part": "https://example.org/y"}
+
+    without = readings(instance, [schema])[0].diagram
+    with_names = readings(instance, [schema], label_prefix=own_base)[0].diagram
+
+    assert "own:EMMO_1234" in without
+    assert "own:ChemicalComponent" in with_names
+    assert "own:part" in with_names
+
+
+def test_named_namespaces_never_shadows_a_prefix_the_context_declares():
+    """The derived name for example.org is `ex`, which here is already taken."""
+    graph = skolemised_graph({"@id": "https://example.org/data/thing", "https://example.org/data/p": "v"})
+    found = named_namespaces(graph, {"ex": "https://other.example/"})
+    assert found["https://example.org/data/"] == "ex_data"
+
+    graph = skolemised_graph({"@id": "https://example.org/thing", "https://example.org/p": "v"})
+    found = named_namespaces(graph, {"ex": "https://other.example/"})
+    assert found["https://example.org/"] == "ex_"
+
+
+def test_terms_skips_a_keyword_and_a_non_string_target():
+    assert terms({"@vocab": "https://a.example/", "broken": {"@id": None}, "ok": "https://a.example/ok"}) == {
+        "https://a.example/ok": "ok"
+    }

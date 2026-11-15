@@ -20,6 +20,7 @@ from oold.utils.transform import (
     NQUADS,
     TURTLE,
     from_rdf,
+    json_to_json,
     jsonld_to_jsonld,
     to_rdf,
     transform,
@@ -618,3 +619,83 @@ if __name__ == "__main__":
     test_complex_graph(None)
     # test_rocreate()
     # test_literal_types()
+
+
+# Live coverage for the deprecated pair. `test_rocreate` above is skipped for flakiness, so
+# without these two the bodies run in no test at all, and "kept working" is a claim nothing
+# checks.
+
+
+DEPRECATED_CONTEXT = {
+    "ex": "https://example.org/",
+    "other": "https://other.example/",
+    "id": "@id",
+    "name": {"@id": "ex:name"},
+    "name*": {"@id": "other:label"},
+}
+
+
+def test_jsonld_to_jsonld_rewrites_the_starred_alias_onto_the_primary_term():
+    expanded = [{"@id": "https://example.org/thing", "https://other.example/label": [{"@value": "a name"}]}]
+
+    with pytest.warns(DeprecationWarning, match="x-oold-context"):
+        result = jsonld_to_jsonld(expanded, DEPRECATED_CONTEXT)
+
+    assert result["name"] == "a name"
+    assert result["id"] == "ex:thing"
+
+
+def test_json_to_json_transforms_a_plain_document_and_drops_the_context():
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "id": "@id",
+        "name": {"@id": "other:label"},
+        "name*": {"@id": "ex:name"},
+    }
+
+    with pytest.warns(DeprecationWarning, match="x-oold-context"):
+        result = json_to_json({"id": "https://example.org/thing", "name": "a name"}, context)
+
+    assert result == {"id": "ex:thing", "name": "a name"}
+    assert "@context" not in result
+
+
+def test_json_to_json_strips_the_identifiers_it_invented_for_an_anonymous_document():
+    """The anonymous path is the part the module docstring says cannot simply be rewritten."""
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "name": {"@id": "other:label"},
+        "name*": {"@id": "ex:name"},
+    }
+
+    with pytest.warns(DeprecationWarning):
+        result = json_to_json({"name": "a name"}, context)
+
+    assert result == {"name": "a name"}
+    assert "id" not in result
+    assert "@id" not in result
+
+
+def test_from_rdf_names_the_predicate_whose_object_cannot_become_a_subject():
+    """Left to the processor this surfaces as a flattening error naming nothing."""
+    schema = {
+        "@context": {
+            "ex": "https://example.org/",
+            "other": "https://other.example/",
+            "id": "@id",
+            "name": {"@id": "ex:name"},
+        },
+        "x-oold-context": {
+            "name": {"other:named": {"@reverse": "other:named", "x-oold-sssom": {"mapping_set_id": "s"}}}
+        },
+    }
+    document = {
+        "@context": {"other": "https://other.example/"},
+        "@id": "https://example.org/thing",
+        "other:named": "a literal",
+    }
+
+    with pytest.raises(ValueError, match="cannot invert"):
+        from_rdf(document, [schema])

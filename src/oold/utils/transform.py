@@ -19,6 +19,7 @@ meta-schema validates.
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Iterable
 from typing import Any
 
@@ -373,22 +374,36 @@ def transform(
 # reproduce their handling of anonymous documents and of a list-valued document
 # context, and any drift there would be a breaking change wearing the clothes of
 # a refactor. They go at the next major version instead.
+#
+# Both warn, because a comment reaches whoever reads this file and a caller on
+# the old notation is by definition not reading it.
+
+_DEPRECATION = (
+    '{name}() and the "name*" alias notation predate the OO-LD specification and are '
+    "scheduled for removal in the next major version. Use oold.utils.transform.transform() "
+    "over x-oold-context instead, which states the same relation with a mapping predicate "
+    "and a set identifier."
+)
 
 
 def jsonld_to_jsonld(graph: dict, transformation_context: dict) -> dict:
     """Applies OO-LD alias notation to transform JSON(-LD) documents
 
+    .. deprecated::
+        Use :func:`transform` over ``x-oold-context``.
+
     Parameters
     ----------
     graph
         input JSON(-LD) document to transform
-    context
+    transformation_context
         transformation context, which contains the mapping of aliases to URIs
 
     Returns
     -------
         transformed JSON(-LD) document
     """
+    warnings.warn(_DEPRECATION.format(name="jsonld_to_jsonld"), DeprecationWarning, stacklevel=2)
     temp1 = {}
     temp2 = {}
     temp3 = {}
@@ -474,6 +489,9 @@ def jsonld_to_jsonld(graph: dict, transformation_context: dict) -> dict:
 def json_to_json(document: dict, transformation_context: dict, document_context: dict | None = None) -> dict:
     """Applies OO-LD alias notation to transform JSON documents
 
+    .. deprecated::
+        Use :func:`transform` over ``x-oold-context``.
+
     Parameters
     ----------
     document
@@ -487,6 +505,7 @@ def json_to_json(document: dict, transformation_context: dict, document_context:
     -------
         transformed JSON document
     """
+    warnings.warn(_DEPRECATION.format(name="json_to_json"), DeprecationWarning, stacklevel=2)
     if document_context is None:
         document_context = transformation_context
     if type(document_context) is list:

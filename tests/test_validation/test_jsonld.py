@@ -14,6 +14,7 @@ from oold.validation.frame import (
     is_embed,
     keyword_alias_keys,
     reference_properties,
+    reverse_predicates,
     schema_to_frame,
 )
 from oold.validation.loader import DocumentLoader, describe_jsonld_error
@@ -98,6 +99,61 @@ def test_instance_rdf_types_is_most_derived_wins():
     assert instance_rdf_types({"type": "object"}) is None
 
 
+def test_a_type_pinned_as_a_default_anchors_the_frame():
+    """OO-LD/oold-python#177.
+
+    Without an anchor the root is only the frame root while every edge runs forward; the first
+    backwards edge leaves nothing matched and framing returns a bare ``@graph``.
+    """
+    context = {
+        "ex": "https://example.org/",
+        "obo": "http://purl.obolibrary.org/obo/",
+        "id": "@id",
+        "type": {"@id": "@type", "@container": "@set"},
+        "Material": "ex:Material",
+        "components": "ex:components",
+        "chemical_composition": {"@reverse": "obo:RO_0000080"},
+    }
+    schema = {
+        "type": "object",
+        "@context": context,
+        "properties": {
+            "type": {"type": "array", "items": {"type": "string"}, "default": ["Material"]},
+            "chemical_composition": {"type": "object", "properties": {"components": {}}},
+        },
+    }
+    assert instance_rdf_types(schema) == ["Material"]
+    frame = schema_to_frame(schema)
+    assert frame["@type"] == "Material"
+
+    rdf_type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"
+    nq = "\n".join([
+        f"<https://example.org/m1> {rdf_type} <https://example.org/Material> .",
+        f"_:c {rdf_type} <https://example.org/ChemicalComposition> .",
+        "_:c <http://purl.obolibrary.org/obo/RO_0000080> <https://example.org/m1> .",
+        '_:c <https://example.org/components> "Fe" .',
+        "",
+    ])
+    graph = jsonld.from_rdf(nq, {"format": "application/n-quads", "useNativeTypes": True})
+    framed = jsonld.frame(graph, frame, {"omitDefault": True})
+
+    assert "@graph" not in framed
+    assert framed["chemical_composition"]["components"] == "Fe"
+
+
+def test_the_keyword_wins_over_a_type_pinned_as_a_default():
+    schema = {
+        "x-oold-instance-rdf-type": ["ex:B"],
+        "properties": {"type": {"default": ["ex:A"]}},
+    }
+    assert instance_rdf_types(schema) == ["ex:B"]
+    # A schema's own default is nearer than a type inherited through allOf.
+    assert instance_rdf_types({
+        "allOf": [{"x-oold-instance-rdf-type": ["ex:A"]}],
+        "properties": {"type": {"default": ["ex:B"]}},
+    }) == ["ex:B"]
+
+
 def test_schema_to_frame_carries_type_context_and_subframes():
     schema = {
         "x-oold-instance-rdf-type": ["schema:Person"],
@@ -175,6 +231,35 @@ def test_embedding_wins_where_a_property_carries_both_signals():
     assert reference_properties(schema) == []
 
 
+def test_a_ref_valued_embed_keeps_its_subframe_before_dereferencing():
+    """OO-LD/oold-python#175.
+
+    ``$ref`` is the only trace of the embed while the schema is undereferenced, and the
+    ``"@type": "@id"`` that OO-LD requires on such a term makes it look reference-valued at the
+    same time. With both lists claiming it, ``{}`` was overwritten by ``@embed: @never`` and the
+    framed node came back empty.
+    """
+    schema = {
+        "type": "object",
+        "@context": {
+            "type": {"@id": "@type", "@container": "@set"},
+            "chemical_composition": {
+                "@id": "https://example.org/chemical_composition",
+                "@type": "@id",
+                "@context": "ChemicalComposition.schema.json",
+            },
+        },
+        "properties": {
+            "type": {"type": "array", "items": {"type": "string"}, "default": ["Material"]},
+            "chemical_composition": {"$ref": "ChemicalComposition.schema.json"},
+        },
+    }
+    assert is_embed({"$ref": "ChemicalComposition.schema.json"})
+    assert embedded_properties(schema) == ["chemical_composition"]
+    assert reference_properties(schema) == []
+    assert schema_to_frame(schema, "Material.schema.json")["chemical_composition"] == {}
+
+
 def test_a_bare_reverse_term_is_reference_valued():
     """A reverse term's values are node references by definition (JSON-LD 1.1 4.1.10).
 
@@ -187,7 +272,55 @@ def test_a_bare_reverse_term_is_reference_valued():
         "properties": {"employees": {"type": "array", "items": {"type": "string"}}},
     }
     assert reference_properties(schema) == ["employees"]
-    assert schema_to_frame(schema)["employees"] == {"@embed": "@never"}
+    assert schema_to_frame(schema)["@reverse"] == {"schema:worksFor": {"@embed": "@never"}}
+
+
+def test_two_terms_on_one_reverse_iri_share_a_single_subframe():
+    """OO-LD/oold-python#176.
+
+    Term names expand, so a subframe per term became two subframes under one IRI. A frame must be
+    a single object, and pyld raised ``invalid frame`` with ``{'frame': [{}, {}]}``.
+    """
+    context = {
+        "ex": "https://example.org/",
+        "obo": "http://purl.obolibrary.org/obo/",
+        "id": "@id",
+        "type": {"@id": "@type", "@container": "@set"},
+        "Material": "ex:Material",
+        "components": "ex:components",
+        "chemical_composition": {"@reverse": "obo:RO_0000080"},
+        "material_composition": {"@reverse": "obo:RO_0000080"},
+    }
+    schema = {
+        "x-oold-instance-rdf-type": ["ex:Material"],
+        "type": "object",
+        "@context": context,
+        "properties": {
+            "chemical_composition": {"type": "object", "properties": {"components": {}}},
+            "material_composition": {"type": "object", "properties": {"components": {}}},
+        },
+    }
+    assert reverse_predicates(schema) == {"obo:RO_0000080": ["chemical_composition", "material_composition"]}
+    frame = schema_to_frame(schema)
+    assert frame["@reverse"] == {"obo:RO_0000080": {}}
+    assert "chemical_composition" not in frame
+
+    rdf_type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"
+    nq = "\n".join([
+        f"<https://example.org/m1> {rdf_type} <https://example.org/Material> .",
+        f"_:c {rdf_type} <https://example.org/ChemicalComposition> .",
+        "_:c <http://purl.obolibrary.org/obo/RO_0000080> <https://example.org/m1> .",
+        '_:c <https://example.org/components> "Fe" .',
+        f"_:m {rdf_type} <https://example.org/MaterialComposition> .",
+        "_:m <http://purl.obolibrary.org/obo/RO_0000080> <https://example.org/m1> .",
+        '_:m <https://example.org/components> "steel" .',
+        "",
+    ])
+    graph = jsonld.from_rdf(nq, {"format": "application/n-quads", "useNativeTypes": True})
+    framed = jsonld.frame(graph, frame, {"omitDefault": True})
+
+    compositions = framed["chemical_composition"]
+    assert sorted(entry["components"] for entry in compositions) == ["Fe", "steel"]
 
 
 def test_a_keyword_alias_never_gets_a_subframe():
@@ -234,7 +367,7 @@ def test_schema_to_frame_keeps_reference_valued_properties_as_iris():
     }
     frame = schema_to_frame(schema, "Organization.schema.json")
     assert frame["address"] == {}
-    assert frame["employees"] == {"@embed": "@never"}
+    assert frame["@reverse"] == {"schema:worksFor": {"@embed": "@never"}}
 
 
 def test_framing_leaves_a_reference_whose_target_has_triples_as_an_iri():

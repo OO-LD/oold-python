@@ -7,6 +7,25 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.3.1 (2026-11-15)
+
+### Bug Fixes
+
+- **frame**: Anchor the frame on a type pinned as a default
+  ([`fa22022`](https://github.com/OO-LD/oold-python/commit/fa220221e48feb83c26879748c317457d2484012))
+
+- **frame**: Keep a $ref-valued embed out of the reference list
+  ([`a7ac1d1`](https://github.com/OO-LD/oold-python/commit/a7ac1d1d153719258fb299c3f706a58238bbe9c4))
+
+- **frame**: One reverse subframe per IRI, not per term
+  ([`74a3adf`](https://github.com/OO-LD/oold-python/commit/74a3adf44fb647aa544c7432c0e5fd78f44949c1))
+
+### Documentation
+
+- **controller**: Name controller members for what they do
+  ([`648018f`](https://github.com/OO-LD/oold-python/commit/648018fc480934b5b5185c6d0702860392e90c25))
+
+
 ## v2.3.0 (2026-10-15)
 
 ### Bug Fixes

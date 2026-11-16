@@ -205,3 +205,40 @@ def test_ontology_iri_is_empty_for_a_document_that_declares_none(tmp_path):
     found, ontology = harvest(path)
     assert ontology == ""
     assert found["http://x.example/a"] == "a"
+
+
+def test_mapped_iris_skips_a_schema_whose_whole_context_is_a_remote_reference():
+    """It defines no term here, so there is nothing of its own to label."""
+    assert mapped_iris([{"@context": "Remote.schema.json"}, {"@context": None}]) == set()
+
+
+def test_harvest_keeps_only_terms_in_an_http_namespace():
+    """The label map is keyed by http(s) IRI, which is what a context expands a term to."""
+    path = Path(__file__).parent / "_urn_terms.ttl"
+    path.write_text(
+        '<urn:uuid:1234> <http://www.w3.org/2000/01/rdf-schema#label> "urn term" .\n'
+        '<https://a.example/t> <http://www.w3.org/2000/01/rdf-schema#label> "http term" .\n',
+        encoding="utf-8",
+    )
+    try:
+        found, _ = harvest(path)
+    finally:
+        path.unlink()
+    assert found == {"https://a.example/t": "http term"}
+
+
+def test_harvest_all_skips_an_unreadable_snapshot_with_nobody_listening(tmp_path):
+    broken = tmp_path / "broken.ttl"
+    broken.write_text("this is not turtle <<<", encoding="utf-8")
+    good = _turtle(tmp_path / "uo.ttl", "http://purl.obolibrary.org/obo/uo", {UO: "metre"})
+    assert harvest_all([broken, good])[UO]["label"] == "metre"
+
+
+def test_resolve_missing_carries_on_with_nobody_listening(monkeypatch):
+    def urlopen(url, timeout=None):
+        if "UO" in url:
+            raise OSError("no route to host")
+        return _Response({"_embedded": {"terms": []}})
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    assert resolve_missing([UO, EMMO]) == {}

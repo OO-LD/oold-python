@@ -19,6 +19,11 @@ from oold.utils.transform import (
     JSON_LD,
     NQUADS,
     TURTLE,
+    _expand_iri,
+    _id_keys,
+    _literal_inversion,
+    _rewrite_map,
+    _vocab_valued_properties,
     from_rdf,
     json_to_json,
     jsonld_to_jsonld,
@@ -699,3 +704,198 @@ def test_from_rdf_names_the_predicate_whose_object_cannot_become_a_subject():
 
     with pytest.raises(ValueError, match="cannot invert"):
         from_rdf(document, [schema])
+
+
+# The helpers below are private, and tested directly because each decides something the public
+# path can only show indirectly: which positions a synonym may be rewritten in, and which values
+# are identifiers rather than data. A wrong answer there is a silently wrong graph.
+
+
+def test_a_value_that_names_no_term_expands_to_nothing():
+    context = {"ex": "https://example.org/", "name": "ex:name"}
+    assert _expand_iri(context, "name") == "https://example.org/name"
+    assert _expand_iri(context, "") is None
+    assert _expand_iri(context, None) is None
+
+
+def test_an_unusable_context_yields_no_expansion_rather_than_raising():
+    """An import must not die on a context it cannot read; it rewrites nothing instead."""
+    assert _expand_iri({"ex": {"@id": ["not", "an", "iri"]}}, "ex:name") is None
+
+
+def test_a_term_the_context_drops_expands_to_nothing():
+    """`null` removes a term, so the probe document comes back empty."""
+    assert _expand_iri({"ex": "https://example.org/", "name": None}, "name") is None
+
+
+def test_a_value_that_expands_only_to_keywords_is_not_an_iri():
+    assert _expand_iri({"name": "@type"}, "name") is None
+
+
+def test_a_synonym_that_is_the_term_itself_is_not_a_rewrite():
+    """Nothing to swap, and emitting the pair would make the bridge rewrite a term onto itself."""
+    schema = {
+        "@context": {"ex": "https://example.org/", "name": "ex:name"},
+        "x-oold-context": {"name": {"ex:name": {"x-oold-sssom": {"mapping_set_id": "s"}}}},
+    }
+    swap, invert = _rewrite_map([schema], schema["@context"])
+    assert swap == {}
+    assert invert == {}
+
+
+def test_a_synonym_with_no_iri_is_dropped_from_the_rewrite():
+    schema = {
+        "@context": {"ex": "https://example.org/", "name": "ex:name"},
+        "x-oold-context": {"name": {"": {"x-oold-sssom": {"mapping_set_id": "s"}}}},
+    }
+    assert _rewrite_map([schema], schema["@context"]) == ({}, {})
+
+
+def test_the_scan_for_vocab_terms_descends_into_a_property_scope():
+    """A scoped @vocab value is still a vocabulary term, so the scan has to reach it.
+
+    It is reported only where the enclosing context also names the term, because the IRI is
+    resolved against that context. A term that exists *only* in the scope resolves to nothing
+    there and is dropped, which is a known limit rather than a decision: it would need the
+    scope's own context to expand against.
+    """
+    scoped_only = {
+        "ex": "https://example.org/",
+        "part": {"@id": "ex:part", "@context": [{"unit": {"@id": "ex:unit", "@type": "@vocab"}}]},
+        "named": {"@id": "ex:named", "@context": "Remote.schema.json"},
+    }
+    assert _vocab_valued_properties(scoped_only) == set()
+
+    also_at_the_top = {
+        "ex": "https://example.org/",
+        "part": {"@id": "ex:part", "@context": [{"unit": {"@id": "ex:unit", "@type": "@vocab"}}]},
+        "unit": {"@id": "ex:unit"},
+    }
+    assert _vocab_valued_properties(also_at_the_top) == {"https://example.org/unit"}
+
+
+def test_id_keys_tolerates_a_context_that_is_not_an_object():
+    """A document may reference its context remotely, and a bare URL aliases nothing."""
+    assert _id_keys("https://example.org/context.jsonld") == frozenset({"@id"})
+    assert _id_keys({"id": "@id", "name": "ex:name"}) == frozenset({"@id", "id"})
+
+
+def test_the_literal_inversion_is_reported_from_wherever_it_sits():
+    """An offending predicate nested inside an embedded object names itself just the same."""
+    expanded = [{"https://example.org/outer": [{"https://other.example/named": [{"@value": "a literal"}]}]}]
+    assert _literal_inversion(expanded, {"https://other.example/named": "x"}) == "https://other.example/named"
+    assert _literal_inversion(expanded, {}) is None
+
+
+def test_the_alias_notation_accepts_a_term_written_as_a_plain_iri():
+    """The shorthand both sides, which is how most of the old contexts were written."""
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "id": "@id",
+        "name": "ex:name",
+        "name*": "other:label",
+    }
+    expanded = [{"@id": "https://example.org/thing", "https://other.example/label": [{"@value": "a name"}]}]
+
+    with pytest.warns(DeprecationWarning):
+        result = jsonld_to_jsonld(expanded, context)
+
+    assert result["name"] == "a name"
+
+
+def test_the_alias_notation_inverts_a_reverse_alias():
+    """The community states the edge the other way, which is the case the notation existed for."""
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "id": "@id",
+        "attachment": {"@id": "ex:hasAttachment", "@type": "@id"},
+        "attachment*": {"@reverse": "other:isPartOf", "@type": "@id"},
+    }
+    expanded = [
+        {
+            "@id": "https://example.org/file",
+            "https://other.example/isPartOf": [{"@id": "https://example.org/record"}],
+        }
+    ]
+
+    with pytest.warns(DeprecationWarning):
+        result = jsonld_to_jsonld(expanded, context)
+
+    assert result["id"] == "ex:record"
+    assert result["attachment"] == "ex:file"
+
+
+def test_json_to_json_wraps_a_document_whose_context_is_a_list():
+    """The list-valued document context is the other half of what the module docstring cites."""
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "id": "@id",
+        "name": {"@id": "other:label"},
+        "name*": {"@id": "ex:name"},
+    }
+
+    with pytest.warns(DeprecationWarning):
+        result = json_to_json(
+            [{"id": "https://example.org/a", "name": "first"}],
+            context,
+            document_context=[context],
+        )
+
+    assert result == {"id": "ex:a", "name": "first"}
+
+
+def test_a_reverse_alias_whose_primary_term_is_a_plain_iri():
+    """The two shorthands combine: the alias inverts, the term it belongs to is a bare IRI.
+
+    A bare IRI carries no `@type: "@id"`, so the inverted value comes back as a node object
+    rather than as a reference. The edge is the same one either way.
+    """
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "id": "@id",
+        "attachment": "ex:hasAttachment",
+        "attachment*": {"@reverse": "other:isPartOf", "@type": "@id"},
+    }
+    expanded = [
+        {
+            "@id": "https://example.org/file",
+            "https://other.example/isPartOf": [{"@id": "https://example.org/record"}],
+        }
+    ]
+
+    with pytest.warns(DeprecationWarning):
+        result = jsonld_to_jsonld(expanded, context)
+
+    assert result["id"] == "ex:record"
+    assert result["attachment"] == {"id": "ex:file"}
+
+
+def test_a_reverse_only_primary_term_is_reported_as_unsupported(capsys):
+    """The notation cannot rewrite onto a term that carries no `@id` of its own.
+
+    Asserted on the report rather than on the output, which is wrong here: the alias is left
+    in the document under its starred name. Pinning that would make a defect a contract, and
+    this block is kept as it was until the next major removes it.
+    """
+    context = {
+        "ex": "https://example.org/",
+        "other": "https://other.example/",
+        "id": "@id",
+        "partOf": {"@reverse": "ex:hasPart"},
+        "partOf*": {"@id": "other:belongsTo"},
+    }
+    expanded = [
+        {
+            "@id": "https://example.org/child",
+            "https://other.example/belongsTo": [{"@id": "https://example.org/parent"}],
+        }
+    ]
+
+    with pytest.warns(DeprecationWarning):
+        jsonld_to_jsonld(expanded, context)
+
+    assert "Error" in capsys.readouterr().out

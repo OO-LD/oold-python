@@ -301,3 +301,44 @@ def test_chain_visits_a_diamond_base_once():
     derived = {"title": "Derived", "allOf": [{"$ref": "Left.schema.json"}, {"$ref": "Right.schema.json"}]}
 
     assert [s["title"] for s in chain(derived, documents.get)] == ["Base", "Left", "Right", "Derived"]
+
+
+def test_a_synonym_with_no_mapping_set_belongs_to_none():
+    """The entry still records a correspondence; it is simply not selectable."""
+    schema = _schema(
+        {"name": "ex:name"},
+        {"name": {"other:label": {"x-oold-sssom": {"predicate_id": "skos:exactMatch"}}}},
+    )
+    assert mapping_sets([schema]) == []
+    assert promote(declared_context([schema]), [schema], SET_A) == {"name": "ex:name"}
+
+
+def test_a_mapping_set_id_that_is_neither_a_name_nor_a_list_selects_nothing():
+    schema = _schema({"name": "ex:name"}, {"name": {"other:label": {"x-oold-sssom": {"mapping_set_id": 7}}}})
+    assert mapping_sets([schema]) == []
+
+
+def test_chain_skips_a_malformed_allof_entry():
+    """A half-written schema holds a bare string where a subschema belongs."""
+    derived = {"title": "Derived", "allOf": ["Base.schema.json", {"@context": {"b": "ex:b"}}]}
+    result = chain(derived, lambda _ref: None)
+    assert [s["title"] for s in result if "title" in s] == ["Derived"]
+    assert declared_context(result) == {"b": "ex:b"}
+
+
+def test_chain_reads_an_inline_branch_and_a_ref_branch_side_by_side():
+    base = {"title": "Base", "@context": {"a": "ex:a"}}
+    derived = {
+        "title": "Derived",
+        "allOf": [{"@context": {"inline": "ex:inline"}}, {"$ref": "Base.schema.json"}],
+    }
+    result = chain(derived, {"Base.schema.json": base}.get)
+    assert declared_context(result) == {"inline": "ex:inline", "a": "ex:a"}
+
+
+def test_chain_without_a_resolver_cannot_follow_a_ref_base():
+    """The terms of a base named only by $ref are out of reach, so the branch is left alone."""
+    derived = {"title": "Derived", "@context": {"own": "ex:own"}, "allOf": [{"$ref": "Base.schema.json"}]}
+    result = chain(derived, None)
+    assert [s["title"] for s in result] == ["Derived"]
+    assert declared_context(result) == {"own": "ex:own"}

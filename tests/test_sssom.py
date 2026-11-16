@@ -248,3 +248,27 @@ def test_a_tab_in_a_value_cannot_break_the_columns():
     ]
     body = render_set("s", rows, {}, set_id="s").splitlines()[-1]
     assert len(body.split("\t")) == len(COLUMNS)
+
+
+def test_prefixes_ignores_a_keyword_and_a_name_that_is_not_a_bare_word():
+    """A prefix is a bare name. `my_ns` is a term that happens to end in a delimiter."""
+    context = {
+        "@vocab": "https://a.example/",
+        "my_ns": "https://b.example/",
+        "ok": "https://c.example/",
+    }
+    assert prefixes(context) == {"ok": "https://c.example/"}
+
+
+def test_prefixes_ignores_a_definition_that_is_neither_a_name_nor_an_object():
+    assert prefixes({"weird": ["https://a.example/"], "none": None}) == {}
+
+
+def test_a_null_synonym_entry_is_not_a_mapping_to_export():
+    """A null removes an inherited mapping under composition. It is the absence of one."""
+    schema = {
+        "@context": {"ex": "https://vocab.example/", "name": "ex:name"},
+        "x-oold-context": {"name": {"ex:removed": None, "ex:kept": {"x-oold-sssom": {"mapping_set_id": SET_A}}}},
+    }
+    sets, _ = collect([group(schema)], own_prefix=OWN)
+    assert [row["object_id"] for row in sets["emmo"]] == ["ex:kept"]

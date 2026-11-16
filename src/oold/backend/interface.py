@@ -116,16 +116,17 @@ class Resolver(BaseModel):
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
         pass
 
-    def resolve(self, request: ResolveParam):
-        # print("RESOLVE", request)
-
-        model_cls = request.model_cls
-        if model_cls is None:
-            model_cls = self.model_cls
+    def _model_cls_for(self, model_cls: type[GenericLinkedBaseModel] | None) -> type[GenericLinkedBaseModel]:
+        model_cls = model_cls or self.model_cls
         if model_cls is None:
             raise ValueError("No model_cls provided in request or resolver")
+        return model_cls
 
-        jsonld_dicts = self.resolve_iris(request.iris)
+    def resolve(self, request: ResolveParam):
+        model_cls = self._model_cls_for(request.model_cls)
+        return self._to_nodes(self.resolve_iris(request.iris), model_cls)
+
+    def _to_nodes(self, jsonld_dicts: dict[str, dict], model_cls: type[GenericLinkedBaseModel]) -> "ResolveResult":
         nodes = {}
         for iri, jsonld_dict in jsonld_dicts.items():
             if jsonld_dict is None:

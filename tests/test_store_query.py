@@ -27,6 +27,7 @@ class Person(LinkedBaseModel):
     type: str | None = "qstore:Person"
     name: str | None = None
     age: int | None = None
+    tags: list[str] | None = None
     address: Address | None = None
 
 
@@ -36,6 +37,7 @@ DOCS = {
         "type": "qstore:Person",
         "name": "Ada",
         "age": 36,
+        "tags": ["a", "b"],
         "address": {"city": "Berlin", "geo": {"lat": 52.5}},
     },
     "ex:bob": {
@@ -56,11 +58,11 @@ DOCS = {
 }
 
 
-@pytest.fixture(params=["dict"])
+@pytest.fixture(params=["dict", pytest.param("postgres", marks=pytest.mark.postgres)])
 def query_store(request):
-    store = SimpleDictDocumentStore()
+    store = request.getfixturevalue("postgres_store") if request.param == "postgres" else SimpleDictDocumentStore()
     store.store_json_dicts(DOCS)
-    yield store
+    return store
 
 
 def _matches(store, condition) -> set[str]:
@@ -79,8 +81,10 @@ def _matches(store, condition) -> set[str]:
         (lambda: (Person.name == "Bob") & (Person.age == 41), {"ex:bob"}),
         (lambda: (Person.name == "Ada") | (Person.name == "Cy"), {"ex:ada", "ex:cy"}),
         (lambda: Person.name == "Nobody", set()),
+        # a list is not equal to one of its items
+        (lambda: Person.tags == "a", set()),
     ],
-    ids=["eq", "ne", "lt", "le", "gt", "ge", "and", "or", "no-match"],
+    ids=["eq", "ne", "lt", "le", "gt", "ge", "and", "or", "no-match", "list-is-not-its-item"],
 )
 def test_top_level_conditions(query_store, build, expected):
     assert _matches(query_store, build()) == expected

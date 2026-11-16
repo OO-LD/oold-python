@@ -1,3 +1,6 @@
+import importlib
+import sys
+
 import pytest
 
 pytest.importorskip("psycopg")
@@ -11,6 +14,23 @@ from oold.backend.postgres import PostgresDocumentStore
 def test_invalid_table_name_is_rejected_before_connecting(table):
     with pytest.raises(ValidationError):
         PostgresDocumentStore(dsn="postgresql://unused", table=table)
+
+
+def test_missing_driver_names_the_extra(monkeypatch):
+    monkeypatch.setitem(sys.modules, "psycopg", None)
+    monkeypatch.delitem(sys.modules, "oold.backend.postgres")
+
+    with pytest.raises(ImportError, match=r"oold\[postgres\]"):
+        importlib.import_module("oold.backend.postgres")
+
+
+@pytest.mark.postgres
+def test_close_is_idempotent_and_the_store_reconnects(postgres_store):
+    postgres_store.store_json_dicts({"ex:a": {"name": "one"}})
+    postgres_store.close()
+    postgres_store.close()
+
+    assert postgres_store.resolve_iris(["ex:a"]) == {"ex:a": {"name": "one"}}
 
 
 @pytest.mark.postgres

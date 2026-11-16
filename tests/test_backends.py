@@ -110,8 +110,17 @@ _STORE_FACTORIES = {
 }
 
 
-@pytest.fixture(params=list(_STORE_FACTORIES))
+@pytest.fixture(
+    params=[
+        *_STORE_FACTORIES,
+        pytest.param("postgres", marks=pytest.mark.postgres),
+    ]
+)
 def store(request) -> Backend:
+    if request.param == "postgres":
+        # Own fixture: it skips without a server and drops its table afterwards.
+        yield request.getfixturevalue("postgres_store")
+        return
     backend = _STORE_FACTORIES[request.param]()
     yield backend
     close = getattr(backend, "close", None)

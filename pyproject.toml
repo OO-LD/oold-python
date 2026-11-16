@@ -220,6 +220,8 @@ markers = [
     # Opt-in parity tests against a local oold-schema checkout; see
     # tests/test_validation/test_parity_live.py. They skip unless OOLD_SCHEMA_DIR is set.
     "parity: compares this port against the reference harness",
+    # Needs a live PostgreSQL; skips unless OOLD_TEST_POSTGRES_URL is set.
+    "postgres: runs against a live PostgreSQL server",
 ]
 
 [tool.deptry]

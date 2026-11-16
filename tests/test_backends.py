@@ -86,38 +86,42 @@ def _run(store: Backend):
     _store_procedure(store, pydantic_version="v2")
 
 
-@pytest.mark.benchmark(group="backend")
-def test_simple_dict_document_store(benchmark):
-    store = SimpleDictDocumentStore()
-
-    if benchmark is not None:
-        benchmark(_run, store)
-    else:
-        _run(store)
+def _make_dict_store() -> Backend:
+    return SimpleDictDocumentStore()
 
 
-@pytest.mark.benchmark(group="backend")
-def test_sqlite_document_store(benchmark):
+def _make_sqlite_store() -> Backend:
     from oold.backend.document_store import SqliteDocumentStore
 
-    store = SqliteDocumentStore(db_path=":memory:")
+    return SqliteDocumentStore(db_path=":memory:")
 
-    if benchmark is not None:
-        benchmark(_run, store)
-    else:
-        _run(store)
+
+def _make_sparql_store() -> Backend:
+    from oold.backend.sparql import LocalSparqlBackend
+
+    return LocalSparqlBackend()
+
+
+# One entry per store; a new backend only needs a factory here.
+_STORE_FACTORIES = {
+    "dict": _make_dict_store,
+    "sqlite": _make_sqlite_store,
+    "sparql": _make_sparql_store,
+}
+
+
+@pytest.fixture(params=list(_STORE_FACTORIES))
+def store(request) -> Backend:
+    backend = _STORE_FACTORIES[request.param]()
+    yield backend
+    close = getattr(backend, "close", None)
+    if close is not None:
+        close()
 
 
 @pytest.mark.benchmark(group="backend")
-def test_local_sparql_store(benchmark):
-    from oold.backend.sparql import LocalSparqlBackend
-
-    store = LocalSparqlBackend()
-
-    if benchmark is not None:
-        benchmark(_run, store)
-    else:
-        _run(store)
+def test_store_roundtrip(store, benchmark):
+    benchmark(_run, store)
 
 
 def test_simple_dict_file_persistence(tmp_path):
@@ -158,9 +162,3 @@ def test_simple_dict_file_no_file():
     store = SimpleDictDocumentStore()
     assert store.file_path is None
     assert store._store == {}
-
-
-if __name__ == "__main__":
-    test_simple_dict_document_store(None)
-    test_sqlite_document_store(None)
-    test_local_sparql_store(None)

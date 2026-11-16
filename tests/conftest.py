@@ -62,6 +62,7 @@ def _restore_global_registries():
 
     registries = [
         interface._resolvers,
+        interface._backends,
         _types,
         _types_v1,
         _controller_types,

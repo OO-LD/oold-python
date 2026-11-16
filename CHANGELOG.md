@@ -7,6 +7,15 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.3.2 (2026-11-16)
+
+### Bug Fixes
+
+- Exclude pydantic 2.13, which is ~9x slower to construct
+  ([#178](https://github.com/OO-LD/oold-python/pull/178),
+  [`2c3a5c3`](https://github.com/OO-LD/oold-python/commit/2c3a5c38ae48f3ec9c6891f0cd8fd8250c581873))
+
+
 ## v2.3.1 (2026-11-15)
 
 ### Bug Fixes

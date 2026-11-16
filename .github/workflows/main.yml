@@ -101,8 +101,15 @@ jobs:
 
       - name: Run the postgres tests
         run: >-
-          uv run python -m pytest tests -m postgres --no-cov --benchmark-disable
-          --junitxml="$RUNNER_TEMP/postgres-junit.xml"
+          uv run python -m pytest tests -m postgres --cov --cov-config=pyproject.toml
+          --cov-report=xml --benchmark-disable --junitxml="$RUNNER_TEMP/postgres-junit.xml"
+
+      - name: Upload coverage reports to Codecov on PostgreSQL 17
+        # Codecov merges this with the main upload, where these tests skip.
+        uses: codecov/codecov-action@v4
+        if: ${{ matrix.postgres == '17' }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Fail if any postgres test was skipped
         # A wrong URL or a missing driver skips these tests, and a skip counts as a pass.

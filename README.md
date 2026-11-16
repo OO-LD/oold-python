@@ -239,6 +239,7 @@ Built-in backends for entity persistence and resolution:
 | --------------------------- | ------------------------------------------------ | --------------- |
 | **SimpleDictDocumentStore** | In-memory dict, optional JSON file (`file_path`) | Filter by field |
 | **SqliteDocumentStore**     | SQLite database (default `format=JSON`)          | -               |
+| **PostgresDocumentStore**   | PostgreSQL JSONB (`oold[postgres]`)              | -               |
 | **LocalSparqlBackend**      | In-memory RDF graph (rdflib)                     | SPARQL          |
 
 ```python

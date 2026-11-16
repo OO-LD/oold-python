@@ -68,6 +68,14 @@ Requires `uv` and `git`.
     uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
     ```
 
+### PostgreSQL tests
+
+The tests marked `postgres` need a live server and skip unless `OOLD_TEST_POSTGRES_URL` is set. CI runs them against PostgreSQL 16, 17 and 18. Each test uses its own table and drops it afterwards, so any database you can write to will do:
+
+```bash
+OOLD_TEST_POSTGRES_URL=postgresql://user:password@localhost:5432/postgres make test
+```
+
 ### Docs
 
 Doc sources live in `docs/`. The site is configured in `zensical.toml`.

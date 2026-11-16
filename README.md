@@ -235,12 +235,12 @@ Parameters:
 
 Built-in backends for entity persistence and resolution:
 
-| Backend                     | Storage                                          | Query support   |
-| --------------------------- | ------------------------------------------------ | --------------- |
-| **SimpleDictDocumentStore** | In-memory dict, optional JSON file (`file_path`) | Filter by field |
-| **SqliteDocumentStore**     | SQLite database (default `format=JSON`)          | -               |
-| **PostgresDocumentStore**   | PostgreSQL JSONB (`oold[postgres]`)              | -               |
-| **LocalSparqlBackend**      | In-memory RDF graph (rdflib)                     | SPARQL          |
+| Backend                     | Storage                                          | Query support                 |
+| --------------------------- | ------------------------------------------------ | ----------------------------- |
+| **SimpleDictDocumentStore** | In-memory dict, optional JSON file (`file_path`) | Filter by field, nested paths |
+| **SqliteDocumentStore**     | SQLite database (default `format=JSON`)          | -                             |
+| **PostgresDocumentStore**   | PostgreSQL JSONB (`oold[postgres]`)              | Filter by field, nested paths |
+| **LocalSparqlBackend**      | In-memory RDF graph (rdflib)                     | SPARQL                        |
 
 ```python
 from oold.backend.document_store import SimpleDictDocumentStore

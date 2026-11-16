@@ -129,9 +129,11 @@ alice = Person["ex:alice"]
 store.close()  # the connection stays open until you close it
 ```
 
-- Entities live in table `entities` (`id TEXT PRIMARY KEY, data JSONB`), created on first use. Pass `table="..."` to use another name (letters, digits and underscores, up to 63 characters).
+- Entities live in table `entities` (`id TEXT PRIMARY KEY, data JSONB`), created on first use. Pass `table="..."` to use another name (letters, digits and underscores, up to 58 characters).
 - Storing an IRI again overwrites its row, and a batch is written in one transaction.
-- Querying with `Model[Model.field == value]` is not supported yet.
+- `index=True` (the default) adds a GIN index on `data` that serves equality conditions. Pass `index=False` to skip it.
+- `query_limit=100` caps the rows a query returns. The default is no limit.
+- Querying works as described in [Querying document stores](#querying-document-stores).
 
 ---
 
@@ -156,6 +158,56 @@ The backend serializes each entity to JSON-LD before inserting it into the RDF g
 
 ---
 
+## Querying document stores
+
+`SimpleDictDocumentStore` and `PostgresDocumentStore` answer the query DSL, so a condition on a model class subscripts straight into the store:
+
+```python
+Person[Person.age > 30]
+Person[(Person.name == "Ada") & (Person.age >= 18)]
+Person[(Person.name == "Ada") | (Person.name == "Bob")]
+```
+
+`==`, `!=`, `<`, `<=`, `>`, `>=`, `&` and `|` are supported. Put parentheses around each side of `&` and `|`.
+
+### Nested fields
+
+A field that embeds a model chains, so you can filter on what is inside it:
+
+```python
+from pydantic import BaseModel
+
+class Address(BaseModel):
+    city: str | None = None
+
+class Person(LinkedBaseModel):
+    id: str
+    address: Address | None = None
+
+Person[Person.address.city == "Berlin"]
+```
+
+The condition carries the dotted path `address.city`. You can also write it by hand with `Condition(field="address.city", ...)`. A document where the path is missing never matches, not even for `!=`.
+
+Paths reach embedded objects only:
+
+- A link is an IRI reference, not an embedded object. Compare it with an IRI (`Person.knows == "ex:bob"`). `Person.knows.name` raises, because following a link means looking up another document.
+- A list of models cannot be indexed, so `Person.previous.city` raises.
+- Chaining needs the default descriptor binding. With `OOLD_DESCRIPTOR_BINDING=0` it raises `NotImplementedError`.
+
+### Differences between the stores
+
+| | SimpleDictDocumentStore | PostgresDocumentStore |
+| --- | --- | --- |
+| A key that contains a dot | matches as a literal key first | always read as a path |
+| A range on mixed types (`age < 36` on a string) | raises `TypeError` | does not match |
+| Strings in a range | Python ordering | database collation |
+| Result order | not defined | by IRI |
+
+On PostgreSQL, equality is jsonb containment and uses the GIN index. Range conditions scan the table. A range only compares values of the same JSON type, so a JSON `null` or a string never matches `age < 36`.
+
+---
+
 ## Querying a SPARQL backend
 
 `SparqlResolver`, `LocalSparqlResolver` and `WikiDataSparqlResolver` translate
@@ -170,7 +222,8 @@ Person[Person.name == "Tim Berners-Lee"]
 ```
 
 `eq`, `ne`, `lt`, `le`, `gt`, `ge` and `&` are supported. Anything else raises
-rather than returning the wrong rows. The predicate and the literal are taken
+rather than returning the wrong rows. That includes `|` and nested field paths
+such as `Person.address.city`. The predicate and the literal are taken
 from the model's own JSON-LD context, so a term scoped to a language produces a
 language-tagged literal and one with an `@type` produces a typed one.
 

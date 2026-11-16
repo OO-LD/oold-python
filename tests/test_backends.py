@@ -86,51 +86,35 @@ def _run(store: Backend):
     _store_procedure(store, pydantic_version="v2")
 
 
-def _make_dict_store() -> Backend:
-    return SimpleDictDocumentStore()
-
-
-def _make_sqlite_store() -> Backend:
-    from oold.backend.document_store import SqliteDocumentStore
-
-    return SqliteDocumentStore(db_path=":memory:")
-
-
-def _make_sparql_store() -> Backend:
-    from oold.backend.sparql import LocalSparqlBackend
-
-    return LocalSparqlBackend()
-
-
-# One entry per store; a new backend only needs a factory here.
-_STORE_FACTORIES = {
-    "dict": _make_dict_store,
-    "sqlite": _make_sqlite_store,
-    "sparql": _make_sparql_store,
-}
-
-
-@pytest.fixture(
-    params=[
-        *_STORE_FACTORIES,
-        pytest.param("postgres", marks=pytest.mark.postgres),
-    ]
-)
-def store(request) -> Backend:
-    if request.param == "postgres":
-        # Own fixture: it skips without a server and drops its table afterwards.
-        yield request.getfixturevalue("postgres_store")
-        return
-    backend = _STORE_FACTORIES[request.param]()
-    yield backend
-    close = getattr(backend, "close", None)
-    if close is not None:
-        close()
+# Test names are the benchmark baseline keys (scripts/compare_benchmarks.py matches on them),
+# so keep them stable instead of parametrizing.
+@pytest.mark.benchmark(group="backend")
+def test_simple_dict_document_store(benchmark):
+    benchmark(_run, SimpleDictDocumentStore())
 
 
 @pytest.mark.benchmark(group="backend")
-def test_store_roundtrip(store, benchmark):
-    benchmark(_run, store)
+def test_sqlite_document_store(benchmark):
+    from oold.backend.document_store import SqliteDocumentStore
+
+    store = SqliteDocumentStore(db_path=":memory:")
+    try:
+        benchmark(_run, store)
+    finally:
+        store.close()
+
+
+@pytest.mark.benchmark(group="backend")
+def test_local_sparql_store(benchmark):
+    from oold.backend.sparql import LocalSparqlBackend
+
+    benchmark(_run, LocalSparqlBackend())
+
+
+@pytest.mark.benchmark(group="backend")
+@pytest.mark.postgres
+def test_postgres_document_store(postgres_store, benchmark):
+    benchmark(_run, postgres_store)
 
 
 def test_simple_dict_file_persistence(tmp_path):

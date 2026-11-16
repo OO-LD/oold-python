@@ -81,8 +81,8 @@ def _restore_global_registries():
 
 
 @pytest.fixture
-def postgres_store():
-    """A PostgresDocumentStore on its own table, dropped afterwards.
+def make_postgres_store():
+    """Build PostgresDocumentStores on their own tables, dropped afterwards.
 
     Skips unless ``OOLD_TEST_POSTGRES_URL`` points at a live server, so the
     default suite and the OS/Python matrix never need one.
@@ -96,11 +96,23 @@ def postgres_store():
 
     from oold.backend.postgres import PostgresDocumentStore
 
-    table = f"entities_{uuid.uuid4().hex}"
-    store = PostgresDocumentStore(dsn=dsn, table=table)
-    yield store
-    store._connection().execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(table)))
-    store.close()
+    stores = []
+
+    def _make(table: str | None = None, **kwargs):
+        store = PostgresDocumentStore(dsn=dsn, table=table or f"entities_{uuid.uuid4().hex}", **kwargs)
+        stores.append(store)
+        return store
+
+    yield _make
+    for store in stores:
+        store._connection().execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(store.table)))
+        store.close()
+
+
+@pytest.fixture
+def postgres_store(make_postgres_store):
+    """A PostgresDocumentStore on its own table."""
+    return make_postgres_store()
 
 
 def pytest_configure(config):

@@ -265,12 +265,30 @@ def _expand_term(model_cls, field: str, value) -> tuple[str, str]:
     return predicate, literal
 
 
+def _reject_nested_path(model_cls, field: str) -> None:
+    """Refuse ``address.city`` when ``address`` embeds a model.
+
+    Left alone, a context with ``@vocab`` expands the dotted name into a made-up
+    predicate and the query quietly matches nothing. A dotted term the context
+    defines itself is no nested path and still translates.
+    """
+    from oold.model._paths import embedded_model, model_fields
+
+    head, _, rest = field.partition(".")
+    if rest and embedded_model((model_fields(model_cls) or {}).get(head)) is not None:
+        raise NotImplementedError(
+            f"Nested field path {field!r} is not supported by the SPARQL resolvers yet. "
+            "Query a top-level field, or use a document store."
+        )
+
+
 def _translate(node, model_cls, counter: list[int]) -> str:
     """Render a Condition or Query as SPARQL graph patterns."""
     if isinstance(node, Query):
         if node.operator != "and":
             raise NotImplementedError(f"Unsupported query operator: {node.operator}")
         return _translate(node.op1, model_cls, counter) + "\n" + _translate(node.op2, model_cls, counter)
+    _reject_nested_path(model_cls, node.field)
     predicate, literal = _expand_term(model_cls, node.field, node.value)
     operator = node.operator or ComparisonOperator.EQ
     if operator == ComparisonOperator.EQ:

@@ -12,20 +12,29 @@ leaving ``Entity.name == "x"`` as ``bool``. The subscript overloads accept
 argument type is not.
 """
 
+from pydantic import BaseModel
 from typing_extensions import assert_type
 
 from oold.model import LinkedBaseModel, LinkResultList
 
 
+class Address(BaseModel):
+    city: str | None = None
+
+
 class Entity(LinkedBaseModel):
     id: str
     name: str | None = None
+    address: Address
 
 
 # a single IRI yields one instance, a condition or a list of IRIs yields a list
 assert_type(Entity["ex:e1"], Entity | None)
 assert_type(Entity[Entity.name == "x"], LinkResultList[Entity] | None)
 assert_type(Entity[["ex:e1", "ex:e2"]], LinkResultList[Entity] | None)
+assert_type(Entity[(Entity.name == "x") | (Entity.id == "ex:e1")], LinkResultList[Entity] | None)
+# a field that embeds a model chains: the annotation types the path, the proxy builds it
+assert_type(Entity[Entity.address.city == "Berlin"], LinkResultList[Entity] | None)
 
 many = Entity[Entity.name == "x"]
 if many is not None:

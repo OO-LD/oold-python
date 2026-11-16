@@ -11,7 +11,7 @@ Runs against ``LocalSparqlResolver`` (an in-process rdflib graph), so no network
 """
 
 import pytest
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from rdflib import Graph
 
 from oold.backend.interface import (
@@ -139,3 +139,57 @@ def test_unmapped_field_raises(backend):
                 model_cls=Person,
             )
         )
+
+
+class Address(BaseModel):
+    city: str | None = None
+
+
+class Located(LinkedBaseModel):
+    """A model whose context has a ``@vocab``: any unknown term expands to a predicate."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "@context": {"id": "@id", "type": "@type", "@vocab": EX},
+            "iri": EX + "Located",
+        }
+    )
+    id: str
+    type: str | None = EX + "Located"
+    name: str | None = None
+    address: Address | None = None
+
+
+def test_a_nested_path_is_rejected_instead_of_becoming_a_made_up_predicate(backend):
+    """Without the check, ``address.city`` expands against ``@vocab`` and quietly matches nothing."""
+    condition = Located.address.city == "Berlin"
+
+    with pytest.raises(NotImplementedError, match=r"address\.city"):
+        _translate(condition, Located, [0])
+    with pytest.raises(NotImplementedError, match=r"address\.city"):
+        backend.query(QueryParam(query=condition, model_cls=Located))
+
+
+def test_a_nested_path_inside_a_conjunction_is_rejected():
+    condition = (Located.name == "x") & (Located.address.city == "Berlin")
+
+    with pytest.raises(NotImplementedError, match=r"address\.city"):
+        _translate(condition, Located, [0])
+
+
+def test_a_dotted_term_that_is_not_a_nested_path_still_translates():
+    """Only a dotted field whose head is an embedded model field is a nested path."""
+
+    class Dotted(LinkedBaseModel):
+        model_config = ConfigDict(
+            json_schema_extra={
+                "@context": {"id": "@id", "type": "@type", "a.b": {"@id": EX + "ab"}},
+                "iri": EX + "Dotted",
+            }
+        )
+        id: str
+        type: str | None = EX + "Dotted"
+
+    patterns = _translate(Condition(field="a.b", operator=ComparisonOperator.EQ, value="x"), Dotted, [0])
+
+    assert f"<{EX}ab>" in patterns

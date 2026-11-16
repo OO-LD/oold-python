@@ -187,7 +187,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         for klass in cls.__mro__:
             fields = klass.__dict__.get("__fields__")
             if fields and name in fields:
-                return FieldProxy(name, getattr(fields[name], "default", None))
+                return FieldProxy(name, getattr(fields[name], "default", None), fields[name])
         raise AttributeError(name)
 
     @overload

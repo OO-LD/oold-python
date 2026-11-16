@@ -74,6 +74,7 @@ from oold.backend.interface import (
     get_resolver,
 )
 from oold.model._compat import LinkedApiMixin
+from oold.model._paths import embedded_model, is_model_container, model_fields
 from oold.model._ref import Ref, _construct
 
 T = TypeVar("T")
@@ -481,43 +482,72 @@ class FieldProxy:
     against class attributes, which resolve to a proxy rather than to the
     default. Without ``__bool__`` every such test is unconditionally true, and
     without ``__getattr__`` every such call raises.
+
+    A field that embeds a model chains: ``Person.address.city`` is a proxy named
+    ``"address.city"``. Chaining wins over the proxy's own ``name`` and
+    ``default``, which is why internals read those through ``object``.
     """
 
-    __slots__ = ("default", "name")
+    __slots__ = ("default", "field", "name")
 
-    def __init__(self, name: str, default: Any = None):
+    def __init__(self, name: str, default: Any = None, field: Any = None):
         self.name = name
         self.default = default
+        self.field = field
+
+    def __getattribute__(self, item: str) -> Any:
+        if not item.startswith("_"):
+            child = _child_proxy(self, item)
+            if child is not None:
+                return child
+        return object.__getattribute__(self, item)
 
     def __bool__(self) -> bool:
-        return bool(self.default) if _has_default(self.default) else False
+        default = object.__getattribute__(self, "default")
+        return bool(default) if _has_default(default) else False
 
     def __getattr__(self, item: str) -> Any:
         default = object.__getattribute__(self, "default")
         if _has_default(default):
             return getattr(default, item)
+        name = object.__getattribute__(self, "name")
+        if is_model_container(object.__getattribute__(self, "field")):
+            raise AttributeError(f"{name!r} is a list of models; nested paths do not index into lists")
         raise AttributeError(f"{type(self).__name__!r} object has no attribute {item!r}")
 
+    def _condition(self, operator: str, other: Any) -> Condition:
+        return Condition(field=object.__getattribute__(self, "name"), operator=operator, value=other)
+
     def __eq__(self, other: Any) -> Any:  # type: ignore[override]
-        return Condition(field=self.name, operator="eq", value=other)
+        return self._condition("eq", other)
 
     def __ne__(self, other: Any) -> Any:  # type: ignore[override]
-        return Condition(field=self.name, operator="ne", value=other)
+        return self._condition("ne", other)
 
     def __lt__(self, other: Any) -> Any:
-        return Condition(field=self.name, operator="lt", value=other)
+        return self._condition("lt", other)
 
     def __le__(self, other: Any) -> Any:
-        return Condition(field=self.name, operator="le", value=other)
+        return self._condition("le", other)
 
     def __gt__(self, other: Any) -> Any:
-        return Condition(field=self.name, operator="gt", value=other)
+        return self._condition("gt", other)
 
     def __ge__(self, other: Any) -> Any:
-        return Condition(field=self.name, operator="ge", value=other)
+        return self._condition("ge", other)
 
     def __hash__(self) -> int:
         return id(self)
+
+
+def _child_proxy(proxy: FieldProxy, item: str) -> FieldProxy | None:
+    """The proxy for ``item`` when the field embeds a model that has it."""
+    model = embedded_model(object.__getattribute__(proxy, "field"))
+    fields = model_fields(model) if model is not None else None
+    if not fields or item not in fields:
+        return None
+    path = object.__getattribute__(proxy, "name")
+    return FieldProxy(f"{path}.{item}", getattr(fields[item], "default", None), fields[item])
 
 
 class LinkedBaseModelMetaClass(ModelMetaclass):
@@ -566,7 +596,7 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         for klass in cls.__mro__:
             fields = klass.__dict__.get("__pydantic_fields__")
             if fields and name in fields:
-                return FieldProxy(name, getattr(fields[name], "default", None))
+                return FieldProxy(name, getattr(fields[name], "default", None), fields[name])
         raise AttributeError(name)
 
     @overload
@@ -1019,6 +1049,12 @@ class _AutoLink:
         # x-oold-required-iri: the schema says this link must carry a reference
         self.required_iri = required_iri
         self.owner: Any = None
+
+    def __getattr__(self, item: str) -> Any:
+        if item.startswith("_"):
+            raise AttributeError(item)
+        name = self.__dict__.get("name")
+        raise AttributeError(f"{name!r} is a link; conditions cannot follow links, compare it with an IRI instead")
 
     def __set_name__(self, owner: type, name: str) -> None:
         # Only relevant for the explicit form (declared in the class body).

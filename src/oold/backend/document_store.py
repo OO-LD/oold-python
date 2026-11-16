@@ -13,7 +13,28 @@ from oold.backend.interface import (
     ResolveResult,
     StoreResult,
     apply_operator,
+    field_path,
 )
+
+_MISSING = object()
+
+
+def _lookup(document: Any, field: str) -> Any:
+    """The value a condition field points at, or ``_MISSING``.
+
+    A literal key wins, so a document whose key contains a dot keeps matching
+    as before. Otherwise the field is a dotted path into embedded objects.
+    """
+    if not isinstance(document, dict):
+        return _MISSING
+    if field in document:
+        return document[field]
+    value: Any = document
+    for segment in field_path(field):
+        if not isinstance(value, dict) or segment not in value:
+            return _MISSING
+        value = value[segment]
+    return value
 
 
 class SimpleDictDocumentStore(Backend):
@@ -71,7 +92,8 @@ class SimpleDictDocumentStore(Backend):
         #    key = context[key]
         matched_entities = set()
         for iri, jsonld_dict in data.items():
-            if key in jsonld_dict and apply_operator(operator, jsonld_dict[key], value):
+            found = _lookup(jsonld_dict, key)
+            if found is not _MISSING and apply_operator(operator, found, value):
                 matched_entities.add(iri)
         return matched_entities
 

@@ -26,6 +26,7 @@ class Entity(LinkedBaseModel):
 assert_type(Entity["ex:e1"], Entity | None)
 assert_type(Entity[Entity.name == "x"], LinkResultList[Entity] | None)
 assert_type(Entity[["ex:e1", "ex:e2"]], LinkResultList[Entity] | None)
+assert_type(Entity[(Entity.name == "x") | (Entity.id == "ex:e1")], LinkResultList[Entity] | None)
 
 many = Entity[Entity.name == "x"]
 if many is not None:

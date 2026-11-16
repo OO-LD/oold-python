@@ -56,6 +56,14 @@ class ResolveResult(BaseModel):
     nodes: dict[str, None | GenericLinkedBaseModel]
 
 
+def field_path(field: str) -> list[str]:
+    """Split a condition field into path segments: ``"address.city"`` -> ``["address", "city"]``."""
+    segments = field.split(".")
+    if not all(segments):
+        raise ValueError(f"Invalid field path {field!r}: empty segment")
+    return segments
+
+
 class Query(BaseModel):
     op1: Union["Query", "Condition"]
     operator: str
@@ -64,6 +72,10 @@ class Query(BaseModel):
     # override the & operator
     def __and__(self, other):
         return Query(op1=self, operator="and", op2=other)
+
+    # override the | operator
+    def __or__(self, other):
+        return Query(op1=self, operator="or", op2=other)
 
 
 class Condition(BaseModel):
@@ -80,6 +92,10 @@ class Condition(BaseModel):
     # override the & operator
     def __and__(self, other):
         return Query(op1=self, operator="and", op2=other)
+
+    # override the | operator
+    def __or__(self, other):
+        return Query(op1=self, operator="or", op2=other)
 
 
 class QueryParam(BaseModel):

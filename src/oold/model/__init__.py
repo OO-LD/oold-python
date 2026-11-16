@@ -36,6 +36,7 @@ from oold.backend.interface import (
     get_backend,
     get_resolver,
 )
+from oold.model._paths import reject_nested_path
 from oold.static import (
     GenericLinkedBaseModel,
     export_jsonld,
@@ -97,6 +98,7 @@ class FieldProxy:
         return bool(d)
 
     def __getattr__(self, name):
+        reject_nested_path(object.__getattribute__(self, "parent"), object.__getattribute__(self, "name"), name)
         d = object.__getattribute__(self, "_default")
         if d is not None and d is not PydanticUndefined:
             return getattr(d, name)

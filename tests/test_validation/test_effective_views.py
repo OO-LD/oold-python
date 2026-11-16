@@ -105,11 +105,8 @@ def test_effective_context_resolves_a_scoped_reference_when_a_source_is_given():
         def locate(self, target, origin=None):
             return target if target == "Leaf.schema.json" else None
 
-        def read(self, key):
-            return {"@context": {"leaf": "ex:leaf"}}
-
-        def term_chain(self, key):
-            return [key]
+        def applicable_schemas(self, key):
+            return [{"@context": {"leaf": "ex:leaf"}}]
 
     schema = {"@context": {"part": {"@id": "ex:part", "@context": "Leaf.schema.json"}}}
     assert effective_context([schema])["part"]["@context"] == "Leaf.schema.json"
@@ -145,10 +142,7 @@ def test_a_context_that_cannot_be_assembled_is_reported_as_a_failed_reading():
         def locate(self, target, origin=None):
             raise AssertionError("not reached: the fragment is refused first")
 
-        def read(self, key):
-            raise AssertionError("not reached")
-
-        def term_chain(self, key):
+        def applicable_schemas(self, key):
             raise AssertionError("not reached")
 
     schema = {"@context": {"part": {"@id": "ex:part", "@context": "#/$defs/Leaf"}}}
@@ -180,3 +174,31 @@ def test_view_checks_spell_out_each_outcome():
     assert messages[3] == "c: lossy round-trip, 2 triples"
     assert checks[1].detail["error"] == "boom"
     assert checks[2].detail["undefined_terms"] == ["unmapped"]
+
+
+def test_a_term_defined_only_in_a_property_scope_is_not_called_undefined():
+    """A processor resolves it through the scope, so reading the top level alone condemns it.
+
+    This is what keeps a reading lossless once the terms of an embedded object stay in the
+    scope they belong to rather than being hoisted into the enclosing context.
+    """
+    context = {
+        "id": "@id",
+        "measurement": {"@id": "ex:measurement", "@context": {"value": "ex:value", "unit": "ex:unit"}},
+    }
+    instance = {"@id": "https://example.org/x", "measurement": {"value": 1, "unit": "s"}}
+
+    assert undefined_terms(instance, context) == set()
+    assert undefined_terms({"value": 1}, context) == {"value"}
+
+
+def test_a_property_scope_propagates_into_further_nesting():
+    """Which is the JSON-LD 1.1 default for a property scope, unlike a type scope."""
+    context = {"outer": {"@id": "ex:outer", "@context": {"deep": "ex:deep"}}}
+    assert undefined_terms({"outer": {"a": {"deep": 1}}}, {**context, "a": "ex:a"}) == set()
+
+
+def test_a_scoped_context_left_as_a_reference_does_not_define_anything():
+    """It is the consumer's to dereference, so its terms are not in force here."""
+    context = {"part": {"@id": "ex:part", "@context": "https://elsewhere.example/Leaf.schema.json"}}
+    assert undefined_terms({"part": {"leaf": 1}}, context) == {"leaf"}

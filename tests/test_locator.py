@@ -10,6 +10,7 @@ import json
 import pytest
 
 from oold.utils.locator import Locator, MirrorRule
+from oold.utils.mappings import declared_context, mapping_sets
 
 BASE = "https://example.org/schemas/"
 RULE = MirrorRule(BASE, "{0}/{2}", 3)
@@ -78,37 +79,6 @@ def test_a_fragment_selects_part_of_a_document_and_not_another_document(tree):
     assert locator.locate("#/$defs/X", origin) == origin
 
 
-def test_term_chain_follows_allof_context_and_ref_with_the_document_last(tree):
-    locator = Locator(tree, [RULE])
-    key = str((tree / "materials" / "Material.schema.json").resolve())
-    walked = locator.term_chain(key)
-    assert walked[-1] == key
-    assert str((tree / "materials" / "Base.schema.json").resolve()) in walked
-    assert str((tree / "quantities" / "Length.schema.json").resolve()) not in walked
-
-
-def test_term_chain_reaches_a_schema_named_only_by_a_property_ref(tmp_path):
-    """A property's target defines the terms of the embedded object; miss it and its keys are dropped."""
-    root = tmp_path / "modules"
-    write(root / "m" / "Leaf.schema.json", {"@context": {"leaf": "ex:leaf"}})
-    key = write(root / "m" / "Root.schema.json", {"properties": {"part": {"$ref": "Leaf.schema.json"}}})
-    walked = Locator(root).term_chain(key)
-    assert walked == [str((root / "m" / "Leaf.schema.json").resolve()), key]
-
-
-def test_term_chain_terminates_on_a_reference_cycle(tmp_path):
-    root = tmp_path / "modules"
-    a = write(root / "m" / "A.schema.json", {"properties": {"b": {"$ref": "B.schema.json"}}})
-    b = write(root / "m" / "B.schema.json", {"properties": {"a": {"$ref": "A.schema.json"}}})
-    assert set(Locator(root).term_chain(a)) == {a, b}
-
-
-def test_term_chain_skips_a_reference_the_tree_cannot_reach(tmp_path):
-    root = tmp_path / "modules"
-    key = write(root / "m" / "Root.schema.json", {"allOf": [{"$ref": "https://elsewhere.example/Gone.schema.json"}]})
-    assert Locator(root).term_chain(key) == [key]
-
-
 def test_loader_feeds_the_inheritance_chain(tree):
     from oold.utils.mappings import chain, declared_context
 
@@ -149,17 +119,6 @@ def test_without_a_root_a_reference_cannot_leave_the_referring_directory(tmp_pat
     assert Locator().locate("Root.schema.json", origin) == origin
 
 
-def test_a_malformed_document_in_the_chain_is_raised_not_skipped(tmp_path):
-    """A dropped document shortens the chain, so fewer terms are inlined and the run stays green."""
-    root = tmp_path / "modules"
-    broken = root / "m" / "Leaf.schema.json"
-    broken.parent.mkdir(parents=True, exist_ok=True)
-    broken.write_text("{ not json", encoding="utf-8")
-    key = write(root / "m" / "Root.schema.json", {"properties": {"part": {"$ref": "Leaf.schema.json"}}})
-    with pytest.raises(json.JSONDecodeError):
-        Locator(root).term_chain(key)
-
-
 def test_a_target_that_is_not_a_reference_resolves_to_nothing(tree):
     locator = Locator(tree, [RULE])
     assert locator.locate("") is None
@@ -173,14 +132,6 @@ def test_a_template_that_names_a_segment_the_iri_does_not_have_is_not_applied(tr
     assert Locator(tree, [rule]).locate(f"{BASE}quantities/0.2/Length.schema.json") is None
 
 
-def test_term_chain_follows_a_schema_named_as_a_string_context(tmp_path):
-    """A schema may name another as its whole `@context`, which is how a base lends its terms."""
-    root = tmp_path / "modules"
-    base = write(root / "m" / "Base.schema.json", {"@context": {"name": "ex:name"}})
-    key = write(root / "m" / "Derived.schema.json", {"@context": ["Base.schema.json", {"size": "ex:size"}]})
-    assert Locator(root).term_chain(key) == [base, key]
-
-
 def test_a_rule_whose_path_escapes_the_root_falls_through_to_the_relative_branch(tree):
     """The rule declines, and resolution continues rather than stopping at the escape."""
     escaping = MirrorRule(BASE, "../{0}", 1)
@@ -188,3 +139,95 @@ def test_a_rule_whose_path_escapes_the_root_falls_through_to_the_relative_branch
     assert locator.locate(f"{BASE}quantities/0.2/Length.schema.json") == str(
         (tree / "quantities" / "Length.schema.json").resolve()
     )
+
+
+def test_context_chain_follows_the_documents_a_context_names(tmp_path):
+    """A term is defined by a @context and by nothing else, so that is the dependency graph."""
+    root = tmp_path / "modules"
+    base = write(root / "m" / "Base.schema.json", {"@context": {"name": "ex:name"}})
+    key = write(root / "m" / "Derived.schema.json", {"@context": ["Base.schema.json", {"size": "ex:size"}]})
+    assert Locator(root).context_chain(key) == [base, key]
+
+
+def test_context_chain_does_not_follow_a_ref(tmp_path):
+    """A $ref says where a value is described. A processor never follows it, and it carries no terms."""
+    root = tmp_path / "modules"
+    write(root / "m" / "Leaf.schema.json", {"@context": {"leaf": "ex:leaf"}})
+    key = write(root / "m" / "Root.schema.json", {"properties": {"part": {"$ref": "Leaf.schema.json"}}})
+    assert Locator(root).context_chain(key) == [key]
+
+
+def test_context_chain_does_not_follow_a_property_scoped_reference(tmp_path):
+    """A scope belongs to one property's values; inline_scoped resolves it where it applies."""
+    root = tmp_path / "modules"
+    write(root / "m" / "Leaf.schema.json", {"@context": {"leaf": "ex:leaf"}})
+    key = write(
+        root / "m" / "Root.schema.json",
+        {"@context": {"part": {"@id": "ex:part", "@context": "Leaf.schema.json"}}},
+    )
+    assert Locator(root).context_chain(key) == [key]
+
+
+def test_context_chain_terminates_on_a_cycle(tmp_path):
+    root = tmp_path / "modules"
+    a = write(root / "m" / "A.schema.json", {"@context": ["B.schema.json"]})
+    b = write(root / "m" / "B.schema.json", {"@context": ["A.schema.json"]})
+    assert set(Locator(root).context_chain(a)) == {a, b}
+
+
+def test_context_chain_skips_a_context_the_tree_cannot_reach(tmp_path):
+    """It is the consumer's to dereference, which is what a remote context IRI is for."""
+    root = tmp_path / "modules"
+    key = write(root / "m" / "Root.schema.json", {"@context": ["https://elsewhere.example/Gone.schema.json"]})
+    assert Locator(root).context_chain(key) == [key]
+
+
+def test_a_malformed_document_in_the_context_chain_is_raised_not_skipped(tmp_path):
+    """A dropped document shortens the chain, so fewer terms are defined and the run stays green."""
+    root = tmp_path / "modules"
+    broken = root / "m" / "Base.schema.json"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.write_text("{ not json", encoding="utf-8")
+    key = write(root / "m" / "Root.schema.json", {"@context": ["Base.schema.json"]})
+    with pytest.raises(json.JSONDecodeError):
+        Locator(root).context_chain(key)
+
+
+def test_applicable_schemas_carries_the_terms_and_the_synonyms(tmp_path):
+    """Terms come from the context declarations, synonyms only from inheritance.
+
+    `x-oold-context` is a schema keyword no JSON-LD processor sees, so naming a base as a remote
+    context brings its terms across and leaves its mappings behind.
+    """
+    root = tmp_path / "modules"
+    write(
+        root / "m" / "Base.schema.json",
+        {
+            "@context": {"name": "ex:name"},
+            "x-oold-context": {"name": {"other:label": {"x-oold-sssom": {"mapping_set_id": "s"}}}},
+        },
+    )
+    key = write(
+        root / "m" / "Derived.schema.json",
+        {"@context": ["Base.schema.json", {"size": "ex:size"}], "allOf": [{"$ref": "Base.schema.json"}]},
+    )
+
+    schemas = Locator(root).applicable_schemas(key)
+
+    assert declared_context(schemas) == {"name": "ex:name", "size": "ex:size"}
+    assert mapping_sets(schemas) == ["s"]
+
+
+def test_applicable_schemas_puts_an_inherited_base_before_the_document_itself(tmp_path):
+    """A base reached only through allOf must not get the last word on a term."""
+    root = tmp_path / "modules"
+    write(root / "m" / "Base.schema.json", {"@context": {"name": "ex:base"}})
+    key = write(
+        root / "m" / "Derived.schema.json",
+        {"@context": {"name": "ex:derived"}, "allOf": [{"$ref": "Base.schema.json"}]},
+    )
+
+    schemas = Locator(root).applicable_schemas(key)
+
+    assert schemas[-1]["@context"] == {"name": "ex:derived"}
+    assert declared_context(schemas) == {"name": "ex:derived"}

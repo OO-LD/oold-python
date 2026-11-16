@@ -55,6 +55,10 @@ def undefined_terms(node: Any, context: dict[str, Any]) -> set[str]:
 
     The round trip cannot see these on its own: an undefined term produces no triple on the way
     out and is missing on the way back, so both sides agree on a graph that lost the data.
+
+    A term scoped to a property is in force for that property's values, so descending into them
+    descends into the scope as well. Reading the top level alone would call an embedded object's
+    keys undefined while a processor resolves them perfectly well.
     """
     missing: set[str] = set()
     if isinstance(node, list):
@@ -64,8 +68,19 @@ def undefined_terms(node: Any, context: dict[str, Any]) -> set[str]:
         for key, value in node.items():
             if not key.startswith(("@", "$")) and key not in context:
                 missing.add(key)
-            missing |= undefined_terms(value, context)
+            missing |= undefined_terms(value, _scoped_under(context, key))
     return missing
+
+
+def _scoped_under(context: dict[str, Any], term: str) -> dict[str, Any]:
+    """The context in force inside ``term``'s values: the active one, plus what the term scopes.
+
+    A property-scoped context extends rather than replaces, and propagates into further nesting,
+    which is the JSON-LD 1.1 default for a property scope.
+    """
+    definition = context.get(term)
+    scoped = definition.get("@context") if isinstance(definition, dict) else None
+    return {**context, **scoped} if isinstance(scoped, dict) else context
 
 
 def _type_aliases(context: dict[str, Any]) -> list[str]:

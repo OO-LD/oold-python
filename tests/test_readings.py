@@ -199,11 +199,8 @@ def test_readings_resolves_a_scoped_context_when_a_source_is_given():
         def locate(self, target, origin=None):
             return target if target == "Leaf.schema.json" else None
 
-        def read(self, key):
-            return {"@context": {"leaf": "https://vocab.example/leaf"}}
-
-        def term_chain(self, key):
-            return [key]
+        def applicable_schemas(self, key):
+            return [{"@context": {"leaf": "https://vocab.example/leaf"}}]
 
     schema = {
         "@context": {

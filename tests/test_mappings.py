@@ -204,11 +204,8 @@ class _Source:
     def locate(self, target, origin=None):
         return target if target in self.documents else None
 
-    def read(self, key):
-        return self.documents[key]
-
-    def term_chain(self, key):
-        return self.chains.get(key, [key])
+    def applicable_schemas(self, key):
+        return [self.documents[member] for member in self.chains.get(key, [key])]
 
 
 def test_inline_scoped_replaces_a_reference_by_the_context_it_names():

@@ -233,13 +233,14 @@ class ScopeSource(Protocol):
     ``locate`` returns an opaque key identifying a document, or ``None`` for a reference it
     cannot reach. Keys are compared for identity, so a document reached two ways must yield
     one key, which is what makes a cycle detectable.
+
+    ``applicable_schemas`` returns the documents whose ``@context`` and ``x-oold-context``
+    apply at that key, base first and the key's own document last.
     """
 
     def locate(self, target: str, origin: str | None = None) -> str | None: ...
 
-    def read(self, key: str) -> dict[str, Any]: ...
-
-    def term_chain(self, key: str) -> list[str]: ...
+    def applicable_schemas(self, key: str) -> list[dict[str, Any]]: ...
 
 
 def inline_scoped(
@@ -292,7 +293,7 @@ def inline_scoped(
         if key in seen or key == origin:
             out[term] = {k: v for k, v in definition.items() if k != "@context"}
             continue
-        schemas = [source.read(member) for member in source.term_chain(key)]
+        schemas = source.applicable_schemas(key)
         nested = promote(declared_context(schemas), schemas, set_id)
         out[term] = {
             **definition,

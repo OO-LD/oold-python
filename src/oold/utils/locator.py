@@ -140,57 +140,59 @@ class Locator:
 
         return resolve
 
-    def term_chain(self, key: str) -> list[str]:
-        """``key`` and every document whose terms it needs, base first.
+    def context_chain(self, key: str) -> list[str]:
+        """``key`` and every document it names as a context, base first.
 
-        A reading needs every term the document can use, and a schema reaches terms three ways:
-        it extends a base with ``allOf``, it names another schema in its ``@context``, and it
-        points a property at another schema with ``$ref``. Following only ``allOf`` leaves the
-        terms of an embedded object undefined, so those keys are dropped on the way to RDF
-        without anything saying so.
+        A term is defined by a ``@context`` and by nothing else, so the documents whose terms
+        reach this one are exactly those its context declarations name. A ``$ref`` states where
+        a *value* is described, which a JSON-LD processor never follows and which carries no
+        terms of its own: a schema that wants the terms of the document it points at names that
+        document as a context too, either at the top level or scoped to the property.
 
-        This is deliberately wider than :func:`oold.utils.mappings.chain`, which follows
-        ``allOf`` alone because inheritance is what decides the *consensus* of a term.
+        Scoped references are not walked here. They belong to one property's values rather than
+        to the document, and :func:`oold.utils.mappings.inline_scoped` resolves them in place,
+        which is what keeps an embedded object's terms out of the enclosing context.
         """
         order: list[str] = []
         # A document is marked before its references are followed, not after, because two
-        # schemas may legitimately reference each other and a reference may point back into
-        # the document it sits in. Keyed on the resolved document, so the guard holds however
-        # the reference was written.
+        # schemas may legitimately name each other and a reference may point back into the
+        # document it sits in. Keyed on the resolved document, so the guard holds however the
+        # reference was written.
         entered: set[str] = set()
-
-        def references(node: Any) -> list[str]:
-            found: list[str] = []
-            if isinstance(node, dict):
-                target = node.get("$ref")
-                if isinstance(target, str):
-                    found.append(target)
-                for value in node.values():
-                    found += references(value)
-            elif isinstance(node, list):
-                for value in node:
-                    found += references(value)
-            return found
 
         def walk(current: str) -> None:
             if current in entered:
                 return
             entered.add(current)
             # A document that cannot be read is raised, not skipped. Skipping it shortens the
-            # chain, so fewer terms are inlined and fewer triples are emitted, and the run
+            # chain, so fewer terms are defined and fewer triples are emitted, and the run
             # reports success over a reading that quietly lost data.
-            schema = self.read(current)
-            context = schema.get("@context")
+            context = self.read(current).get("@context")
             for entry in context if isinstance(context, list) else [context]:
                 if isinstance(entry, str):
                     nested = self.locate(entry, current)
                     if nested is not None:
                         walk(nested)
-            for target in references(schema):
-                nested = self.locate(target, current)
-                if nested is not None:
-                    walk(nested)
             order.append(current)
 
         walk(key)
         return order
+
+    def applicable_schemas(self, key: str) -> list[dict[str, Any]]:
+        """The documents whose ``@context`` and ``x-oold-context`` apply to ``key``, base first.
+
+        Two sources, because they answer different questions. :meth:`context_chain` gives the
+        documents that define the terms, which is what a processor would resolve. The ``allOf``
+        chain gives the documents that declare the synonyms, because ``x-oold-context`` is a
+        schema keyword no processor ever sees: naming a base as a remote context carries its
+        terms and not its mappings, so only inheritance does.
+
+        An inherited document the context declarations do not name is placed before ``key``,
+        never after it, so the most derived document keeps the last word on a term.
+        """
+        from oold.utils.mappings import chain
+
+        documents = [self.read(member) for member in self.context_chain(key)]
+        known = {id(document) for document in documents}
+        inherited = [document for document in chain(self.read(key), self.loader(key)) if id(document) not in known]
+        return [*documents[:-1], *inherited, documents[-1]]

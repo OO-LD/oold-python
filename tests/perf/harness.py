@@ -10,6 +10,7 @@ import json
 import math
 import platform
 import statistics
+import sys
 import threading
 import time
 import tracemalloc
@@ -17,6 +18,11 @@ from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
 
 import psutil
+
+try:
+    import resource
+except ImportError:  # Windows
+    resource = None
 
 RSS_SAMPLE_INTERVAL_S = 0.002
 
@@ -53,6 +59,11 @@ class Metrics:
     def bytes_per_triple(self) -> float:
         return self.rss_delta_bytes / self.triples if self.triples else 0.0
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "Metrics":
+        """Inverse of ``to_dict``, dropping the derived values."""
+        return cls(**{name: data[name] for name in cls.__dataclass_fields__ if name in data})
+
     def to_dict(self) -> dict:
         data = asdict(self)
         data.update(
@@ -64,6 +75,14 @@ class Metrics:
         return data
 
 
+def os_peak_rss() -> int:
+    """Process-lifetime RSS high-water mark as tracked by the OS, in bytes."""
+    if resource is None:
+        return psutil.Process().memory_info().peak_wset
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return peak if sys.platform == "darwin" else peak * 1024
+
+
 class _RssSampler:
     """Polls RSS on a thread, since the peak is not readable portably after the fact."""
 
@@ -72,6 +91,7 @@ class _RssSampler:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self.start_bytes = self._process.memory_info().rss
+        self._os_peak_before = os_peak_rss()
         self.peak_bytes = self.start_bytes
 
     def _sample(self):
@@ -89,6 +109,10 @@ class _RssSampler:
         self._stop.set()
         self._thread.join()
         self._sample()
+        # The OS mark is exact but lifetime-wide: it is the peak of this window
+        # only when the window raised it, otherwise the polled value stands.
+        if os_peak_rss() > self._os_peak_before:
+            self.peak_bytes = max(self.peak_bytes, os_peak_rss())
 
 
 class _GcWatch:

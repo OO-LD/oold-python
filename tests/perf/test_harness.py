@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from .harness import Metrics, dump, measure, percentiles, time_each, to_benchmark_json
+from .harness import Metrics, dump, measure, os_peak_rss, percentiles, time_each, to_benchmark_json
 
 MB = 1024 * 1024
 
@@ -101,3 +101,16 @@ def test_result_file_is_readable_by_compare_benchmarks(tmp_path):
     spec.loader.exec_module(module)
     benchmarks = module.extract_benchmarks(to_benchmark_json([_result(1.0)]))
     assert benchmarks["export[1000]"]["mean"] == 1.0
+
+
+def test_os_peak_rss_is_a_monotonic_high_water_mark():
+    before = os_peak_rss()
+    assert before > 0
+    keep = b"x" * (40 * MB)
+    assert os_peak_rss() >= before
+    del keep
+
+
+def test_metrics_round_trip_through_a_dict():
+    original = _result(2.0, heap_peak_bytes=MB, traced=True)
+    assert Metrics.from_dict(original.to_dict()) == original

@@ -123,6 +123,7 @@ dev = [
     "pytest-cov>=7.0.0",
     "pytest-benchmark",
     "pytest-playwright",
+    "psutil>=5.9",
     "jsondiff",
     "panel",
     "pre-commit>=4.5.1",

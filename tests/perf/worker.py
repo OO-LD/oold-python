@@ -5,7 +5,9 @@ import cProfile
 import json
 import pstats
 
-from .harness import measure
+from rdflib import Graph
+
+from .harness import count_calls, measure
 from .scenarios import SCENARIOS
 
 
@@ -25,13 +27,17 @@ def main(argv=None) -> None:
         profiler.runcall(prepared.run)
         pstats.Stats(profiler).sort_stats("cumulative").print_stats(args.profile)
         return
-    metrics = measure(
-        args.scenario,
-        prepared.run,
-        args.triples,
-        trace_heap=args.trace_heap,
-        latency_samples=lambda: prepared.samples,
-    )
+    with count_calls([(Graph, "query"), (Graph, "update")]) as sparql:
+        metrics = measure(
+            args.scenario,
+            prepared.run,
+            args.triples,
+            trace_heap=args.trace_heap,
+            latency_samples=lambda: prepared.samples,
+        )
+    metrics.extra["sparql_calls"] = sparql.count
+    if prepared.output_bytes:
+        metrics.extra["output_bytes"] = prepared.output_bytes()
     if not args.trace_heap:
         prepared.verify()
     print(json.dumps(metrics.to_dict()))

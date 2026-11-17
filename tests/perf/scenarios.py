@@ -20,6 +20,7 @@ class Prepared:
     run: Callable[[], None]
     verify: Callable[[], None]
     samples: list[float] = field(default_factory=list)
+    output_bytes: Callable[[], int] | None = None
 
 
 def _iri(person) -> str:
@@ -66,7 +67,7 @@ def export(triples: int) -> Prepared:
         assert len(docs) == len(people)
         assert _count_triples(docs) == triples
 
-    return Prepared(run, verify, samples)
+    return Prepared(run, verify, samples, output_bytes=lambda: len(json.dumps(docs)))
 
 
 def store(triples: int) -> Prepared:
@@ -143,7 +144,7 @@ def rdflib_serialize(triples: int) -> Prepared:
         assert out
         assert len(json.loads(out[0])) == len(people)
 
-    return Prepared(run, verify)
+    return Prepared(run, verify, output_bytes=lambda: len(out[0].encode()))
 
 
 SCENARIOS: dict[str, Callable[[int], Prepared]] = {

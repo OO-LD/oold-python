@@ -14,7 +14,8 @@ import sys
 import threading
 import time
 import tracemalloc
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 
 import psutil
@@ -146,6 +147,32 @@ def scaling_exponent(points: list[tuple[int, float]]) -> float | None:
     ys = [math.log(wall) for _, wall in points]
     mean_x, mean_y = statistics.fmean(xs), statistics.fmean(ys)
     return sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / sum((x - mean_x) ** 2 for x in xs)
+
+
+class CallCount:
+    count = 0
+
+
+@contextmanager
+def count_calls(targets: Sequence[tuple[type, str]]) -> Iterator[CallCount]:
+    """Count calls to ``owner.name`` for each target while the block runs, then restore them."""
+    counter = CallCount()
+    originals = [(owner, name, getattr(owner, name)) for owner, name in targets]
+
+    def wrap(original):
+        def counted(*args, **kwargs):
+            counter.count += 1
+            return original(*args, **kwargs)
+
+        return counted
+
+    for owner, name, original in originals:
+        setattr(owner, name, wrap(original))
+    try:
+        yield counter
+    finally:
+        for owner, name, original in originals:
+            setattr(owner, name, original)
 
 
 def percentiles(samples: Iterable[float]) -> dict[str, float]:

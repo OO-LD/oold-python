@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from .harness import Metrics, dump, measure, os_peak_rss, percentiles, time_each, to_benchmark_json
+from .harness import Metrics, count_calls, dump, measure, os_peak_rss, percentiles, time_each, to_benchmark_json
 
 MB = 1024 * 1024
 
@@ -114,3 +114,18 @@ def test_os_peak_rss_is_a_monotonic_high_water_mark():
 def test_metrics_round_trip_through_a_dict():
     original = _result(2.0, heap_peak_bytes=MB, traced=True)
     assert Metrics.from_dict(original.to_dict()) == original
+
+
+def test_count_calls_counts_and_restores():
+    class Target:
+        def work(self, value):
+            return value * 2
+
+    original = Target.work
+    with count_calls([(Target, "work")]) as counter:
+        assert Target().work(2) == 4
+        Target().work(3)
+    assert counter.count == 2
+    assert Target.work is original
+    Target().work(1)
+    assert counter.count == 2

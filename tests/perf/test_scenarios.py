@@ -59,3 +59,28 @@ def test_worker_profile_prints_the_hot_functions(capsys):
 
     main(["export", "200", "--profile", "5"])
     assert "cumulative" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("scenario", ["store", "import"])
+def test_local_store_and_import_make_no_sparql_calls(scenario):
+    assert run_scenario(scenario, 200).extra["sparql_calls"] == 0
+
+
+def test_a_sparql_query_is_counted():
+    from rdflib import Graph
+
+    from .harness import count_calls
+
+    with count_calls([(Graph, "query")]) as counter:
+        Graph().query("SELECT * WHERE { ?s ?p ?o }")
+    assert counter.count == 1
+
+
+@pytest.mark.parametrize("scenario", ["export", "rdflib_serialize"])
+def test_scenarios_with_an_output_report_its_size(scenario):
+    assert run_scenario(scenario, 200).extra["output_bytes"] > 0
+
+
+@pytest.mark.parametrize("scenario", ["store", "import", "rdflib_parse"])
+def test_scenarios_without_an_output_report_no_size(scenario):
+    assert "output_bytes" not in run_scenario(scenario, 200).extra

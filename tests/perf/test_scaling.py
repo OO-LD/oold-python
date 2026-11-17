@@ -43,6 +43,15 @@ def test_report_lists_sizes_exponent_and_skips():
     assert exponents(collected)["export"] == pytest.approx(1.0)
 
 
+def test_report_shows_sparql_calls_and_output_size():
+    run = _metrics("export", 1_000, 1.0)
+    run.extra.update(sparql_calls=0, output_bytes=600_000)
+    report = format_report(Collected(results=[run, _metrics("store", 1_000, 1.0)]))
+    assert "| 0 | 600 |" in report
+    store_row = next(line for line in report.splitlines() if line.startswith("| store"))
+    assert store_row.endswith("| - | - |")
+
+
 def _fake_runner(monkeypatch, wall_of, *, timeout_at=None):
     import subprocess
 

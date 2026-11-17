@@ -20,6 +20,11 @@ def _mean(runs: list[Metrics], attr: str) -> float:
     return statistics.fmean(getattr(run, attr) for run in runs)
 
 
+def _extra(runs: list[Metrics], key: str, per_triple: bool = False) -> str:
+    values = [run.extra[key] / (run.triples if per_triple else 1) for run in runs if key in run.extra]
+    return f"{statistics.fmean(values):.0f}" if values else "-"
+
+
 def _untraced(results: list[Metrics], scenario: str) -> dict[int, list[Metrics]]:
     grouped: dict[int, list[Metrics]] = {}
     for run in results:
@@ -42,8 +47,8 @@ def exponents(collected: Collected) -> dict[str, float | None]:
 def format_report(collected: Collected) -> str:
     heap = {(r.scenario, r.triples): r.heap_peak_bytes for r in collected.results if r.traced}
     lines = [
-        "| scenario | triples | wall s | triples/s | cpu/wall | rss MB | B/triple | heap MB | p95 ms | gc s |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| scenario | triples | wall s | triples/s | cpu/wall | rss MB | B/triple | heap MB | p95 ms | gc s | sparql calls | out B/triple |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for scenario in dict.fromkeys(run.scenario for run in collected.results):
         for triples, runs in _untraced(collected.results, scenario).items():
@@ -53,7 +58,7 @@ def format_report(collected: Collected) -> str:
                 f"| {scenario} | {triples} | {_mean(runs, 'wall_s'):.3f} | {_mean(runs, 'throughput'):.0f} | {_mean(runs, 'cpu_ratio'):.2f} "
                 f"| {_mean(runs, 'rss_delta_bytes') / MB:.1f} | {_mean(runs, 'bytes_per_triple'):.0f} "
                 f"| {f'{peak / MB:.1f}' if peak else '-'} | {f'{statistics.fmean(p95) * 1000:.2f}' if p95 else '-'} "
-                f"| {_mean(runs, 'gc_pause_s'):.3f} |"
+                f"| {_mean(runs, 'gc_pause_s'):.3f} | {_extra(runs, 'sparql_calls')} | {_extra(runs, 'output_bytes', per_triple=True)} |"
             )
     lines += ["", "| scenario | exponent | verdict |", "| --- | ---: | --- |"]
     for scenario, exponent in exponents(collected).items():

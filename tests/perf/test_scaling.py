@@ -90,14 +90,7 @@ def test_collect_does_not_repeat_or_trace_slow_runs(monkeypatch):
 
 
 @pytest.mark.scaling
-@pytest.mark.parametrize("scenario", ["export", "store", "rdflib_parse", "rdflib_serialize"])
+@pytest.mark.parametrize("scenario", ["export", "store", "import", "rdflib_parse", "rdflib_serialize"])
 def test_scenario_scales_roughly_linearly(scenario):
     collected = collect([1_000, 10_000], [scenario])
     assert exponents(collected)[scenario] < 1.5
-
-
-@pytest.mark.scaling
-@pytest.mark.xfail(strict=True, reason="issue 29: one full-graph CONSTRUCT per IRI makes import quadratic")
-def test_import_scales_linearly():
-    collected = collect([500, 1_000, 2_000], ["import"])
-    assert exponents(collected)["import"] < 1.5

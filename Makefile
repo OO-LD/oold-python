@@ -40,6 +40,11 @@ benchmark: ## Run performance benchmarks with pytest-benchmark
 		--benchmark-autosave \
 		--benchmark-json=benchmark_results.json
 
+.PHONY: benchmark-rdf
+benchmark-rdf: ## Benchmark RDF export and import at 1k, 10k and 100k triples (own harness, not pytest-benchmark)
+	@echo "🚀 Benchmarking RDF export and import"
+	@PYTHONPATH=tests uv run python -m perf --out benchmark_rdf_results.json
+
 .PHONY: build
 build: clean-build ## Build wheel file
 	@echo "🚀 Creating wheel file"

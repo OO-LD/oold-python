@@ -2,7 +2,7 @@ import json
 from typing import Any
 
 from pydantic import ConfigDict
-from rdflib import Graph
+from rdflib import Graph, URIRef
 from SPARQLWrapper import JSON, JSONLD, SPARQLWrapper
 
 from oold.backend.auth import UserPwdCredential, get_credential
@@ -30,6 +30,19 @@ correct still fails. Their policy asks for a tool name and a contact URL.
 """
 
 
+_EX_NAMESPACE = "https://example.com/"
+
+
+def _subject(iri: str) -> URIRef:
+    """Full IRIs pass through, ``ex:`` expands to the one namespace this module assumes."""
+    if iri.startswith("http"):
+        return URIRef(iri)
+    prefix, _, local = iri.partition(":")
+    if prefix != "ex":
+        raise ValueError(f"Unknown namespace prefix : {prefix}")
+    return URIRef(_EX_NAMESPACE + local)
+
+
 class LocalSparqlResolver(Resolver):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -55,41 +68,33 @@ class LocalSparqlResolver(Resolver):
         return self.resolve(ResolveParam(iris=iris, model_cls=model_cls))
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
-        # sparql query to get a node by IRI with all its properties
-        # using CONSTRUCT to get the full node
-        # format the result as json-ld
+        """Every triple of each subject as JSON-LD, or None for a subject with no triples.
+
+        A direct index lookup rather than a CONSTRUCT with a FILTER: the FILTER
+        is evaluated against every triple of the graph, once per IRI, which made
+        resolving quadratic in the size of the graph.
+        """
         jsonld_dicts = {}
         for iri in iris:
-            iri_filter = f"FILTER (?s = {iri})"
-            # check if the iri is a full IRI or a prefix
-            if iri.startswith("http"):
-                iri_filter = f"FILTER (?s = <{iri}>)"
-            # todo: build full iri / prefix mapping from model context
-            qres = self.graph.query(_construct_node(iri_filter, "PREFIX ex: <https://example.com/>"))
-            jsonld_dict = json.loads(qres.serialize(format="json-ld"))[0]
-            jsonld_dicts[iri] = jsonld_dict
+            triples = list(self.graph.triples((_subject(iri), None, None)))
+            if not triples:
+                jsonld_dicts[iri] = None
+                continue
+            node = Graph(bind_namespaces="none")
+            for triple in triples:
+                node.add(triple)
+            jsonld_dicts[iri] = json.loads(node.serialize(format="json-ld"))[0]
         return jsonld_dicts
 
 
 class LocalSparqlBackend(LocalSparqlResolver, Backend):
     def store_jsonld_dicts(self, jsonld_dicts: dict[str, dict]) -> StoreResult:
-        # delete all triples with the given iris as subject
-        for iri in jsonld_dicts:
-            iri_filter = f"{iri}"
-            # check if the iri is a full IRI or a prefix
-            if iri.startswith("http"):
-                iri_filter = f"<{iri}>"
-            query = """
-                PREFIX ex: <https://example.com/>
-                DELETE WHERE {
-                    {{{iri_filter}}} ?p ?o .
-                }
-                """.replace("{{{iri_filter}}}", iri_filter)
-            self.graph.update(query)
-            # convert jsonld_dict to rdflib triples and add to graph
-            g = Graph()
-            g.parse(data=json.dumps(jsonld_dicts[iri]), format="json-ld")
-            self.graph += g
+        # replace: drop the subject's triples, then parse the new document into the graph itself.
+        # None means delete, like the other stores.
+        for iri, jsonld_dict in jsonld_dicts.items():
+            self.graph.remove((_subject(iri), None, None))
+            if jsonld_dict is not None:
+                self.graph.parse(data=json.dumps(jsonld_dict), format="json-ld")
         return StoreResult(success=True)
 
 
@@ -212,7 +217,7 @@ _SPARQL_OPERATORS = {
 
 
 def _construct_node(iri_filter: str, prefixes: str = "") -> str:
-    """CONSTRUCT every triple of one subject. Shared by all three resolvers."""
+    """CONSTRUCT every triple of one subject. Used by the remote resolvers."""
     return f"""
         {prefixes}
         CONSTRUCT {{ ?s ?p ?o . }}

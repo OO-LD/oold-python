@@ -213,6 +213,7 @@ __marimo__/
 # Benchmarks (pytest-benchmark)
 .benchmarks/
 benchmark_results.json
+benchmark_rdf_results.json
 baseline_benchmark.json
 current_benchmark.json
 benchmark_comparison.txt

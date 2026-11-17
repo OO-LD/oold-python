@@ -76,6 +76,19 @@ The tests marked `postgres` need a live server and skip unless `OOLD_TEST_POSTGR
 OOLD_TEST_POSTGRES_URL=postgresql://user:password@localhost:5432/postgres make test
 ```
 
+### Benchmarking RDF performance
+
+A separate harness measures RDF export, store and import at 1k, 10k and 100k triples. It runs each scenario in a fresh subprocess and records time, CPU, peak memory, GC pauses and the scaling exponent. It is not `pytest-benchmark`, which `make benchmark` uses.
+
+```bash
+make benchmark-rdf                                                      # 1k to 100k, each run capped at 120 s, writes benchmark_rdf_results.json
+PYTHONPATH=tests uv run python -m perf --sizes 1000 2000 --scenarios export store
+PYTHONPATH=tests uv run python -m perf.worker import 1000 --profile 30  # cProfile, top 30 by cumulative time
+uv run pytest -m scaling --no-cov                                       # scaling guards, skipped by default
+```
+
+The code lives in `tests/perf/`. CI runs the 1k sizes with the normal tests. The `Benchmark RDF` workflow runs sizes up to 10k, triggers like the main workflow and can also be started from the Actions tab (100k is left out of CI, use `make benchmark-rdf` locally), which publishes the report in the job summary and uploads `benchmark_rdf_results.json` as an artifact.
+
 ### Docs
 
 Doc sources live in `docs/`. The site is configured in `zensical.toml`.

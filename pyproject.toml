@@ -228,6 +228,8 @@ markers = [
     "parity: compares this port against the reference harness",
     # Needs a live PostgreSQL; skips unless OOLD_TEST_POSTGRES_URL is set.
     "postgres: runs against a live PostgreSQL server",
+    # Slow scaling checks over the RDF scenarios; they skip unless selected with `-m scaling`.
+    "scaling: slow checks of how the RDF scenarios scale",
 ]
 
 [tool.deptry]

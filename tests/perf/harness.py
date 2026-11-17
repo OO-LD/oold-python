@@ -138,6 +138,16 @@ class _GcWatch:
         gc.callbacks.remove(self._callback)
 
 
+def scaling_exponent(points: list[tuple[int, float]]) -> float | None:
+    """Log-log least-squares slope of wall time over triples: 1 is linear, 2 is quadratic."""
+    if len({triples for triples, _ in points}) < 2:
+        return None
+    xs = [math.log(triples) for triples, _ in points]
+    ys = [math.log(wall) for _, wall in points]
+    mean_x, mean_y = statistics.fmean(xs), statistics.fmean(ys)
+    return sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / sum((x - mean_x) ** 2 for x in xs)
+
+
 def percentiles(samples: Iterable[float]) -> dict[str, float]:
     """Nearest-rank p50, p95 and p99."""
     ordered = sorted(samples)
@@ -202,7 +212,7 @@ def environment() -> dict[str, str]:
     return {"python": platform.python_version(), "platform": platform.platform(), "machine": platform.machine()}
 
 
-def to_benchmark_json(results: list[Metrics]) -> dict:
+def to_benchmark_json(results: list[Metrics], skipped: Iterable[tuple[str, int, str]] = ()) -> dict:
     """The pytest-benchmark shape that ``scripts/compare_benchmarks.py`` reads.
 
     Repeated untraced runs of one scenario and size are folded into one entry,
@@ -232,9 +242,10 @@ def to_benchmark_json(results: list[Metrics]) -> dict:
             },
             "extra_info": {"runs": [run.to_dict() for run in runs], "heap_peak_bytes": heap_peaks.get(name)},
         })
-    return {"machine_info": environment(), "benchmarks": benchmarks}
+    skips = [{"name": f"{scenario}[{triples}]", "reason": reason} for scenario, triples, reason in skipped]
+    return {"machine_info": environment(), "benchmarks": benchmarks, "skipped": skips}
 
 
-def dump(results: list[Metrics], path) -> None:
+def dump(results: list[Metrics], path, skipped: Iterable[tuple[str, int, str]] = ()) -> None:
     with open(path, "w") as handle:
-        json.dump(to_benchmark_json(results), handle, indent=2)
+        json.dump(to_benchmark_json(results, skipped), handle, indent=2)

@@ -46,9 +46,9 @@ def test_a_failing_scenario_surfaces_its_error():
 
 
 def test_collect_writes_one_entry_per_scenario_and_size(tmp_path):
-    results = collect([200], ["export", "store"])
+    collected = collect([200], ["export", "store"])
     path = tmp_path / "result.json"
-    dump(results, path)
+    dump(collected.results, path)
     benchmarks = json.loads(path.read_text())["benchmarks"]
     assert [b["name"] for b in benchmarks] == ["export[200]", "store[200]"]
     assert all(b["extra_info"]["heap_peak_bytes"] > 0 for b in benchmarks)

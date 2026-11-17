@@ -87,7 +87,7 @@ PYTHONPATH=tests uv run python -m perf.worker import 1000 --profile 30  # cProfi
 uv run pytest -m scaling --no-cov                                       # scaling guards, skipped by default
 ```
 
-The code lives in `tests/perf/`. CI runs the 1k sizes with the normal tests. The full sizes run in the `Benchmark RDF` workflow, which triggers like the main workflow and can also be started from the Actions tab, which publishes the report in the job summary and uploads `benchmark_rdf_results.json` as an artifact.
+The code lives in `tests/perf/`. CI runs the 1k sizes with the normal tests. The `Benchmark RDF` workflow runs sizes up to 10k, triggers like the main workflow and can also be started from the Actions tab (100k is left out of CI, use `make benchmark-rdf` locally), which publishes the report in the job summary and uploads `benchmark_rdf_results.json` as an artifact.
 
 ### Docs
 

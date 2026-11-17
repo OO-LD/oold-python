@@ -1,7 +1,9 @@
 """Runs one scenario in this process and prints its Metrics as JSON on the last line."""
 
 import argparse
+import cProfile
 import json
+import pstats
 
 from .harness import measure
 from .scenarios import SCENARIOS
@@ -12,9 +14,17 @@ def main(argv=None) -> None:
     parser.add_argument("scenario", choices=sorted(SCENARIOS))
     parser.add_argument("triples", type=int)
     parser.add_argument("--trace-heap", action="store_true")
+    parser.add_argument(
+        "--profile", type=int, metavar="TOP", help="print the TOP cumulative-time functions instead of metrics"
+    )
     args = parser.parse_args(argv)
 
     prepared = SCENARIOS[args.scenario](args.triples)
+    if args.profile:
+        profiler = cProfile.Profile()
+        profiler.runcall(prepared.run)
+        pstats.Stats(profiler).sort_stats("cumulative").print_stats(args.profile)
+        return
     metrics = measure(
         args.scenario,
         prepared.run,

@@ -52,3 +52,10 @@ def test_collect_writes_one_entry_per_scenario_and_size(tmp_path):
     benchmarks = json.loads(path.read_text())["benchmarks"]
     assert [b["name"] for b in benchmarks] == ["export[200]", "store[200]"]
     assert all(b["extra_info"]["heap_peak_bytes"] > 0 for b in benchmarks)
+
+
+def test_worker_profile_prints_the_hot_functions(capsys):
+    from .worker import main
+
+    main(["export", "200", "--profile", "5"])
+    assert "cumulative" in capsys.readouterr().out

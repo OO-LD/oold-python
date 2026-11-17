@@ -75,3 +75,40 @@ def test_resolve_matches_the_sparql_construct_it_replaces():
 def test_an_unknown_prefix_still_fails_loudly():
     with pytest.raises(Exception, match="Unknown namespace prefix"):
         LocalSparqlBackend().resolve_iris(["foo:a"])
+
+
+def test_resolving_a_missing_iri_gives_none():
+    backend = _backend(_doc("a"))
+    assert backend.resolve_iris([EX + "missing"]) == {EX + "missing": None}
+    assert backend.resolve_iris(["ex:missing"]) == {"ex:missing": None}
+
+
+def test_resolving_found_and_missing_iris_together():
+    backend = _backend(_doc("a"))
+    result = backend.resolve_iris([EX + "missing", EX + "a"])
+    assert list(result) == [EX + "missing", EX + "a"]
+    assert result[EX + "missing"] is None
+    assert result[EX + "a"]["@id"] == EX + "a"
+
+
+def test_storing_none_deletes_the_subject_only():
+    backend = _backend(_doc("a", knows=["b"]), _doc("b"))
+    assert backend.store_jsonld_dicts({EX + "a": None}).success
+    assert (URIRef(EX + "a"), None, None) not in backend.graph
+    assert backend.resolve_iris([EX + "a"]) == {EX + "a": None}
+    assert backend.resolve_iris([EX + "b"])[EX + "b"]["@id"] == EX + "b"
+
+
+def test_storing_none_for_an_unknown_subject_is_a_no_op():
+    backend = _backend(_doc("a"))
+    before = len(backend.graph)
+    assert backend.store_jsonld_dicts({EX + "unknown": None}).success
+    assert len(backend.graph) == before
+
+
+def test_store_through_the_backend_interface_deletes_on_none():
+    from oold.backend.interface import StoreParam
+
+    backend = _backend(_doc("a"))
+    backend.store(StoreParam(nodes={EX + "a": None}))
+    assert len(backend.graph) == 0

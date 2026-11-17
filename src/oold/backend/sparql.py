@@ -68,7 +68,7 @@ class LocalSparqlResolver(Resolver):
         return self.resolve(ResolveParam(iris=iris, model_cls=model_cls))
 
     def resolve_iris(self, iris: list[str]) -> dict[str, dict]:
-        """Every triple of each subject as JSON-LD.
+        """Every triple of each subject as JSON-LD, or None for a subject with no triples.
 
         A direct index lookup rather than a CONSTRUCT with a FILTER: the FILTER
         is evaluated against every triple of the graph, once per IRI, which made
@@ -76,8 +76,12 @@ class LocalSparqlResolver(Resolver):
         """
         jsonld_dicts = {}
         for iri in iris:
+            triples = list(self.graph.triples((_subject(iri), None, None)))
+            if not triples:
+                jsonld_dicts[iri] = None
+                continue
             node = Graph(bind_namespaces="none")
-            for triple in self.graph.triples((_subject(iri), None, None)):
+            for triple in triples:
                 node.add(triple)
             jsonld_dicts[iri] = json.loads(node.serialize(format="json-ld"))[0]
         return jsonld_dicts
@@ -85,10 +89,12 @@ class LocalSparqlResolver(Resolver):
 
 class LocalSparqlBackend(LocalSparqlResolver, Backend):
     def store_jsonld_dicts(self, jsonld_dicts: dict[str, dict]) -> StoreResult:
-        # replace: drop the subject's triples, then parse the new document into the graph itself
+        # replace: drop the subject's triples, then parse the new document into the graph itself.
+        # None means delete, like the other stores.
         for iri, jsonld_dict in jsonld_dicts.items():
             self.graph.remove((_subject(iri), None, None))
-            self.graph.parse(data=json.dumps(jsonld_dict), format="json-ld")
+            if jsonld_dict is not None:
+                self.graph.parse(data=json.dumps(jsonld_dict), format="json-ld")
         return StoreResult(success=True)
 
 

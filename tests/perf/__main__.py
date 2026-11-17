@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from .dataset import TRIPLE_SIZES
+from .dataset import BENCHMARK_SIZES
 from .harness import dump
 from .report import format_report
 from .runner import DEFAULT_TIMEOUT_S, SLOW_RUN_S, collect
@@ -12,7 +12,7 @@ from .scenarios import SCENARIOS
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="python -m perf")
-    parser.add_argument("--sizes", type=int, nargs="+", default=list(TRIPLE_SIZES))
+    parser.add_argument("--sizes", type=int, nargs="+", default=list(BENCHMARK_SIZES))
     parser.add_argument("--scenarios", nargs="+", choices=sorted(SCENARIOS), default=list(SCENARIOS))
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S, help="seconds per run")

@@ -1,5 +1,6 @@
 import pytest
 
+from .dataset import BENCHMARK_SIZES, TRIPLE_SIZES
 from .harness import Metrics, scaling_exponent
 from .report import exponents, format_report, verdict
 from .runner import Collected, Skipped, collect
@@ -7,6 +8,10 @@ from .runner import Collected, Skipped, collect
 
 def _metrics(scenario, triples, wall, **kwargs):
     return Metrics(scenario, triples, wall, wall, 100, 200, [0, 0, 0], 0.0, **kwargs)
+
+
+def test_benchmark_sizes_cover_the_issue_sizes():
+    assert set(TRIPLE_SIZES) <= set(BENCHMARK_SIZES)
 
 
 def test_scaling_exponent_recovers_known_slopes():

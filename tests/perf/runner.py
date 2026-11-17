@@ -13,8 +13,8 @@ from .harness import Metrics, scaling_exponent
 from .scenarios import SCENARIOS
 
 TESTS_DIR = Path(__file__).parents[1]
-DEFAULT_TIMEOUT_S = 900
-SLOW_RUN_S = 60.0
+DEFAULT_TIMEOUT_S = 120
+SLOW_RUN_S = 20.0
 
 
 def run_scenario(

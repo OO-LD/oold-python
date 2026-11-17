@@ -1,0 +1,58 @@
+name: Benchmark RDF
+
+# Triggers like the main workflow. The tests in tests/perf already run a 1k smoke there; this
+# job runs the sizes up to 100k. Each run is capped at 120 s, and a size predicted to exceed
+# that is skipped, so slow scenarios stay cheap.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: "Triple counts, space separated. Empty uses the default sizes (1k to 100k)"
+        default: ""
+
+jobs:
+  benchmark-rdf:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: "3.12"
+
+      - name: Run the RDF benchmark
+        env:
+          SIZES: ${{ inputs.sizes }}
+        run: |
+          # Without pipefail a failing benchmark would be hidden behind tee.
+          set -o pipefail
+          # shellcheck disable=SC2086 - SIZES is a space separated list on purpose
+          PYTHONPATH=tests uv run python -m perf ${SIZES:+--sizes $SIZES} --out benchmark_rdf_results.json \
+            | tee benchmark_rdf_report.md
+
+      - name: Publish the report in the job summary
+        if: always()
+        run: |
+          if [ -f benchmark_rdf_report.md ]; then
+            cat benchmark_rdf_report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-rdf-results
+          path: |
+            benchmark_rdf_results.json
+            benchmark_rdf_report.md
+          if-no-files-found: warn
+          retention-days: 90

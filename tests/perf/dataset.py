@@ -7,6 +7,8 @@ triple, one name triple and one triple per ``knows`` edge.
 from pydantic import ConfigDict, Field
 
 TRIPLE_SIZES = (1_000, 10_000, 100_000)
+# The intermediate sizes give a scaling exponent even for a scenario too slow to reach 10k.
+BENCHMARK_SIZES = (1_000, 2_000, 4_000, 10_000, 100_000)
 PREFIX = "perf"
 NAMESPACE = "https://perf.example.org/"
 BASE_TRIPLES = 2

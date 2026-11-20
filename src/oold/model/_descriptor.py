@@ -114,10 +114,21 @@ class _Constructing:
 class LinkNotResolved(LookupError):
     """A mandatory link did not yield an object.
 
-    Raised only for links declared ``Link[T]`` rather than ``Link[T | None]``:
-    the declaration promises a ``T``, so handing back a ``None`` the type denies
-    would be the real error. Declare the ``None`` arm where absence is data.
+    Raised only for links whose annotation promises a ``T`` - a bare ``Link[T]``
+    rather than ``Optional[Link[T]]`` - so handing back a ``None`` the type
+    denies would be the real error. Declare ``Optional`` where absence is data.
+
+    The two failure modes raise distinct subclasses; catching this base covers
+    both.
     """
+
+
+class LinkNotSet(LinkNotResolved):
+    """Nothing is stored for the link: the document never carried it."""
+
+
+class LinkUnresolvable(LinkNotResolved):
+    """A reference is stored, but the backend did not return the object."""
 
 
 def links_enabled() -> bool:
@@ -196,13 +207,10 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
             # every construction failed with a misleading "Field required" about
             # a value that had in fact been supplied.
             #
-            # It is *not* required in the OO-LD sense: that is what
-            # OoldField(required=True) says. Requiredness propagates into
-            # resolution - resolving a link constructs the target - so a
-            # required link makes every stored document lacking it
-            # unconstructible, and a self-referential link could never be
-            # satisfied by a real dataset. Links are declared far more often
-            # than they are required, so the terse form is the common case.
+            # Requiredness is NOT decided here: the install site derives it from
+            # the annotation, so a bare Link[T] is required exactly as a bare
+            # `x: int` is, and Optional[Link[T]] is not. This injection only
+            # keeps pydantic out of the way.
             namespace[field_name] = OoldField()
             continue
         # A Field() living in Annotated metadata rather than as the assigned
@@ -414,16 +422,16 @@ def OoldField(
         OoldField(range=None, link=None, required=None, **field_kwargs)
 
     ``required``
-        The link must be supplied when the model is constructed; omitting it
-        raises ``ValueError``. Written to the schema as ``x-oold-required-iri``
-        and into the standard ``required`` array.
-
-        This is the knob for requiredness, **not** the annotation. The two are
-        different questions - "must the caller supply it?" and "what do I get
-        when I read it?" - and a self-referential link needs them to differ:
-        ``father: Link["Person"]`` reads as a ``Person`` so an ancestry walk
-        needs no guard per hop, while no real dataset can require every person
-        to name a father.
+        Override for what the annotation already says. Requiredness follows the
+        annotation, as for every other pydantic field: a bare ``Link[T]`` is
+        required - construction without it raises ``ValueError``, and the
+        property lands in the schema's ``required`` array - while
+        ``Optional[Link[T]] = None`` is not. Pass ``required=`` only to make the
+        two axes differ: ``required=False`` on a non-optional annotation keeps
+        the ``T`` read (a chain needs no guard, an unset read raises) without
+        the schema demanding the property. That escape is not expressible in
+        JSON Schema and is not recommended; sparse data wants
+        ``Optional[Link[T]] = None``.
     ``range``
         Target schema IRI, written as ``x-oold-range``. **Do not pass it**: it
         is derived from the annotation, which already names the target, and
@@ -445,9 +453,9 @@ def OoldField(
     The recommended declaration pairs it with :class:`Link` / :class:`LinkList`,
     which are what give a type checker both the read and the write type::
 
-        father: Link["Person"] = OoldField()               # chains guard-free
-        manager: Link[Organization] = OoldField(required=True)
-        advisor: Link["Organization | None"] = OoldField()  # may read as None
+        manager: Link[Organization]                         # required, chains guard-free
+        father: Optional[Link["Person"]] = None             # optional, reads as None when absent
+        extras: Link[Organization] = OoldField(description="...")  # required, plus field kwargs
     """
     if required is None:
         required = required_iri
@@ -1095,7 +1103,7 @@ class _AutoLink:
             if not self.optional and any(item is None for item in items):
                 # the declaration promised every element resolves
                 missing = [r.iri for r, item in zip(stored, items, strict=False) if item is None]
-                raise LinkNotResolved(self._message(obj, missing))
+                raise LinkUnresolvable(self._message(obj, missing))
             result = LinkResultList(items)._bind(obj, self.name, stored)
         elif stored is None:
             if not self.optional:
@@ -1105,15 +1113,15 @@ class _AutoLink:
                 # they are built would make them unloadable. Declaring the link
                 # mandatory states an intent to traverse it, so one try/except
                 # around a whole chain replaces a guard at every hop.
-                raise LinkNotResolved(
-                    f"{type(obj).__name__}.{self.name} is declared mandatory but is "
-                    f"not set. Declare it as Link[T | None] if absence is data."
+                raise LinkNotSet(
+                    f"{self._subject(obj)}.{self.name} is declared mandatory but is "
+                    f"not set. Declare it as Optional[Link[T]] if absence is data."
                 )
             result = None
         else:
             result = _batch_resolve([stored], target)[0]
             if result is None and not self.optional:
-                raise LinkNotResolved(self._message(obj, [stored.iri]))
+                raise LinkUnresolvable(self._message(obj, [stored.iri]))
         # Store the resolved value in the instance __dict__. This descriptor is
         # deliberately NON-data (no __set__), so from now on normal attribute
         # lookup finds the instance dict first and never calls back into Python:
@@ -1122,10 +1130,22 @@ class _AutoLink:
         obj.__dict__[self.name] = result
         return result
 
+    @staticmethod
+    def _subject(obj: Any) -> str:
+        """``Person(ex:p3)``, or the class name alone when there is no IRI.
+
+        In ``a.father.father.father`` every hop shares the class and attribute
+        name, so only the subject identifies which hop failed.
+        """
+        get_iri = getattr(obj, "get_iri", None)
+        iri = get_iri() if callable(get_iri) else None
+        name = type(obj).__name__
+        return f"{name}({iri})" if iri else name
+
     def _message(self, obj: Any, iris: list[Any]) -> str:
         listed = ", ".join(str(iri) for iri in iris if iri)
         return (
-            f"{type(obj).__name__}.{self.name} is declared mandatory, but "
+            f"{self._subject(obj)}.{self.name} is declared mandatory, but "
             f"{listed or 'the reference'} could not be resolved. The backend "
             f"answered without it - declare the link as optional if that is a "
             f"legitimate answer."
@@ -1184,14 +1204,16 @@ class Link(_AutoLink, _LinkAnnotation, Generic[T]):
 
     Two spellings, not equivalent to a type checker::
 
-        employer: Link[Organization] = OoldField()   # recommended
+        employer: Link[Organization]                 # recommended
         employer = Link(Organization)                # not a pydantic field
 
     The annotation form types both directions: it reads as ``T`` and accepts a
-    ``T``, an IRI or a JSON object on assignment. ``Link[T]`` promises a ``T``,
-    so a chain needs no guard per hop; write ``Link[T | None]`` where absence is
-    part of the model. Nested - ``Optional[Link[T]]`` - the read type still
-    narrows but the write type does not, so spell the union inside.
+    ``T``, an IRI or a JSON object on assignment. A bare ``Link[T]`` is
+    required, like any other bare annotation, and promises a ``T`` - so a chain
+    needs no guard per hop. ``Optional[Link[T]] = None`` declares the link
+    optional, reading as ``T | None``. (``Link[T | None]`` says the same and
+    keeps working, but is deprecated: optionality belongs outside, where every
+    other pydantic field declares it.)
     """
 
     _many: ClassVar[bool] = False
@@ -1222,12 +1244,14 @@ class LinkList(_AutoLink, _LinkAnnotation, Generic[T]):
 
     Two spellings, not equivalent to a type checker::
 
-        knows: LinkList["Person"] = OoldField()   # recommended
+        knows: LinkList["Person"]                 # recommended
         knows = LinkList("Person")                # not a pydantic field
 
-    The annotation form reads as ``LinkResultList[T]`` - never ``None`` itself,
-    an unset link is an empty list - and accepts objects, IRIs or JSON objects
-    on assignment. Prefer it to ``list[Link[T]]``, which a checker reads as a
+    The annotation form reads as ``LinkResultList[T]`` and accepts objects, IRIs
+    or JSON objects on assignment. A bare ``LinkList[T]`` is required;
+    ``Optional[LinkList[T]] = None`` says the list itself may be absent, while
+    ``LinkList[T | None]`` says an element may not resolve - two different
+    statements. Prefer either to ``list[Link[T]]``, which a checker reads as a
     list of descriptors.
     """
 
@@ -1449,7 +1473,14 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             target, many, optional = _extract_target(field.annotation)
             if isinstance(rng, str) and not isinstance(target, type):
                 target = rng
-            descr = _AutoLink(name, target, many, optional, bool(extra.get("x-oold-required-iri")))
+            # Requiredness follows the annotation, as it does for every other
+            # pydantic field: a bare Link[T] is required, Optional[Link[T]] is
+            # not. An explicit required= stays the override - which is also what
+            # keeps the legacy keyword form unchanged, since there the
+            # annotation never says Link[...] and `optional` is always True.
+            explicit = extra.get("x-oold-required-iri")
+            required_iri = (not optional) if explicit is None else bool(explicit)
+            descr = _AutoLink(name, target, many, optional, required_iri)
             setattr(cls, name, descr)
             links[name] = descr
         cls.__link_fields__ = links

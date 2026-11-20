@@ -1468,7 +1468,9 @@ else:  # pragma: no cover
 from oold.model._descriptor import Link as Link  # noqa: E402
 from oold.model._descriptor import LinkList as LinkList  # noqa: E402
 from oold.model._descriptor import LinkNotResolved as LinkNotResolved  # noqa: E402
+from oold.model._descriptor import LinkNotSet as LinkNotSet  # noqa: E402
 from oold.model._descriptor import LinkResultList as LinkResultList  # noqa: E402
+from oold.model._descriptor import LinkUnresolvable as LinkUnresolvable  # noqa: E402
 from oold.model._descriptor import OoldExtra as OoldExtra  # noqa: E402
 from oold.model._descriptor import OoldField as OoldField  # noqa: E402
 

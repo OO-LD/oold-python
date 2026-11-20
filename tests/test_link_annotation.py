@@ -40,11 +40,21 @@ class Person(LinkedBaseModel):
 
 
 class Employee(LinkedBaseModel):
-    """Every employee has an employer - declared, and enforced."""
+    """Every employee has an employer - declared, and enforced at construction.
+
+    ``required=False`` decouples the two axes for ``Loose``: the read still
+    promises an ``Org``, but partial data constructs.
+    """
 
     id: str
     type: str | None = "annot:Employee"
     employer: Link[Org] = OoldField()
+
+
+class Loose(LinkedBaseModel):
+    id: str
+    type: str | None = "annot:Loose"
+    employer: Link[Org] = OoldField(required=False)
 
 
 class Plain(LinkedBaseModel):
@@ -55,6 +65,7 @@ class Plain(LinkedBaseModel):
 
 Person.model_rebuild()
 Employee.model_rebuild()
+Loose.model_rebuild()
 Plain.model_rebuild()
 
 
@@ -155,20 +166,28 @@ def test_optional_link_keeps_the_slot_of_an_unresolvable_reference(store):
     assert p.link_iris("knows") == ["annot:bob", "annot:nobody"]
 
 
-def test_mandatory_link_unset_raises_on_access_not_on_construction(store):
-    """Partial graph data must still load; the promise is about reading."""
-    e = Employee(id="annot:e")  # builds fine
+def test_a_bare_link_is_required_at_construction(store):
+    """A bare Link[T] is required like any other bare annotation."""
+    with pytest.raises(ValueError, match="employer is required"):
+        Employee(id="annot:e")
+
+
+def test_required_false_unset_raises_on_access_not_on_construction(store):
+    """The escape hatch: partial data still loads; the promise is about
+    reading, so the raise moves to the access."""
+    e = Loose(id="annot:e")  # builds fine
     with pytest.raises(LinkNotResolved, match="not set"):
         _ = e.employer
 
 
 def test_a_whole_chain_needs_one_except_not_a_guard_per_hop(store):
-    """The point of declaring a link mandatory."""
+    """The point of a non-optional read type. required=False lets partial
+    data construct while every hop still reads as a Node."""
 
     class Node(LinkedBaseModel):
         id: str
         type: str | None = "annot:Node"
-        parent: Link["Node"] = OoldField()
+        parent: Link["Node"] = OoldField(required=False)
 
     Node.model_rebuild()
     leaf = Node(id="annot:leaf", parent={"id": "annot:mid"})

@@ -4,17 +4,18 @@
    target is inferred from the annotation, so the schema IRI is not repeated in
    Python. Note the trade-off: nothing then writes ``x-oold-range`` into the
    emitted schema, so pass ``range=`` where the schema is the artifact.
-2. ``Link[T]`` / ``LinkList[T]`` as the **whole** annotation, e.g.
+2. ``Link[T]`` / ``LinkList[T]`` as the annotation, e.g.
    ``employer: Link[Organization]`` or ``knows: LinkList["Person"]``. These are
    descriptor types, so a checker takes the ``__init__`` parameter and the
    assignment type from ``__set__`` and the attribute type from ``__get__``
    (PEP 681) - which is how one field carries both the resolved read type and
-   the IRI-or-object write type. Optionality is declared in the parameter:
-   ``Link[T]`` reads as ``T``, ``Link[T | None]`` as ``T | None``.
+   the IRI-or-object write type. Requiredness and optionality follow the
+   annotation like everywhere else in pydantic: a bare ``Link[T]`` is required
+   and reads as ``T``; ``Optional[Link[T]] = None`` is optional and reads as
+   ``T | None``.
 
-   They must be the whole annotation. Nested - ``list[Link[T]]`` or
-   ``Optional[Link[T]]`` - a checker does not apply descriptor rules and the
-   read type comes back wrong; use ``LinkList[T]`` and ``Link[T | None]``.
+   For the to-many form use ``LinkList[T]``, not ``list[Link[T]]`` - a checker
+   reads the latter as a list of descriptors.
 3. **Union forms** mixing literal, inline object and reference, e.g.
    ``location: Union[str, Location, None] = OoldField(link=True)``.
 
@@ -185,15 +186,16 @@ class OoldModel(LinkedBaseModel):
                 continue
             if explicit_range and not isinstance(target, type):
                 target = explicit_range
-            # carry the same promises the binding computes, so Link[T] is
-            # mandatory here too and x-oold-required-iri is enforced
+            # carry the same promises the binding computes: requiredness follows
+            # the annotation, and an explicit required= stays the override
             _, _, optional = _extract_target(field.annotation)
+            explicit = extra.get("x-oold-required-iri")
             descr = _AutoLink(
                 name,
                 target,
                 many=many,
                 optional=optional,
-                required_iri=bool(extra.get("x-oold-required-iri")),
+                required_iri=(not optional) if explicit is None else bool(explicit),
             )
             setattr(cls, name, descr)
             links[name] = descr

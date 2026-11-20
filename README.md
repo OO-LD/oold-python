@@ -120,16 +120,18 @@ f = model.Foo(
 
 Thanks to the resolver mechanism, these IRIs turn into fully-fledged objects as soon as you need them.
 
-Writing a model by hand, declare links with `Link[T]` / `LinkList[T]`. This is the recommended notation: it is the only one a type checker reads correctly in both directions - the resolved object you get back, and the object, IRI or JSON object you may assign:
+Writing a model by hand, declare links with `Link[T]` / `LinkList[T]`. This is the recommended notation: it is the only one a type checker reads correctly in both directions - the resolved object you get back, and the object, IRI or JSON object you may assign. Requiredness follows the annotation, as for every other pydantic field:
 
 ```python
-from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+from typing import Optional
+
+from oold.model import Link, LinkedBaseModel, LinkList
 
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization | None"] = OoldField()
-    knows: LinkList["Person"] = OoldField()
+    employer: Optional[Link["Organization"]] = None   # optional
+    knows: LinkList["Person"]                         # required
 
 alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
 alice.knows[0].name    # a Person, resolved on access

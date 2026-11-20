@@ -27,7 +27,7 @@ from oold.backend.interface import SetResolverParam, set_resolver
 from oold.backend.sparql import WikiDataSparqlResolver
 
 # based on pydantic v2
-from oold.model import Link, LinkedBaseModel, LinkNotResolved, OoldField
+from oold.model import Link, LinkedBaseModel
 
 WD_ENTITY = "http://www.wikidata.org/entity/"
 ENTITY_SCHEMA = "https://oo-ld.org/examples/wikidata/Entity"
@@ -89,16 +89,17 @@ class Person(WikiDataEntity):
         }
     )
     type: str | None = "Item:Q5"
-    # Link[T] rather than "Person | None": the annotation says what *reading*
-    # the link yields, so a chain can be written plainly and guarded once.
-    # Ancestry does run out - that is what the try/except in main() is for.
-    father: Link["Person"] = OoldField()
+    # Optional, as for any other pydantic field: most Wikidata records carry no
+    # P22, so absence is data and reading an absent father answers None. A bare
+    # Link["Person"] would make the property required - every record would have
+    # to name a father, which no real dataset satisfies.
+    father: Link["Person"] | None = None
 
     # Extension, step 2 of 3: LinkList[T] is the to-many form. It reads as a
-    # list of Person - never None, an unset link is an empty list - so the
+    # list of Person - never None, an unset optional list reads as [] - so the
     # elements need no guard either. Add LinkList to the oold.model import
     # above when uncommenting.
-    # children: LinkList["Person"] = OoldField()
+    # children: LinkList["Person"] | None = None
 
 
 Person.model_rebuild()
@@ -136,21 +137,31 @@ def main() -> None:
     # for child in father.children:
     #     print("  resolved:  ", child.id, "-", child.name)
 
-    print("\nplain chaining - no guard, no narrowing, no cast")
-    ggf = person.father.father.father
-    print("  great-grandfather:", ggf.name)
+    print("\nplain chaining - the ignore trades the per-hop guard for a runtime error")
+    try:
+        # An optional link reads as Person | None, so a checker wants a guard at
+        # every hop. The ignore keeps the dot syntax; the price is that a hop
+        # without a father surfaces as AttributeError on None - without naming
+        # which hop. Where the chain must stay guard-free AND raise with the
+        # failing subject named, decouple the axes with
+        # `father: Link["Person"] = OoldField(required=False)` instead.
+        # The bare ignore is deliberate: it is the one spelling pyright and
+        # both ty generations all honour - ty skips mypy-style codes, and its
+        # own rule name changed between releases.
+        ggf = person.father.father.father  # type: ignore  # noqa: PGH003
+        print("  great-grandfather:", ggf.name)
+    except AttributeError:
+        print("  ancestry ran out before the great-grandfather")
 
     print("\nthe same walk, until the data runs out")
     ancestor, generations = person, 0
-    try:
-        while True:
-            ancestor = ancestor.father
-            generations += 1
-            print(f"  {generations} generation(s) back:", ancestor.name)
-    except LinkNotResolved:
-        # Ancestry runs out. Declaring the link mandatory is what turns that
-        # into one exception at the end rather than a guard at every hop.
-        print(f"  no father recorded for {ancestor.name} - walked {generations} generation(s)")
+    while (father_ := ancestor.father) is not None:
+        ancestor = father_
+        generations += 1
+        print(f"  {generations} generation(s) back:", ancestor.name)
+    # Ancestry runs out as data, not as an exception: an optional link answers
+    # None both for "no P22 recorded" and for "could not be resolved".
+    print(f"  no father recorded for {ancestor.name} - walked {generations} generation(s)")
 
     print("\nquery: the same DSL, translated to SPARQL by the resolver")
     found = Person[Person.name == "Tim Berners-Lee"]

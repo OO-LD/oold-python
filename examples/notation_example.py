@@ -47,8 +47,10 @@ class Person(OoldModel):
     # 1. Link[T] / LinkList[T] as the whole annotation - the recommended form.
     #    Reads give the resolved object, writes accept an object, an IRI or a
     #    JSON object, and a type checker sees both (see the coverage note below).
-    knows: LinkList["Person"] = OoldField()
-    employer: Link[Organization] = OoldField()
+    #    A bare `Link[T]` is required, exactly like a bare `id: str`; the None
+    #    arm declares the link optional, as it does for every pydantic field.
+    knows: LinkList["Person"] | None = None
+    employer: Link[Organization] | None = None
 
     # 2. the plain form: identical at runtime, no range= needed either, but a
     #    type checker only sees list[Person] and so rejects a list of IRIs

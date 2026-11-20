@@ -159,7 +159,8 @@ def test_deepcopy_keeps_links_as_references():
 
 def test_optional_wrapping_a_link_is_optional():
     """Optional[Link[T]] and Link[T | None] mean the same thing; the union was
-    only honoured when it came *after* the Link."""
+    only honoured when it came *after* the Link. A bare Link[T] is required,
+    as a bare annotation is everywhere else in pydantic."""
     from typing import Optional
 
     from oold.model import Link, LinkNotResolved
@@ -171,11 +172,21 @@ def test_optional_wrapping_a_link_is_optional():
         mandatory: Link[Target] = OoldField()
 
     M.model_rebuild()
-    m = M(id="ex:m")
+    with pytest.raises(ValueError, match="mandatory is required"):
+        M(id="ex:m")
+    m = M(id="ex:m", mandatory="ex:1")
     assert m.outer is None
     assert m.inner is None
+
+    class Sparse(LinkedBaseModel):
+        id: str
+        # the escape hatch: reads as Target, but the schema does not demand it
+        loose: Link[Target] = OoldField(required=False)
+
+    Sparse.model_rebuild()
+    s = Sparse(id="ex:s")
     with pytest.raises(LinkNotResolved):
-        _ = m.mandatory
+        _ = s.loose
 
 
 def test_a_shared_field_info_is_not_mutated():

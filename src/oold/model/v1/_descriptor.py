@@ -261,7 +261,8 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
                 link_data[_name] = _iris
         for key, value in link_data.items():
             link_fields[key].set_value(self, value)
-        missing = [name for name, d in link_fields.items() if d.required_iri and not self._links.get(name)]
+        # presence, not truthiness: an explicitly empty list satisfies `required`
+        missing = [name for name, d in link_fields.items() if d.required_iri and name not in self._links]
         if missing:
             # see the v2 note: enforced on a true value, not on key presence
             raise ValueError(f"{', '.join(sorted(missing))} is required but not set")

@@ -37,9 +37,10 @@ class Person(OoldModel):
     type: str | None = "ex:NPerson"
     # target inferred from the annotation, no range= needed
     knows: list["Person"] = OoldField()
-    # Link[T] inside the annotation
+    # Link[T] inside the annotation; the None arm keeps it optional, since a
+    # bare Link annotation is required like any other bare annotation
     employer: Link[Org] | None = Field(default=None)
-    friends: list[Link["Person"]] = OoldField()
+    friends: list[Link["Person"]] | None = OoldField()
     # union: literal text | inline object | reference
     location: str | Location | None = OoldField(link=True)
 
@@ -259,16 +260,17 @@ def test_an_explicit_range_is_not_overwritten():
     assert _properties(Explicit)["target"]["x-oold-range"] == "Legacy.json"
 
 
-def test_required_is_a_field_argument_not_the_annotation():
-    """Requiredness and the read type are separate questions. A self-link needs
-    them to differ: father reads as a Person so a walk needs no guard per hop,
-    while no real dataset can require every person to name one."""
+def test_required_follows_the_annotation_and_the_field_argument_overrides():
+    """Requiredness follows the annotation, as it does for every other pydantic
+    field. The field argument exists only to make the two axes differ: a
+    self-link over sparse data reads as a Chain so a walk needs no guard per
+    hop, while the schema does not demand that every record names one."""
 
     class Chain(OoldModel):
         id: str
         type: str | None = "ex:NChain"
-        father: Link["Chain"] = OoldField()
-        manager: Link["Org"] = OoldField(required=True)
+        father: Link["Chain"] = OoldField(required=False)
+        manager: Link["Org"]
 
     Chain.model_rebuild()
 
@@ -301,15 +303,11 @@ def test_required_iri_is_still_accepted():
     assert Old.__link_fields__["manager"].required_iri is True
 
 
-def test_a_link_annotation_without_a_default_is_optional():
-    """Links are declared far more often than they are required, so the terse
-    form is the common case.
-
-    Requiredness is explicit because it propagates into resolution: resolving a
-    link constructs the target, so a required link makes every stored document
-    lacking it unconstructible - and a self-referential link, `father`, could
-    then never be satisfied by a real dataset.
-    """
+def test_a_bare_link_annotation_is_required():
+    """A bare ``Link[T]`` is required, exactly as a bare ``x: int`` is -
+    optionality is declared with ``Optional[...]``, not inferred from the kind
+    of field. Sparse data declares the ``None`` arm or passes
+    ``required=False``; see issue #159."""
 
     class Bare(OoldModel):
         id: str
@@ -317,6 +315,18 @@ def test_a_link_annotation_without_a_default_is_optional():
         manager: Link["Org"]
 
     Bare.model_rebuild()
-    assert Bare(id="ex:b").link_iris("manager") is None  # constructs unset
+    with pytest.raises(ValueError, match="manager is required"):
+        Bare(id="ex:b")
     assert Bare(id="ex:b", manager="ex:acme").link_iris("manager") == "ex:acme"
-    assert Bare.__link_fields__["manager"].required_iri is False
+    assert Bare.__link_fields__["manager"].required_iri is True
+    assert "manager" in _required(Bare)
+
+    class Sparse(OoldModel):
+        id: str
+        type: str | None = "ex:NSparse"
+        manager: Link["Org"] | None = None
+
+    Sparse.model_rebuild()
+    assert Sparse(id="ex:s").link_iris("manager") is None  # constructs unset
+    assert Sparse.__link_fields__["manager"].required_iri is False
+    assert "manager" not in _required(Sparse)

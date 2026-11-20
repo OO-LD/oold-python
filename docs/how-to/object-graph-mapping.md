@@ -4,24 +4,28 @@ oold-python's core feature is *IRI-transparent references*: a link field can hol
 
 ## Recommended declaration
 
-Declare a link with `Link[T]` or `LinkList[T]`, and `OoldField()` with no
-arguments:
+Declare a link with `Link[T]` or `LinkList[T]` as the annotation; nothing else
+is needed:
 
 ```python
-from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+from typing import Optional
+
+from oold.model import Link, LinkedBaseModel, LinkList
 
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization | None"] = OoldField()
-    knows: LinkList["Person"] = OoldField()
+    employer: Optional[Link["Organization"]] = None  # optional, like any other field
+    knows: LinkList["Person"]                        # required, like a bare `id: str`
 ```
 
 The annotation is the single source of truth. It names the target, so
 `x-oold-range` is derived from it and written into the emitted schema - passing
 `range=` would state the same thing twice and let the two disagree. It says the
-field is a link, so `link=True` is redundant. And it declares optionality:
-`Link[T]` reads as `T`, `Link[T | None]` as `T | None`.
+field is a link, so `link=True` is redundant. And it declares requiredness and
+optionality, following the pydantic convention: a bare `Link[T]` is required
+and reads as `T`; `Optional[Link[T]] = None` is optional and reads as
+`T | None`.
 
 This is also the only form a type checker reads correctly in **both**
 directions - the resolved object you get back, and the object, IRI or JSON
@@ -212,13 +216,15 @@ rejects `knows=["ex:bob"]` even though the library accepts it at runtime.
 `Link[T]` and `LinkList[T]` carry both. They are exported from `oold.model`:
 
 ```python
-from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+from typing import Optional
+
+from oold.model import Link, LinkedBaseModel, LinkList
 
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization | None"] = OoldField()
-    knows: LinkList["Person"] = OoldField()
+    employer: Optional[Link["Organization"]] = None
+    knows: LinkList["Person"]
 
 # accepted: an object, an IRI, or a JSON object
 alice = Person(id="ex:alice", knows=["ex:bob", {"id": "ex:carol"}])
@@ -250,22 +256,36 @@ the schema.
 
 ### Optionality is declared
 
-`Link[T]` reads as `T`, so a chain needs no guard at every hop. `Link[T | None]`
-reads as `T | None`, because absence is then part of the model:
+`Link[T]` reads as `T`, so a chain needs no guard at every hop.
+`Optional[Link[T]] = None` reads as `T | None`, because absence is then part of
+the model:
 
 ```python
 class Person(LinkedBaseModel):
-    father: Link["Person"] = OoldField()          # promises a Person
-    mother: Link["Person | None"] = OoldField()   # may legitimately be absent
+    father: Link["Person"]                        # required; promises a Person
+    mother: Optional[Link["Person"]] = None       # may legitimately be absent
 
 person.father.father.father.name    # no guards
 ```
 
-A link declared mandatory raises `LinkNotResolved` when it is unset or when the
-backend cannot place the reference, so one `try/except` covers a whole walk:
+A link whose read type is non-optional raises when the read cannot keep the
+promise - `LinkNotSet` when nothing is stored, `LinkUnresolvable` when a
+reference is stored but the backend does not return the object. Both derive
+from `LinkNotResolved`, so one `try/except` covers a whole walk. The message
+names the failing subject, `Person(ex:p3).father ...`, because in a
+self-referential chain every hop shares the class and attribute name.
+
+Over sparse data - where a record may genuinely lack the property - the
+required form would make such records unconstructible. Either declare the
+`None` arm and terminate the walk on `None`, or decouple the two axes with the
+escape hatch:
 
 ```python
 from oold.model import LinkNotResolved
+
+class Person(LinkedBaseModel):
+    # reads as Person (chains guard-free), but the schema does not demand it
+    father: Link["Person"] = OoldField(required=False)
 
 try:
     while True:
@@ -276,7 +296,12 @@ except LinkNotResolved:
 ```
 
 A **transport failure is not absence** - a connection error propagates unchanged
-rather than being reported as a missing link.
+rather than being reported as a missing link. And the single `except` covers the
+walk's own links, not everything resolution does: constructing a traversed
+document that is missing a *different* required link raises that class's plain
+`ValueError`, which `except LinkNotResolved` does not catch. Where the walked
+documents are allowed to be partial, their required links need `required=False`
+too.
 
 ### `OoldField` arguments
 
@@ -288,26 +313,23 @@ OoldField(required=None, range=None, link=None, **field_kwargs)
 
 | argument | effect |
 |---|---|
-| `required` | the link must be supplied at construction; omitting it raises `ValueError`. Reaches the schema as the standard `required` array, and nothing else |
+| `required` | **override** for what the annotation already states. Omitted, requiredness follows the annotation; `required=False` on a non-optional annotation keeps the strict read while the property stays out of the schema's `required` array |
 | `range` | target schema IRI, emitted as `x-oold-range`. **Do not pass it**: omitted, it is derived from the annotation, which already names the target |
 | `link` | marks the field a link where the annotation does not imply it, as in a union arm. Redundant with `Link[T]` / `LinkList[T]` |
 | `required_iri` | deprecated spelling of `required`, kept because generated packages pass it |
 | `**field_kwargs` | passed to `pydantic.Field` (`alias`, `description`, `default_factory`, ...). `default=None` is supplied unless you pass a `default_factory` |
 
-Requiredness is always explicit. A link annotation with no default is optional,
-like one with a bare `OoldField()`:
+Requiredness follows the annotation, exactly as for every other pydantic field:
 
 ```python
-father: Link["Person"]                            # optional
-father: Link["Person"] = OoldField()              # optional
-father: Link["Person"] = OoldField(required=True) # required, explicit
+father: Link["Person"]                             # required
+father: Optional[Link["Person"]] = None            # optional
+father: Link["Person"] | None = None               # optional, same statement
+father: Link["Person"] = OoldField(required=False) # escape hatch, see below
 ```
 
-"No default means required" reads well in plain Python, but requiredness
-propagates into resolution - reading a link constructs the target - so a
-required link makes every stored document lacking it unconstructible. A
-self-referential link like `father` could then never be satisfied by a real
-dataset, and links are declared far more often than they are required.
+A required link raises `ValueError` at construction when it is not supplied,
+and the property appears in the emitted schema's `required` array.
 
 !!! note "`x-oold-required-iri` is internal"
     A schema states requiredness through `required` and nothing else.
@@ -317,37 +339,71 @@ dataset, and links are declared far more often than they are required.
     never be required at the pydantic level, because its value is routed out of
     the payload before validation. It does not appear in a published schema.
 
-### Requiredness is a field argument, not the annotation
+### The notation table
 
-"Must the caller supply it?" and "what do I get when I read it?" are different
-questions, and they need separate carriers - a self-referential link needs them
-to differ. All four combinations are available:
+Every supported spelling, with what each column means: *required* is the
+construction contract (`ValueError` when omitted), *read type* is what the
+attribute yields, *unset read* is what reading an absent link does, and
+*in `required[]`* is the emitted schema.
 
-| | `OoldField()` | `OoldField(required=True)` |
-|---|---|---|
-| `Link[T]` | may omit; reading raises `LinkNotResolved` if absent | must supply; reading raises if absent |
-| `Link[T \| None]` | may omit; reading yields `None` | must supply; reading may still yield `None` |
+| spelling | required | read type | unset read | in `required[]` |
+|---|---|---|---|---|
+| `Link[Org]` | yes | `Org` | raises | yes |
+| `Link[Org] = OoldField(...)` | yes | `Org` | raises | yes |
+| `Optional[Link[Org]] = None` | no | `Org \| None` | `None` | no |
+| `Link[Org] \| None = None` | no | `Org \| None` | `None` | no |
+| `Optional[Link[Org]] = OoldField(...)` | no | `Org \| None` | `None` | no |
+| `Link[Org] = OoldField(required=False)` | no | `Org` | raises | no |
+| `Link[Org] = OoldField(default="ex:o")` | no | `Org` | never unset - the default resolves | no |
+| `LinkList[Org]` | yes | `LinkResultList[Org]` | raises | yes |
+| `LinkList[Org] = OoldField(required=False)` | no | `LinkResultList[Org]` | raises | no |
+| `Optional[LinkList[Org]] = None` | no | `LinkResultList[Org] \| None` | `[]` | no |
+| `LinkList[Org \| None] = OoldField()` | no | `LinkResultList[Org \| None]` | element is `None` | no |
 
-```python
-class Person(LinkedBaseModel):
-    father: Link["Person"] = OoldField()                  # chain it, no guards
-    employer: Link["Organization"] = OoldField(required=True)
-    advisor: Link["Person | None"] = OoldField()          # guard it
-```
+A declared default makes a link not required, as it does for every pydantic
+field; `required` means the *key* must be present, so an explicitly empty list
+satisfies a required `LinkList` - exactly what JSON Schema `required` says
+about the document `{"f": []}`.
 
-`father` is the case that forces the split. Reading it must yield a `Person` so
-that `person.father.father.father` needs no guard per hop - but no real dataset
-can require *every* person to name a father, so it cannot be required at
-construction. Requiredness in the annotation would tie those together.
+The three optional `LinkList` forms say different things: the list itself may
+be absent, an element may not resolve, every element resolves. The first two
+are the same at runtime - both read `[]` when unset - and differ only
+statically. Two deprecated spellings keep working: `Link[T | None]` for the
+to-one case (prefer `Optional[Link[T]]`), and `list[Link[T]]` for the to-many
+case (prefer `LinkList[T]`) - note the latter now derives requiredness like
+`LinkList[T]` does, so a bare `list[Link[T]]` is required and needs a `None`
+arm or a default to stay optional. One deliberate deviation from plain
+pydantic: a bare `Optional[Link[T]]` *without* `= None` is treated as optional,
+because a link's value never reaches pydantic's own required check - write the
+`= None`.
 
-A link is never required at the *pydantic* level, because its value is routed
-out of the payload before validation. That is what `required` exists to express,
-and why it is also written into the schema's `required` array - otherwise the
-constraint would be invisible to any plain JSON Schema validator.
+`OoldField(required=False)` is the one escape that decouples the two axes: the
+read still promises an `Org` - a chain needs no guard, an unset read raises
+`LinkNotSet` - while the schema does not demand the property. It is **not
+expressible in JSON Schema**, so it never round-trips through a schema and the
+generator never emits it. Prefer `Optional[Link[T]] = None` unless the
+guard-free chain is the point.
 
-!!! note "Write the whole annotation"
-    Spell the union inside: `Link[T | None]`, not `Optional[Link[T]]`, and
-    `LinkList[T]`, not `list[Link[T]]`. Nested in another annotation a checker
-    stops applying descriptor rules - `list[Link[T]]` reads as a list of
-    descriptors, and `Optional[Link[T]]` narrows on read but rejects an IRI on
-    write. Both keep working at runtime, which is what makes them easy to miss.
+### List access and filters
+
+Element access and the query DSL act on `LinkResultList[T]` and preserve `T`,
+so the declaration decides what a filtered result holds:
+
+| declaration | `links[0]` | `links[0:2]` | `links[Person.name == "x"]` | `links["@name=='x'"]` |
+|---|---|---|---|---|
+| `LinkList[Org]` | `Org` | `LinkResultList[Org]` | `LinkResultList[Org]` | `Any` |
+| `LinkList[Org \| None]` | `Org \| None` | `LinkResultList[Org \| None]` | `LinkResultList[Org \| None]` | `Any` |
+| `Optional[LinkList[Org]] = None` | gate with `is not None` first: the attribute reads `LinkResultList[Org] \| None` | same | same | same |
+
+Two static imprecisions, stated rather than fixed: a condition filter over
+`LinkList[Org | None]` keeps the `None` arm although a `None` element can never
+match a condition, and the inline string form returns `Any`, which ends type
+checking downstream - prefer the `Person.name == "x"` form.
+
+!!! note "Write `LinkList[T]`, not `list[Link[T]]`"
+    The to-many form is its own type. `list[Link[T]]` keeps working at runtime
+    but a checker reads it as a list of descriptors. For the to-one optional
+    form, `Optional[Link[T]]` is the recommended spelling; note that its
+    *write* side is checker-dependent - pyright and current ty apply the
+    descriptor's assignment type through the union, older ty versions see a
+    plain union slot and reject an IRI on write.

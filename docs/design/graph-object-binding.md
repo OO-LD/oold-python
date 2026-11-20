@@ -175,12 +175,12 @@ accepts a literal, a reference or an inline object.
 #### Optionality is declared, not assumed
 
 `Link[T]` reads as `T`, not `T | None`. The declaration is a promise the binding
-keeps, so a chain of mandatory links needs no guard per hop:
+keeps, so a chain of non-optional links needs no guard per hop:
 
 ```python
 class Person(LinkedBaseModel):
-    father: Link["Person"] = OoldField()          # mandatory
-    mother: Link["Person | None"] = OoldField()   # optional
+    father: Link["Person"]                        # required, reads as Person
+    mother: Optional[Link["Person"]] = None       # optional
 
 person.father.father.father.name    # no guards - the type says it resolves
 mother = person.mother              # guard required, and warranted
@@ -193,23 +193,30 @@ declaration denies is the alternative, and that is the same polite fiction the
 
 What the promise costs, by case:
 
-| | `Link[T]` | `Link[T \| None]` |
+| | `Link[T]` | `Optional[Link[T]] = None` |
 | --- | --- | --- |
-| not set, no IRI | **raises `LinkNotResolved`** | `None` |
+| not supplied at construction | **raises `ValueError`** | constructs |
+| not set, no IRI | **raises `LinkNotSet`** | `None` |
 | backend error | propagates | propagates |
-| answered, no such entity | **raises `LinkNotResolved`** | `None` |
+| answered, no such entity | **raises `LinkUnresolvable`** | `None` |
 
-All three fire on *access*, not at construction. An earlier version rejected an
-absent mandatory link when the object was built - knowable without resolving
-anything, and tempting for that reason - but it over-enforces: the annotation
-says what *reading* the link yields, not that every instance carries one. Graph
-data is routinely partial (most Wikidata people have no recorded father), and
-rejecting those objects makes them unloadable. Declaring a link mandatory states
-an intent to **traverse** it, so one `try/except` around a whole walk replaces a
-guard at every hop.
+`LinkNotSet` and `LinkUnresolvable` both derive from `LinkNotResolved`, so one
+`try/except` covers a whole walk, and the message names the failing subject
+(`Person(ex:p3).father ...`) - in a self-referential chain every hop shares the
+class and attribute name, so only the subject identifies the hop.
 
-The middle row is unchanged and matters: a transport failure is not "has no
-father", and conflating the two would be the real bug.
+The construction row is the #159 decision: a bare annotation means required,
+exactly as it does for every other pydantic field. Where data is routinely
+partial (most Wikidata people have no recorded father), the required form makes
+such records unconstructible - and because resolution constructs target
+objects, the failure surfaces one hop from its cause. Those datasets declare
+the `None` arm, or decouple the two axes with
+`Link["Person"] = OoldField(required=False)`: the read stays strict (the walk
+needs no guard and ends in one exception), while construction accepts records
+without the property.
+
+The backend-error row is unchanged and matters: a transport failure is not "has
+no father", and conflating the two would be the real bug.
 
 #### Coverage
 
@@ -315,7 +322,8 @@ JSON Schema. Measured, not asserted: read types from `ty`, schema keys from
 | `Optional[List[T]] = Field(None, json_schema_extra={"range": ...})` | yes | no | `range` (legacy) | `list[T] \| None` | no | no |
 | `= OoldField(range="...")` | no | no | `x-oold-range` as given | as annotated | no | no |
 | `= OoldField()` | no | **yes** | **`x-oold-range`, derived** | as annotated | no | no |
-| `Link[T]` / `LinkList[T]` with `OoldField()` | not yet | **yes** | **`x-oold-range`, derived** | **exact** (`T`, `LinkResultList[T]`) | **yes** | **yes** |
+| `Link[T]` / `LinkList[T]`, bare or with `OoldField(...)` | not yet | **yes** | **`x-oold-range`, derived** | **exact** (`T`, `LinkResultList[T]`) | **yes** | **yes** - required |
+| `Optional[Link[T]] = None` / `Optional[LinkList[T]] = None` | not yet | **yes** | **`x-oold-range`, derived** | **exact** (`T \| None`, `LinkResultList[T] \| None`) | checker-dependent (see dropped-notations note) | **yes** - optional |
 | `= Link(T)` / `= LinkList(T)` | no | yes (from the argument) | **field absent from schema** | exact | n/a - not a field | no |
 | `str \| Location \| None = OoldField(link=True)` | no | yes | **derived** | union as declared | no | via the `None` arm |
 
@@ -326,15 +334,16 @@ unannotated descriptor form is not a pydantic field at all, so it neither
 appears in the schema nor gets an `__init__` parameter, though its read type is
 exact.
 
-#### Requiredness is a field argument, not the annotation
+#### Requiredness follows the annotation
 
 Two different questions - "must the caller supply it?" and "what do I get when I
-read it?" - so two carriers:
+read it?" - but both answered by the annotation, with one override:
 
 | declaration | stored as | enforced | on violation |
 |---|---|---|---|
-| `Link[T]` - no `None` arm | `_AutoLink.optional = False` | on read | `LinkNotResolved` |
-| `OoldField(required=True)` | `_AutoLink.required_iri`, precomputed into `cls.__required_links__`; reaches the schema as the standard `required` array | in `__init__` | `ValueError: ... is required but not set` |
+| `Link[T]` - no `None` arm, no default | `_AutoLink.optional = False`, and `required_iri = True` derived from it (a declared default cancels the derivation, as a default does for every pydantic field), precomputed into `cls.__required_links__`; reaches the schema as the standard `required` array. Enforced as key presence, so an explicitly empty required `LinkList` constructs - `{"f": []}` satisfies JSON Schema `required` too | in `__init__`, and on read | `ValueError: ... is required but not set`; `LinkNotSet` / `LinkUnresolvable` on read |
+| `Optional[Link[T]] = None` | `_AutoLink.optional = True`, `required_iri = False` | - | reading an absent link answers `None` |
+| `OoldField(required=...)` | the explicit override of `required_iri`, winning over the derivation | as above | as above |
 
 A link is never required at the *pydantic* level, because its value is routed
 out of the payload before validation - which is why the legacy binding declared
@@ -344,46 +353,44 @@ states requiredness through `required` alone, and the annotation exists only to
 carry the requirement across the point where code generation drops the property
 from `required` so the emitted field is `Optional`.
 
-A bare `Link[T]` annotation with no default is **optional**. "No default means
-required" reads well in plain Python, but requiredness propagates into
-resolution - the failure mode described next - and links are declared far more
-often than they are required, so the terse form is the common case.
+**The history, for the record.** A bare `Link[T]` was briefly **optional**
+(v2.0.0, option 2 of #159): "no default means required" propagates into
+resolution - resolving constructs target objects, so a required link makes
+every stored document lacking it unconstructible, and the failure surfaces one
+hop from its cause, about a document you never asked for. That argument is
+real, and it lost to a stronger one: the optional reading made the terse form
+mean something no Python reader expects, and the escape it was protecting
+exists anyway. `OoldField(required=False)` keeps the strict read over sparse
+data, and the raise names the failing subject so the one-hop-away failure is at
+least attributable. Decided in #159 (2026-11-17), shipped with the derivation
+in `__pydantic_init_subclass__`.
 
-**Why not put requiredness in the annotation.** `required` -> `Link[T]`,
-absence -> `Link[T | None]` reads well and was the first proposal. It fails on a
-self-referential link. `father: Link["Person"]` required means every person in
-the dataset carries a father IRI, which is only true of a graph with no root -
-and resolution constructs target objects, so the failure surfaces one hop from
-its cause: reading `alice.father` raises `ValueError: father is required but not
-set` about *Bob's* document, which you never asked for. So `father` would have
-to be `Link["Person | None"]`, which needs a guard per hop - the thing the
-annotation exists to avoid.
-
-The alternative was to strip the `| None` under `TYPE_CHECKING`, which both
-pyright and ty do resolve (a self-type overload on `Link[X | None]` yields `X`).
-It was rejected because the runtime would then have to raise instead of
-returning `None`, which silently breaks `entity.link is None`, `if entity.link:`
-and `getattr(entity, f, None)` - and the last does *not* save the caller, since
+Two ways to make an *optional* declaration chain guard-free were examined and
+rejected. Stripping the `| None` under `TYPE_CHECKING` - which both pyright and
+ty do resolve - would force the runtime to raise instead of returning `None`,
+silently breaking `entity.link is None`, `if entity.link:` and
+`getattr(entity, f, None)`; the last does *not* save the caller, since
 `LinkNotResolved` is a `LookupError`, not an `AttributeError`. Pattern A in
-`downstream-migration.md` is exactly that shape.
+`downstream-migration.md` is exactly that shape. And suppressing the diagnostic
+is only half-available: pyright separates `reportOptionalMemberAccess` from
+`reportAttributeAccessIssue`, so it can be turned off without losing typo
+detection, but ty reports both under one rule. Either way it is a setting every
+downstream consumer would have to make. `OoldField(required=False)` is what
+remains of this demand, and it changes the declaration rather than lying about
+one.
 
-Suppressing the diagnostic instead is only half-available: pyright separates
-`reportOptionalMemberAccess` from `reportAttributeAccessIssue`, so it can be
-turned off without losing typo detection, but ty reports both under
-`unresolved-attribute` (checked on 0.0.49 and 0.0.80). Either way it is a
-setting every downstream consumer would have to make.
-
-**Open:** nothing emits the read-side promise, so a model -> schema -> model
-round trip loses the distinction between `Link[T]` and `Link[T | None]`. Code
-generation can default to `Link[T]` for required properties and
-`Link[T | None]` otherwise; expressing it exactly needs a keyword of its own.
+**Round trip:** the schema side carries exactly the `required` array, so a
+model -> schema -> model trip maps `required: [f]` to `Link[T]` and everything
+else to `Optional[Link[T]]`. `OoldField(required=False)` - strict read, not
+required - is not expressible in JSON Schema and never round-trips; "every
+element resolves" is a promise about dereferencing, not a document constraint.
 
 #### Notations considered and dropped
 
 | notation | why it is not used |
 |---|---|
 | `list[Link[T]]` - `Link` nested inside a container | Silently degrades. A descriptor nested in a `list` is not treated as one, so the read type comes back as `list[Link[T]]` - not merely untyped but **wrong**. Superseded by `LinkList[T]`, which carries the to-many-ness itself. Still works at runtime, which is what makes it dangerous. |
-| `Optional[Link[T]]` - `Link` nested inside a union | Half-degrades: the read type narrows to `T \| None` correctly, but the descriptor's `__set__` is not seen through the wrapper, so assigning an IRI is rejected (`Expected Link[T] \| None`). `Link[T \| None]` states the same thing and types both directions. |
+| `Link[T \| None]` - the `None` arm inside the parameter | Works in both directions, but says optionality in a place no other pydantic field does. Deprecated in favour of `Optional[Link[T]] = None`, which reads identically; note the recommended form's *write* side is checker-dependent - pyright and current ty apply `__set__` through the union, older ty versions see a plain union slot and reject an IRI on write (read narrowing is correct everywhere). |
 | `Annotated[Person, OoldRange(...)]` wrapping a `Ref` value | The static type is not backed by the runtime value: a checker reads `Person`, `isinstance` says `Ref`. Rejected in 3(c). |
 | `Ref[T]` as the field type | Honest, but `p.knows[0]` is a `Ref`, not a `Person` - `isinstance` fails and the list operations, polymorphic dispatch and query DSL go with it (3.6). Kept only as an opt-in handle for visible or async resolution. |
 | `~Person.name == "x"` for match filters | `~` binds tighter than `==`, so this parses and would work - but pandas established `~` as NOT, and colliding with that is worse than a method. |

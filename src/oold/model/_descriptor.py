@@ -42,6 +42,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import sys
 import types
 from collections import defaultdict
@@ -200,7 +201,7 @@ def _neutralise_link_defaults(namespace: dict) -> dict[str, Any]:
             _record_default(field_name, info)
             namespace[field_name] = _neutralised(info)
             continue
-        if field_name not in namespace and _is_link_annotation(annotation):
+        if field_name not in namespace and (_is_link_annotation(annotation) or _is_link_annotation_string(annotation)):
             # `manager: Link[Org]` with nothing assigned. It still needs a field
             # carrying default=None - a link cannot be required at the pydantic
             # level, because its value never reaches validation, and left alone
@@ -481,6 +482,19 @@ def _has_default(value: Any) -> bool:
     return value is not None and value is not ... and value is not PydanticUndefined
 
 
+def _derive_required_iri(optional: bool, explicit: Any, has_default: bool) -> bool:
+    """Requiredness, the way pydantic decides it for every other field.
+
+    A bare non-optional annotation is required; a ``None`` arm or a declared
+    default makes it not. An explicit ``OoldField(required=)`` is the override.
+    One function, because two install sites derive this and drifting apart would
+    desynchronise construction from the descriptors.
+    """
+    if explicit is not None:
+        return bool(explicit)
+    return not optional and not has_default
+
+
 class FieldProxy:
     """Class-level field handle enabling ``Person.name == "John"``.
 
@@ -554,14 +568,21 @@ class LinkedBaseModelMetaClass(ModelMetaclass):
         defaults: dict[str, Any] = {}
         if links_enabled():
             defaults = _neutralise_link_defaults(namespace)
+        if defaults:
+            # Into the namespace, not onto the finished class: the requiredness
+            # derivation in __pydantic_init_subclass__ runs inside
+            # super().__new__ and has to see the class's own defaults - a
+            # defaulted link is not required, like any other defaulted field.
+            # Merge the bases' defaults so a subclass may add without restating.
+            inherited: dict[str, Any] = {}
+            for base in bases:
+                inherited.update(getattr(base, "__link_defaults__", {}) or {})
+            namespace["__link_defaults__"] = {**inherited, **defaults}
         _Constructing.enter()
         try:
             cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         finally:
             _Constructing.leave()
-        if defaults:
-            # a subclass may add defaults without restating the inherited ones
-            cls.__link_defaults__ = {**getattr(cls, "__link_defaults__", {}), **defaults}
         return cls
 
     def __getattr__(cls, name: str) -> Any:
@@ -640,6 +661,24 @@ def _extract_target(annotation: Any) -> tuple[Any, bool, bool]:
     # None arm appears anywhere in the annotation.
     optional = not seen_link_annotation or saw_none_arm
     return target, many, optional
+
+
+_LINK_ANNOTATION_STRING = re.compile(r"(?:^|[^\w.])(?:Link|LinkList)\[")
+
+
+def _is_link_annotation_string(annotation: Any) -> bool:
+    """The stringized form of :func:`_is_link_annotation`.
+
+    Under ``from __future__ import annotations`` the class namespace holds the
+    annotation as source text, and the type-based walk sees nothing. The field
+    cannot be resolved here - forward references are not importable yet - so
+    the text is matched instead. Only the default injection consults this. A
+    false positive takes a subscripted type that is literally named ``Link`` or
+    ``LinkList`` but is not ours; the injected ``OoldField()`` then marks it a
+    link. Accepted: without the match, every model under the future import
+    fails construction with a misleading "Field required".
+    """
+    return isinstance(annotation, str) and bool(_LINK_ANNOTATION_STRING.search(annotation))
 
 
 def _is_link_annotation(annotation: Any) -> bool:
@@ -1099,6 +1138,15 @@ class _AutoLink:
         stored = obj._links.get(self.name)
         target = self._target_cls(objtype or type(obj))
         if self.many:
+            if stored is None and not self.optional:
+                # Never set, as opposed to explicitly empty - [] is a statement
+                # about the elements, absence of the key is not. Same promise as
+                # the to-one branch below, so the required=False escape keeps
+                # its one-exception walk for lists too.
+                raise LinkNotSet(
+                    f"{self._subject(obj)}.{self.name} is declared mandatory but is "
+                    f"not set. Declare it as Optional[LinkList[T]] if absence is data."
+                )
             items = _batch_resolve(stored, target) if stored else []
             if not self.optional and any(item is None for item in items):
                 # the declaration promised every element resolves
@@ -1474,12 +1522,16 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
             if isinstance(rng, str) and not isinstance(target, type):
                 target = rng
             # Requiredness follows the annotation, as it does for every other
-            # pydantic field: a bare Link[T] is required, Optional[Link[T]] is
-            # not. An explicit required= stays the override - which is also what
-            # keeps the legacy keyword form unchanged, since there the
-            # annotation never says Link[...] and `optional` is always True.
-            explicit = extra.get("x-oold-required-iri")
-            required_iri = (not optional) if explicit is None else bool(explicit)
+            # pydantic field: a bare Link[T] is required, Optional[Link[T]] or a
+            # declared default is not. An explicit required= stays the
+            # override - which is also what keeps the legacy keyword form
+            # unchanged, since there the annotation never says Link[...] and
+            # `optional` is always True.
+            required_iri = _derive_required_iri(
+                optional,
+                extra.get("x-oold-required-iri"),
+                name in getattr(cls, "__link_defaults__", {}),
+            )
             descr = _AutoLink(name, target, many, optional, required_iri)
             setattr(cls, name, descr)
             links[name] = descr
@@ -1526,7 +1578,11 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
                 link_data[_name] = _iris
         for key, value in link_data.items():
             self._set_link(key, value)
-        missing = [name for name in type(self).__required_links__ if not self._links.get(name)]
+        # Presence, not truthiness: JSON Schema `required` demands the key, and
+        # an explicitly empty list satisfies it - the emitted schema accepts
+        # {"f": []}, so construction must too, or stored documents with an
+        # empty-but-present list become unconstructible during resolution.
+        missing = [name for name in type(self).__required_links__ if name not in self._links]
         if missing:
             # x-oold-required-iri, enforced as the legacy binding did. It raised
             # on the mere presence of the keyword; this raises on a true value,

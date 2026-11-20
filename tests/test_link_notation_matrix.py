@@ -101,6 +101,20 @@ class M8(LinkedBaseModel):
     f: LinkList[Org | None] = OoldField()
 
 
+class M9(LinkedBaseModel):
+    model_config = ConfigDict(json_schema_extra={"$id": "https://example.org/mx/M9"})
+    id: str
+    type: str | None = "mx:M9"
+    f: LinkList[Org] = OoldField(required=False)
+
+
+class M10(LinkedBaseModel):
+    model_config = ConfigDict(json_schema_extra={"$id": "https://example.org/mx/M10"})
+    id: str
+    type: str | None = "mx:M10"
+    f: Link[Org] = OoldField(default="mx:o1")
+
+
 # spelling -> class and expected columns
 ROWS = {
     "Link[Org]": {"cls": M0, "required": True},
@@ -112,6 +126,8 @@ ROWS = {
     "LinkList[Org]": {"cls": M6, "required": True, "many": True},
     "Optional[LinkList[Org]] = None": {"cls": M7, "required": False, "many": True},
     "LinkList[Org | None] = OoldField()": {"cls": M8, "required": False, "many": True},
+    "LinkList[Org] = OoldField(required=False)": {"cls": M9, "required": False, "many": True, "strict_read": True},
+    'Link[Org] = OoldField(default="mx:o1")': {"cls": M10, "required": False, "defaulted": True},
 }
 
 _CLASSES = {label: row["cls"] for label, row in ROWS.items()}
@@ -137,7 +153,7 @@ def test_column_in_required_array(label):
 
 @pytest.mark.parametrize(
     "label",
-    [label for label, row in ROWS.items() if not row["required"]],
+    [label for label, row in ROWS.items() if not row["required"] and not row.get("defaulted")],
 )
 def test_column_unset_read(label):
     """Column *unset read*, for the rows that construct unset.
@@ -166,6 +182,24 @@ def test_required_rows_read_after_construction(linked_store):
     assert isinstance(one.f, Org)
     many = _CLASSES["LinkList[Org]"](id="mx:i", f=["mx:o1"])
     assert [type(v).__name__ for v in many.f] == ["Org"]
+
+
+def test_a_required_list_accepts_an_explicitly_empty_one(linked_store):
+    """JSON Schema `required` demands the key, and {"f": []} has it - so the
+    schema the class emits accepts the document, and construction must too."""
+    linked_store("mx", {})
+    instance = _CLASSES["LinkList[Org]"](id="mx:i", f=[])
+    assert list(instance.f) == []
+
+
+def test_a_defaulted_link_is_not_required(linked_store):
+    """A field with a default is never required in pydantic; the declared IRI
+    is seeded instead and resolves lazily."""
+    linked_store("mx", {"mx:o1": {"id": "mx:o1", "type": "mx:Org"}})
+    cls = _CLASSES['Link[Org] = OoldField(default="mx:o1")']
+    instance = cls(id="mx:i")  # constructs: the default satisfies the link
+    assert instance.link_iris("f") == "mx:o1"
+    assert isinstance(instance.f, Org)
 
 
 def test_not_set_and_unresolvable_are_distinct(linked_store):

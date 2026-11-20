@@ -45,6 +45,7 @@ from oold.model._descriptor import (
     LinkList,
     OoldField,
     _AutoLink,
+    _derive_required_iri,
     _extract_target,
     _LinkAnnotation,
     _register_class,
@@ -189,13 +190,16 @@ class OoldModel(LinkedBaseModel):
             # carry the same promises the binding computes: requiredness follows
             # the annotation, and an explicit required= stays the override
             _, _, optional = _extract_target(field.annotation)
-            explicit = extra.get("x-oold-required-iri")
             descr = _AutoLink(
                 name,
                 target,
                 many=many,
                 optional=optional,
-                required_iri=(not optional) if explicit is None else bool(explicit),
+                required_iri=_derive_required_iri(
+                    optional,
+                    extra.get("x-oold-required-iri"),
+                    name in getattr(cls, "__link_defaults__", {}),
+                ),
             )
             setattr(cls, name, descr)
             links[name] = descr
@@ -203,6 +207,10 @@ class OoldModel(LinkedBaseModel):
                 literals[name] = lits
         cls.__link_fields__ = links
         cls.__link_literals__ = literals
+        # This hook rebuilds the descriptor set from its own scan, so the
+        # construction-time enforcement has to follow the same set - the tuple
+        # computed by super() reflects the binding's scan, not this one.
+        cls.__required_links__ = tuple(n for n, d in links.items() if d.required_iri)
         # Register the way the binding does - including the inherited-IRI
         # guard - rather than writing the type default straight in, which let a
         # subclass that only narrows a field replace its parent in the registry.

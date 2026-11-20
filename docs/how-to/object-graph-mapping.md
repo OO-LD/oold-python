@@ -4,17 +4,19 @@ oold-python's core feature is *IRI-transparent references*: a link field can hol
 
 ## Recommended declaration
 
-Declare a link with `Link[T]` or `LinkList[T]`, and `OoldField()` with no
-arguments:
+Declare a link with `Link[T]` or `LinkList[T]` as the annotation; nothing else
+is needed:
 
 ```python
-from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+from typing import Optional
+
+from oold.model import Link, LinkedBaseModel, LinkList
 
 class Person(LinkedBaseModel):
     id: str
     name: str | None = None
-    employer: Link["Organization"]                  # required, like a bare `id: str`
-    knows: LinkList["Person"] | None = None         # optional, like any other field
+    employer: Optional[Link["Organization"]] = None  # optional, like any other field
+    knows: LinkList["Person"]                        # required, like a bare `id: str`
 ```
 
 The annotation is the single source of truth. It names the target, so
@@ -214,7 +216,9 @@ rejects `knows=["ex:bob"]` even though the library accepts it at runtime.
 `Link[T]` and `LinkList[T]` carry both. They are exported from `oold.model`:
 
 ```python
-from oold.model import Link, LinkedBaseModel, LinkList, OoldField
+from typing import Optional
+
+from oold.model import Link, LinkedBaseModel, LinkList
 
 class Person(LinkedBaseModel):
     id: str
@@ -292,7 +296,12 @@ except LinkNotResolved:
 ```
 
 A **transport failure is not absence** - a connection error propagates unchanged
-rather than being reported as a missing link.
+rather than being reported as a missing link. And the single `except` covers the
+walk's own links, not everything resolution does: constructing a traversed
+document that is missing a *different* required link raises that class's plain
+`ValueError`, which `except LinkNotResolved` does not catch. Where the walked
+documents are allowed to be partial, their required links need `required=False`
+too.
 
 ### `OoldField` arguments
 
@@ -345,15 +354,28 @@ attribute yields, *unset read* is what reading an absent link does, and
 | `Link[Org] \| None = None` | no | `Org \| None` | `None` | no |
 | `Optional[Link[Org]] = OoldField(...)` | no | `Org \| None` | `None` | no |
 | `Link[Org] = OoldField(required=False)` | no | `Org` | raises | no |
-| `LinkList[Org]` | yes | `LinkResultList[Org]` | raises per element | yes |
+| `Link[Org] = OoldField(default="ex:o")` | no | `Org` | never unset - the default resolves | no |
+| `LinkList[Org]` | yes | `LinkResultList[Org]` | raises | yes |
+| `LinkList[Org] = OoldField(required=False)` | no | `LinkResultList[Org]` | raises | no |
 | `Optional[LinkList[Org]] = None` | no | `LinkResultList[Org] \| None` | `[]` | no |
 | `LinkList[Org \| None] = OoldField()` | no | `LinkResultList[Org \| None]` | element is `None` | no |
 
-The three `LinkList` forms say different things: the list itself may be absent,
-an element may not resolve, every element resolves. The first two are the same
-at runtime - both read `[]` when unset - and differ only statically.
-`Link[T | None]` for the **to-one** case keeps working but is deprecated in
-favour of `Optional[Link[T]]`.
+A declared default makes a link not required, as it does for every pydantic
+field; `required` means the *key* must be present, so an explicitly empty list
+satisfies a required `LinkList` - exactly what JSON Schema `required` says
+about the document `{"f": []}`.
+
+The three optional `LinkList` forms say different things: the list itself may
+be absent, an element may not resolve, every element resolves. The first two
+are the same at runtime - both read `[]` when unset - and differ only
+statically. Two deprecated spellings keep working: `Link[T | None]` for the
+to-one case (prefer `Optional[Link[T]]`), and `list[Link[T]]` for the to-many
+case (prefer `LinkList[T]`) - note the latter now derives requiredness like
+`LinkList[T]` does, so a bare `list[Link[T]]` is required and needs a `None`
+arm or a default to stay optional. One deliberate deviation from plain
+pydantic: a bare `Optional[Link[T]]` *without* `= None` is treated as optional,
+because a link's value never reaches pydantic's own required check - write the
+`= None`.
 
 `OoldField(required=False)` is the one escape that decouples the two axes: the
 read still promises an `Org` - a chain needs no guard, an unset read raises

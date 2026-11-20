@@ -341,7 +341,7 @@ read it?" - but both answered by the annotation, with one override:
 
 | declaration | stored as | enforced | on violation |
 |---|---|---|---|
-| `Link[T]` - no `None` arm | `_AutoLink.optional = False`, and `required_iri = True` derived from it, precomputed into `cls.__required_links__`; reaches the schema as the standard `required` array | in `__init__`, and on read | `ValueError: ... is required but not set`; `LinkNotSet` / `LinkUnresolvable` on read |
+| `Link[T]` - no `None` arm, no default | `_AutoLink.optional = False`, and `required_iri = True` derived from it (a declared default cancels the derivation, as a default does for every pydantic field), precomputed into `cls.__required_links__`; reaches the schema as the standard `required` array. Enforced as key presence, so an explicitly empty required `LinkList` constructs - `{"f": []}` satisfies JSON Schema `required` too | in `__init__`, and on read | `ValueError: ... is required but not set`; `LinkNotSet` / `LinkUnresolvable` on read |
 | `Optional[Link[T]] = None` | `_AutoLink.optional = True`, `required_iri = False` | - | reading an absent link answers `None` |
 | `OoldField(required=...)` | the explicit override of `required_iri`, winning over the derivation | as above | as above |
 

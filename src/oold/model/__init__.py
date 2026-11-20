@@ -793,7 +793,9 @@ class _LinkedBaseModelLegacy(BaseModel, GenericLinkedBaseModel, metaclass=_Linke
             # pydantic v2
             extra = self.model_fields[name].json_schema_extra
 
-            if extra and "x-oold-required-iri" in extra and name not in self.__iris__:
+            # the value decides, not the key: OoldField(required=False) writes
+            # x-oold-required-iri: False to say the opposite of required
+            if extra and extra.get("x-oold-required-iri") and name not in self.__iris__:
                 raise ValueError(f"{name} is required but not set")
 
     def _handle_value(self, name, value):

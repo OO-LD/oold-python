@@ -299,3 +299,23 @@ def test_nested_plain_models_still_serialise():
 
         seen.append(M(id=f"ex:{tag}", nested={"n": 5})._raw_dict()["nested"])
     assert seen[0] == seen[1] == {"n": 5}
+
+
+def test_required_false_constructs_unset_in_both_bindings():
+    """OoldField(required=False) writes x-oold-required-iri: False. The legacy
+    binding raised on mere key presence, inverting the stated meaning."""
+    from oold.model import OoldField
+
+    for base, tag in ((LegacyLinkedBaseModel, "SRF"), (LinkedBaseModel, "ARF")):
+
+        class T(base):
+            id: str
+            type: str | None = f"ex:{tag}T"
+
+        class M(base):
+            id: str
+            type: str | None = f"ex:{tag}M"
+            loose: T | None = OoldField(required=False, range="T")
+
+        m = M(id=f"ex:{tag}")  # must construct unset in both bindings
+        assert m.get_iri_ref("loose") is None

@@ -29,7 +29,7 @@ try:
 except ImportError:  # pragma: no cover - depends on the installed mcp major version
     # mcp 1.x, where the same class is called FastMCP. The parts used here - the `tool`
     # decorator and `run(transport=...)` - are identical across both.
-    from mcp.server.fastmcp import FastMCP as _Server  # ty: ignore[unresolved-import]
+    from mcp.server.fastmcp import FastMCP as _Server  # ty: ignore[import-not-found]
 
 from .cli import SPEC_RULE_URL
 from .generate import generate

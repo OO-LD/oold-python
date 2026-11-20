@@ -686,8 +686,10 @@ class _LinkedBaseModelLegacy(BaseModel, GenericLinkedBaseModel, metaclass=_Linke
                 if node:
                     node_list.append(node)
             return node_list
-        elif isinstance(obj, dict):
-            super().model_validate(obj, strict=strict, from_attributes=from_attributes, context=context)
+        # Everything else is pydantic's own job - and the result has to be
+        # returned: the dict branch used to call super() and fall off the end,
+        # so model_validate({...}) answered None on the legacy binding.
+        return super().model_validate(obj, strict=strict, from_attributes=from_attributes, context=context)
 
     def __init__(self, *a, **kw):
         # Accept a model instance as first positional arg:

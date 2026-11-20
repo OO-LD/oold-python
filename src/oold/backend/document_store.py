@@ -26,7 +26,9 @@ class SimpleDictDocumentStore(Backend):
 
     _store: dict[str, dict] | None = None
     file_path: Path | str | None = None
-    format: LinkedDataFormat = LinkedDataFormat.JSON
+    # LinkedDataFormat | None matches the base attribute: a narrower mutable
+    # override would reject writes the base type allows
+    format: LinkedDataFormat | None = LinkedDataFormat.JSON
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -111,7 +113,9 @@ class SimpleDictDocumentStore(Backend):
 
 class SqliteDocumentStore(Backend):
     db_path: Path | str
-    format: LinkedDataFormat = LinkedDataFormat.JSON
+    # LinkedDataFormat | None matches the base attribute: a narrower mutable
+    # override would reject writes the base type allows
+    format: LinkedDataFormat | None = LinkedDataFormat.JSON
     persist_connection: bool = False
     _conn: sqlite3.Connection | None = None
 

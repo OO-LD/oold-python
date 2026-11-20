@@ -193,7 +193,10 @@ exclude = [
 # (Model["iri"], obj.links[Field == ...]). The following checks fire on these
 # intentional, runtime-valid metaprogramming patterns rather than real bugs, so
 # they are downgraded to keep `ty check` meaningful without mass inline ignores.
-unresolved-attribute = "ignore"
+# ty 0.0.107 split the old unresolved-attribute into missing-attribute and
+# missing-union-attribute; both stay down for the same reason.
+missing-attribute = "ignore"
+missing-union-attribute = "ignore"
 not-subscriptable = "ignore"
 # Assigning an IRI to a link field is no longer a reason for this one: the
 # Link[T] / LinkList[T] annotations type both directions, and the override below
@@ -202,16 +205,20 @@ not-subscriptable = "ignore"
 invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
 unknown-argument = "ignore"
-invalid-return-type = "ignore"
+invalid-explicit-return = "ignore"
 unsupported-operator = "ignore"
 no-matching-overload = "ignore"
-invalid-method-override = "ignore"
+incompatible-method-override = "ignore"
 not-iterable = "ignore"
 invalid-type-form = "ignore"
 missing-argument = "ignore"
-call-non-callable = "ignore"
+not-callable = "ignore"
 too-many-positional-arguments = "ignore"
 subclass-of-final-class = "ignore"
+# pydantic v1 models override `Config` with a narrower class on purpose - that
+# is how pydantic v1 configuration works, so the override rule has nothing to
+# say about it.
+incompatible-attribute-override = "ignore"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -334,6 +341,17 @@ branch = true
 source = ["src"]
 
 [[tool.ty.overrides]]
+# The examples carry one deliberate blanket `# type: ignore` on an ungated
+# optional chain (wiki_data). Under this repo's config the silenced rule is
+# already off, so ty reports the directive as unused - but it is load-bearing
+# for every downstream config where the rule runs, which is who examples are
+# written for.
+include = ["examples/**"]
+
+[tool.ty.overrides.rules]
+unused-type-ignore-comment = "ignore"
+
+[[tool.ty.overrides]]
 # The static contract of the link and query API is asserted here, so the rules
 # it exercises must actually run - the repo-wide downgrades above would
 # otherwise make every assert_type in it vacuous.
@@ -342,5 +360,6 @@ include = ["tests/typing/**"]
 [tool.ty.overrides.rules]
 invalid-argument-type = "error"
 invalid-assignment = "error"
-unresolved-attribute = "error"
+missing-attribute = "error"
+missing-union-attribute = "error"
 not-subscriptable = "error"

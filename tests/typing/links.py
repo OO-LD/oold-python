@@ -63,12 +63,12 @@ written = Entity(
 )
 written.links = ["ex:d", {"id": "ex:e"}]
 written.owner = {"id": "ex:other"}
-# Writes through the Optional wrapper are checker-dependent: pyright and
-# current ty apply the descriptor's __set__ through the union, so an IRI, a
-# dict and an object are all accepted; the ty pinned here sees a plain
-# `Link[Org] | None` slot and rejects every reference form. The probe asserts
-# only the intersection - `None` at construction - and the runtime acceptance
-# of the reference forms is covered by tests/test_link_notation_matrix.py.
+# Attribute writes through the Optional wrapper are pyright-only: ty does not
+# apply the descriptor's __set__ inside a union (0.0.49 rejected the reference
+# forms, 0.0.107 rejects every assignment including None), so the probe asserts
+# the constructor direction, which both checkers type, and the runtime
+# acceptance of all reference forms is covered by
+# tests/test_link_notation_matrix.py.
 
 # -- reads: exactly what the annotation declares ------------------------------
 # A separate instance: ty narrows an attribute to the assigned type after a

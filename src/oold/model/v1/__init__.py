@@ -481,8 +481,8 @@ class _LinkedBaseModelLegacy(_LinkedBaseModel):
                 if node:
                     node_list.append(node)
             return node_list
-        elif isinstance(obj, dict):
-            return super().parse_obj(obj)
+        # everything else is pydantic's job; falling off the end answered None
+        return super().parse_obj(obj)
 
     def __init__(self, *a, **kw):
         # Accept a model instance as first positional arg:
@@ -989,9 +989,9 @@ class _LinkedBaseModelLegacy(_LinkedBaseModel):
         return result
 
     @classmethod
-    def from_json(cls, json_dict: builtins.dict) -> "_LinkedBaseModelLegacy":
+    def from_json(cls, data: builtins.dict) -> "_LinkedBaseModelLegacy":
         """Constructs a model instance from a JSON representation."""
-        return import_json(BaseModel, _LinkedBaseModelLegacy, cls, json_dict, _types, _controller_types)
+        return import_json(BaseModel, _LinkedBaseModelLegacy, cls, data, _types, _controller_types)
 
 
 # Re-export BaseController from v2 module (it's a plain class, no Pydantic dep)

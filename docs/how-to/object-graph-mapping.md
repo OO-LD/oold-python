@@ -404,6 +404,7 @@ checking downstream - prefer the `Person.name == "x"` form.
     The to-many form is its own type. `list[Link[T]]` keeps working at runtime
     but a checker reads it as a list of descriptors. For the to-one optional
     form, `Optional[Link[T]]` is the recommended spelling; note that its
-    *write* side is checker-dependent - pyright and current ty apply the
-    descriptor's assignment type through the union, older ty versions see a
-    plain union slot and reject an IRI on write.
+    *write* side is checker-dependent - pyright applies the descriptor's
+    assignment type through the union, ty does not, so an attribute write
+    through the wrapper types only under pyright; pass the reference at
+    construction instead (read narrowing is correct everywhere).

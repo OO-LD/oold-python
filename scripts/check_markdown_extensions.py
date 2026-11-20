@@ -30,7 +30,7 @@ import os
 import sys
 
 try:
-    import tomllib  # ty: ignore[unresolved-import]  # stdlib on 3.11+; ty type-checks against the 3.10 floor
+    import tomllib  # ty: ignore[import-not-found]  # stdlib on 3.11+; ty type-checks against the 3.10 floor
 except ModuleNotFoundError:
     sys.exit(
         "This check needs Python 3.11+ for the stdlib tomllib parser (the project "

@@ -295,6 +295,13 @@ class LinkedBaseModel(BaseModel, LinkedApiMixin, metaclass=LinkedBaseModelMetaCl
                 out[name] = iris
         return out
 
+    @__iris__.setter
+    def __iris__(self, value: dict[str, Any]) -> None:
+        # The getter-only redefinition silently dropped the mixin's setter, so
+        # a direct property assignment lost writes that __setattr__'s special
+        # case still honoured - keep both paths on the mixin's semantics.
+        LinkedApiMixin.__iris__.fset(self, value)
+
     @classmethod
     def _fields(cls) -> dict:
         return cls.__fields__

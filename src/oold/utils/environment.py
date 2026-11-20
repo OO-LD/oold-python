@@ -24,7 +24,7 @@ def is_running_in_pyodide() -> bool:
 
 def get_ipython_source() -> str:
     """Get the source code of the running notebook."""
-    from IPython import get_ipython  # ty: ignore[unresolved-import]  # optional, only present in IPython/Jupyter
+    from IPython import get_ipython  # ty: ignore[import-not-found]  # optional, only present in IPython/Jupyter
 
     shell = get_ipython()
     if shell is None:

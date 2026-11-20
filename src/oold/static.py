@@ -226,10 +226,13 @@ class GenericLinkedBaseModel:
 
     @classmethod
     @abstractmethod
-    def from_json(cls, json_dict: dict) -> "GenericLinkedBaseModel":
+    def from_json(cls, data: dict) -> "GenericLinkedBaseModel":
         """Constructs a model instance from a JSON representation.
         Note: the given JSON must contain a field to identify the model class,
-        default is 'type'."""
+        default is 'type'.
+
+        The parameter is named ``data`` because every override names it that,
+        and an override must not reject a keyword the base accepts."""
         pass
 
     @abstractmethod

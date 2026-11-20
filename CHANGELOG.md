@@ -7,6 +7,17 @@ not edit released sections by hand.
 
 <!-- version list -->
 
+## v2.3.3 (2026-11-20)
+
+### Bug Fixes
+
+- A bare Link[T] annotation is required, like any bare annotation
+  ([`0fe5cac`](https://github.com/OO-LD/oold-python/commit/0fe5cac36a3a662d7965409ddf9973cbdaba7f8f))
+
+- Review findings on the requiredness derivation
+  ([`9388510`](https://github.com/OO-LD/oold-python/commit/9388510bc7c8e3594654ececa2f002ab9cb823eb))
+
+
 ## v2.3.2 (2026-11-16)
 
 ### Bug Fixes

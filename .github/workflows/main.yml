@@ -67,6 +67,58 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  tests-postgres:
+    # Real PostgreSQL via a service container, which only Linux runners support. One Python
+    # version is enough: the matrix above already covers the interpreters.
+    name: tests-postgres (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        postgres: ["16", "17", "18"]
+      fail-fast: false
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      OOLD_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: "3.12"
+
+      - name: Run the postgres tests
+        run: >-
+          uv run python -m pytest tests -m postgres --cov --cov-config=pyproject.toml
+          --cov-report=xml --benchmark-disable --junitxml="$RUNNER_TEMP/postgres-junit.xml"
+
+      - name: Upload coverage reports to Codecov on PostgreSQL 17
+        # Codecov merges this with the main upload, where these tests skip.
+        uses: codecov/codecov-action@v4
+        if: ${{ matrix.postgres == '17' }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Fail if any postgres test was skipped
+        # A wrong URL or a missing driver skips these tests, and a skip counts as a pass.
+        run: |
+          if grep -q "<skipped" "$RUNNER_TEMP/postgres-junit.xml"; then
+            echo "postgres tests were skipped, so nothing ran against PostgreSQL ${{ matrix.postgres }}" >&2
+            exit 1
+          fi
+
   validate-schemas:
     # Runs the OO-LD validator over the committed fixtures, offline, so a regression in the
     # validation pipeline fails CI even when the unit tests still pass.

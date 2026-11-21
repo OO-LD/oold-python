@@ -86,14 +86,11 @@ def _run(store: Backend):
     _store_procedure(store, pydantic_version="v2")
 
 
+# Test names are the benchmark baseline keys (scripts/compare_benchmarks.py matches on them),
+# so keep them stable instead of parametrizing.
 @pytest.mark.benchmark(group="backend")
 def test_simple_dict_document_store(benchmark):
-    store = SimpleDictDocumentStore()
-
-    if benchmark is not None:
-        benchmark(_run, store)
-    else:
-        _run(store)
+    benchmark(_run, SimpleDictDocumentStore())
 
 
 @pytest.mark.benchmark(group="backend")
@@ -101,23 +98,23 @@ def test_sqlite_document_store(benchmark):
     from oold.backend.document_store import SqliteDocumentStore
 
     store = SqliteDocumentStore(db_path=":memory:")
-
-    if benchmark is not None:
+    try:
         benchmark(_run, store)
-    else:
-        _run(store)
+    finally:
+        store.close()
 
 
 @pytest.mark.benchmark(group="backend")
 def test_local_sparql_store(benchmark):
     from oold.backend.sparql import LocalSparqlBackend
 
-    store = LocalSparqlBackend()
+    benchmark(_run, LocalSparqlBackend())
 
-    if benchmark is not None:
-        benchmark(_run, store)
-    else:
-        _run(store)
+
+@pytest.mark.benchmark(group="backend")
+@pytest.mark.postgres
+def test_postgres_document_store(postgres_store, benchmark):
+    benchmark(_run, postgres_store)
 
 
 def test_simple_dict_file_persistence(tmp_path):
@@ -158,9 +155,3 @@ def test_simple_dict_file_no_file():
     store = SimpleDictDocumentStore()
     assert store.file_path is None
     assert store._store == {}
-
-
-if __name__ == "__main__":
-    test_simple_dict_document_store(None)
-    test_sqlite_document_store(None)
-    test_local_sparql_store(None)

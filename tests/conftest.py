@@ -7,6 +7,8 @@ run already, which is why the fixtures below always restore.
 """
 
 import importlib.util
+import os
+import uuid
 
 import pytest
 
@@ -62,6 +64,7 @@ def _restore_global_registries():
 
     registries = [
         interface._resolvers,
+        interface._backends,
         _types,
         _types_v1,
         _controller_types,
@@ -75,6 +78,29 @@ def _restore_global_registries():
     for registry, snapshot in zip(registries, saved, strict=True):
         registry.clear()
         registry.update(snapshot)
+
+
+@pytest.fixture
+def postgres_store():
+    """A PostgresDocumentStore on its own table, dropped afterwards.
+
+    Skips unless ``OOLD_TEST_POSTGRES_URL`` points at a live server, so the
+    default suite and the OS/Python matrix never need one.
+    """
+    pytest.importorskip("psycopg")
+    dsn = os.environ.get("OOLD_TEST_POSTGRES_URL")
+    if not dsn:
+        pytest.skip("OOLD_TEST_POSTGRES_URL is not set")
+
+    from psycopg import sql
+
+    from oold.backend.postgres import PostgresDocumentStore
+
+    table = f"entities_{uuid.uuid4().hex}"
+    store = PostgresDocumentStore(dsn=dsn, table=table)
+    yield store
+    store._connection().execute(sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(table)))
+    store.close()
 
 
 def pytest_configure(config):

@@ -94,6 +94,7 @@ All backends implement the `Backend` interface from `backend/interface.py`:
 |---|---|---|
 | `SimpleDictDocumentStore` | In-memory dict, optional JSON file | No |
 | `SqliteDocumentStore` | SQLite database | No |
+| `PostgresDocumentStore` | PostgreSQL JSONB | No |
 | `LocalSparqlBackend` | In-memory RDFLib graph | Yes |
 
 Backends are registered per IRI prefix via `set_resolver` / `set_backend`, so multiple backends can coexist in one application.

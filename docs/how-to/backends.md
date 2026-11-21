@@ -87,7 +87,7 @@ Persists entities in a SQLite database. Drop-in replacement for `SimpleDictDocum
 ```python
 from oold.backend.document_store import SqliteDocumentStore
 
-store = SqliteDocumentStore(file_path="./data/entities.db")
+store = SqliteDocumentStore(db_path="./data/entities.db")  # or ":memory:"
 
 set_resolver(SetResolverParam(iri="ex", resolver=store))
 set_backend(SetBackendParam(iri="ex", backend=store))
@@ -96,6 +96,42 @@ set_backend(SetBackendParam(iri="ex", backend=store))
 store.store(StoreParam(nodes={"ex:alice": alice}))
 alice = Person["ex:alice"]
 ```
+
+---
+
+## PostgresDocumentStore
+
+Persists entities as JSONB rows in PostgreSQL, one row per IRI. It needs the `postgres` extra:
+
+=== "uv (recommended)"
+
+    ```bash
+    uv add "oold[postgres]"
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "oold[postgres]"
+    ```
+
+```python
+from oold.backend.postgres import PostgresDocumentStore
+
+store = PostgresDocumentStore(dsn="postgresql://user:password@localhost:5432/mydb")
+
+set_resolver(SetResolverParam(iri="ex", resolver=store))
+set_backend(SetBackendParam(iri="ex", backend=store))
+
+store.store(StoreParam(nodes={"ex:alice": alice}))
+alice = Person["ex:alice"]
+
+store.close()  # the connection stays open until you close it
+```
+
+- Entities live in table `entities` (`id TEXT PRIMARY KEY, data JSONB`), created on first use. Pass `table="..."` to use another name (letters, digits and underscores, up to 63 characters).
+- Storing an IRI again overwrites its row, and a batch is written in one transaction.
+- Querying with `Model[Model.field == value]` is not supported yet.
 
 ---
 
@@ -153,7 +189,7 @@ Register different backends for different IRI prefixes:
 
 ```python
 local_store  = SimpleDictDocumentStore()
-remote_store = SqliteDocumentStore(file_path="remote.db")
+remote_store = SqliteDocumentStore(db_path="remote.db")
 
 set_resolver(SetResolverParam(iri="local",  resolver=local_store))
 set_resolver(SetResolverParam(iri="remote", resolver=remote_store))

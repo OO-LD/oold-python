@@ -1,0 +1,198 @@
+"""Finding a published schema in a working tree.
+
+A schema refers to another by the IRI it is published under, because that is what resolves for
+a consumer. While it is being edited the same document is a file, and the file is the source of
+truth: reading it from disk keeps a build offline and shows the version being worked on rather
+than the one already released.
+
+The mapping from IRI to file is the only part of that which is layout-specific, so it is stated
+as data. A :class:`MirrorRule` names one IRI prefix and where the segments after it sit under
+the root; everything else - following references, reading documents - is the same whatever the
+tree looks like. A consumer with a different layout passes different rules, and one with no tree
+at all (a browser, a remote store) implements :class:`~oold.utils.mappings.ScopeSource` instead.
+
+With no rule the locator still resolves a relative reference against the referring document,
+which is how sibling schemas point at each other.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class MirrorRule:
+    """One published IRI prefix, and where the document it names sits under the root.
+
+    ``template`` is formatted with the path segments that follow ``prefix``, so
+    ``MirrorRule("https://example.org/schemas/", "{0}/{2}", 3)`` reads
+    ``https://example.org/schemas/<module>/<version>/<Name>`` as ``<root>/<module>/<Name>``:
+    the version is part of the published identity and not of the tree.
+
+    ``segments`` is the number of segments the rule expects, and ``None`` accepts any count. It
+    is stated rather than inferred from the template because a template need not mention every
+    segment, and a rule that silently matched a shorter IRI would resolve one document to
+    another.
+    """
+
+    prefix: str
+    template: str
+    segments: int | None = None
+
+    def path_under(self, root: Path, iri: str) -> Path | None:
+        """Where ``iri`` would sit under ``root``, or ``None`` when the rule does not apply.
+
+        The result is not guaranteed to stay under ``root``: an IRI segment may contain ``..``,
+        and formatting it into the template walks back out of the tree. :meth:`Locator.locate`
+        is what rejects that, so a caller using a rule directly has to check it as well.
+        """
+        if not iri.startswith(self.prefix):
+            return None
+        parts = iri[len(self.prefix) :].split("/")
+        if self.segments is not None and len(parts) != self.segments:
+            return None
+        try:
+            relative = self.template.format(*parts)
+        except (IndexError, KeyError):
+            return None
+        return root / relative
+
+
+class Locator:
+    """Resolves references to documents in a working tree, and reads them.
+
+    A *key* is this class's name for a located document: an absolute path as a string. Keys are
+    compared for identity, which is what lets a caller detect a cycle, so a document reached two
+    ways is one key.
+
+    Resolution is confined to a boundary. A reference is input, not a path an author typed here,
+    so ``../../secret.json`` and a ``..`` buried in an IRI segment both have to be refused rather
+    than followed. The boundary is ``root`` where one is given, and otherwise the directory of
+    the document that made the reference, which is the widest guess that cannot be wrong.
+    """
+
+    def __init__(
+        self,
+        root: Path | str | None = None,
+        rules: Sequence[MirrorRule] = (),
+        encoding: str = "utf-8",
+    ) -> None:
+        self.root = Path(root).resolve() if root is not None else None
+        self.rules = tuple(rules)
+        self.encoding = encoding
+        self._documents: dict[str, dict[str, Any]] = {}
+
+    def _within(self, candidate: Path, boundary: Path) -> str | None:
+        """``candidate`` as a key, or ``None`` when it is outside ``boundary`` or absent."""
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(boundary):
+            return None
+        return str(resolved) if resolved.is_file() else None
+
+    def locate(self, target: str, origin: str | None = None) -> str | None:
+        """The key of the document ``target`` names, or ``None`` when the tree has no such file.
+
+        ``None`` also covers a reference that resolves outside the boundary, so a caller cannot
+        tell an absent document from a refused one. That is deliberate: the two are the same
+        answer to "is this document available here", and distinguishing them would report
+        whether a path exists outside the tree.
+
+        A fragment is dropped first: it selects a part of a document and says nothing about
+        which document that is.
+        """
+        if not isinstance(target, str) or not target:
+            return None
+        path = target.partition("#")[0]
+        if not path:
+            return origin
+        if self.root is not None:
+            for rule in self.rules:
+                candidate = rule.path_under(self.root, path)
+                if candidate is not None:
+                    key = self._within(candidate, self.root)
+                    if key is not None:
+                        return key
+        if origin is None:
+            return None
+        boundary = self.root if self.root is not None else Path(origin).parent.resolve()
+        return self._within(Path(origin).parent / path, boundary)
+
+    def read(self, key: str) -> dict[str, Any]:
+        """The document at ``key``, parsed once and kept, since a chain revisits a base."""
+        if key not in self._documents:
+            self._documents[key] = json.loads(Path(key).read_text(encoding=self.encoding))
+        return self._documents[key]
+
+    def loader(self, origin: str | None) -> Callable[[str], dict[str, Any] | None]:
+        """A ``$ref`` resolver for :func:`oold.utils.mappings.chain`, relative to ``origin``.
+
+        Returns ``None`` for a reference the tree cannot reach, which is what makes a chain
+        walk skip that branch instead of failing on half-written input.
+        """
+
+        def resolve(ref: str) -> dict[str, Any] | None:
+            key = self.locate(ref, origin)
+            return self.read(key) if key is not None else None
+
+        return resolve
+
+    def context_chain(self, key: str) -> list[str]:
+        """``key`` and every document it names as a context, base first.
+
+        A term is defined by a ``@context`` and by nothing else, so the documents whose terms
+        reach this one are exactly those its context declarations name. A ``$ref`` states where
+        a *value* is described, which a JSON-LD processor never follows and which carries no
+        terms of its own: a schema that wants the terms of the document it points at names that
+        document as a context too, either at the top level or scoped to the property.
+
+        Scoped references are not walked here. They belong to one property's values rather than
+        to the document, and :func:`oold.utils.mappings.inline_scoped` resolves them in place,
+        which is what keeps an embedded object's terms out of the enclosing context.
+        """
+        order: list[str] = []
+        # A document is marked before its references are followed, not after, because two
+        # schemas may legitimately name each other and a reference may point back into the
+        # document it sits in. Keyed on the resolved document, so the guard holds however the
+        # reference was written.
+        entered: set[str] = set()
+
+        def walk(current: str) -> None:
+            if current in entered:
+                return
+            entered.add(current)
+            # A document that cannot be read is raised, not skipped. Skipping it shortens the
+            # chain, so fewer terms are defined and fewer triples are emitted, and the run
+            # reports success over a reading that quietly lost data.
+            context = self.read(current).get("@context")
+            for entry in context if isinstance(context, list) else [context]:
+                if isinstance(entry, str):
+                    nested = self.locate(entry, current)
+                    if nested is not None:
+                        walk(nested)
+            order.append(current)
+
+        walk(key)
+        return order
+
+    def applicable_schemas(self, key: str) -> list[dict[str, Any]]:
+        """The documents whose ``@context`` and ``x-oold-context`` apply to ``key``, base first.
+
+        Two sources, because they answer different questions. :meth:`context_chain` gives the
+        documents that define the terms, which is what a processor would resolve. The ``allOf``
+        chain gives the documents that declare the synonyms, because ``x-oold-context`` is a
+        schema keyword no processor ever sees: naming a base as a remote context carries its
+        terms and not its mappings, so only inheritance does.
+
+        An inherited document the context declarations do not name is placed before ``key``,
+        never after it, so the most derived document keeps the last word on a term.
+        """
+        from oold.utils.mappings import chain
+
+        documents = [self.read(member) for member in self.context_chain(key)]
+        known = {id(document) for document in documents}
+        inherited = [document for document in chain(self.read(key), self.loader(key)) if id(document) not in known]
+        return [*documents[:-1], *inherited, documents[-1]]

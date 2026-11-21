@@ -34,6 +34,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 from .compliance import run_suite, vocabulary_coverage
+from .effective_views import effective_views
 from .formats import is_iri
 from .frame import collect_composed_properties, instance_rdf_types
 from .generate import generate
@@ -1034,6 +1035,16 @@ CHECKS: tuple[CheckInfo, ...] = (
         "roundtrip.instance",
         "an instance round-trips through RDF unchanged",
         detects=roundtrip_instance,
+    ),
+    # Emitted by effective_views.view_checks, which a caller invokes directly rather than through
+    # the pipeline. Every other check here reads an instance under the declared context alone, so
+    # a mapping set that drops a term is invisible to all of them, and this is the id that reports
+    # one. Registered because the id is public either way, and an unregistered id is one no
+    # report can describe and no --only can filter on.
+    CheckInfo(
+        "roundtrip.mapping_set",
+        "an instance round-trips unchanged under each mapping set its schemas declare",
+        detects=effective_views,
     ),
     # -------------------------------------------------------------- compliance-suite self-checks
     CheckInfo(

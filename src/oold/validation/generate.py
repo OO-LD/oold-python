@@ -24,6 +24,7 @@ Two things the generator must get right:
 from __future__ import annotations
 
 import copy
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -396,3 +397,62 @@ def collect_variants(schema: dict[str, Any], limit: int = MAX_VARIANTS) -> tuple
 
     walk(schema, [])
     return variants[:limit], len(variants)
+
+
+# ---------------------------------------------------------------- authored instances
+
+#: Identity given to a synthesised instance, which exists to be shown rather than stored.
+DEFAULT_INSTANCE_ID = "https://example.org/instance"
+
+
+def synth_instance(
+    schema: dict[str, Any],
+    chain: Sequence[dict[str, Any]] | None = None,
+    schema_ref: str | None = None,
+    instance_id: str | None = DEFAULT_INSTANCE_ID,
+) -> dict[str, Any] | None:
+    """Build an instance from the schema's own ``examples`` and ``default`` values.
+
+    Where :func:`generate` populates every property so a schema is exercised exhaustively, this
+    uses *only what an author wrote*. It is for showing a schema to a reader: a documentation
+    page can present an instance and its RDF readings for a schema that has no committed one,
+    without inventing a single value.
+
+    A property with neither an example nor a default is left out, and a schema that cannot fill
+    its required properties yields ``None`` rather than an instance that does not validate.
+
+    ``chain`` is the inheritance chain, base first, so an inherited property contributes its
+    authored value; it defaults to the schema alone. A root-level ``examples`` entry is a whole
+    example instance, which is exactly what this wants, and the most derived one wins.
+    """
+    members = list(chain) if chain is not None else [schema]
+    header: dict[str, Any] = {}
+    if schema_ref is not None:
+        header["$schema"] = schema_ref
+        header["@context"] = schema_ref
+    if instance_id is not None:
+        header["@id"] = instance_id
+
+    for member in reversed(members):
+        examples = member.get("examples")
+        if isinstance(examples, list) and examples and isinstance(examples[0], dict):
+            return {**header, **examples[0]}
+
+    properties: dict[str, Any] = {}
+    for member in members:
+        properties.update(member.get("properties") or {})
+    required = {name for member in members for name in (member.get("required") or [])}
+
+    document: dict[str, Any] = {}
+    for name, spec in properties.items():
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("examples"):
+            document[name] = spec["examples"][0]
+        elif "default" in spec:
+            document[name] = spec["default"]
+        elif spec.get("enum"):
+            document[name] = spec["enum"][0]
+    if not document or not required <= document.keys():
+        return None
+    return {**header, **document}
